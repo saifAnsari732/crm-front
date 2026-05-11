@@ -157,7 +157,7 @@ export default function AdminTrackingHistory() {
             <select
               value={filters.employeeId}
               onChange={(e) => setFilters(f => ({ ...f, employeeId: e.target.value }))}
-              className="input-field py-2 text-sm w-48"
+              className="input-field py-2 text-sm w-48 bg-teal-700"
             >
               <option value="">All Employees</option>
               {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
@@ -303,16 +303,20 @@ export default function AdminTrackingHistory() {
                                 </div>
                                 <div>
                                   {addr ? (
-                                    <>
-                                      <span className="font-semibold text-primary-500 block text-sm">
-                                        {addr.split(',')[0]}
-                                      </span>
-                                      {addr.includes(',') && (
-                                        <span className="text-xs text-[var(--text-muted)] line-clamp-1">
-                                          {addr.split(',').slice(1).join(',').trim()}
+                                    addr.startsWith('Location') ? (
+                                      <span className="text-xs text-[var(--text-muted)] font-mono">{addr}</span>
+                                    ) : (
+                                      <>
+                                        <span className="font-semibold text-primary-500 block text-sm">
+                                          {addr.split(',')[0]}
                                         </span>
-                                      )}
-                                    </>
+                                        {addr.includes(',') && (
+                                          <span className="text-xs text-[var(--text-muted)] line-clamp-1">
+                                            {addr.split(',').slice(1).join(',').trim()}
+                                          </span>
+                                        )}
+                                      </>
+                                    )
                                   ) : (
                                     <span className="text-[var(--text-muted)] text-xs animate-pulse">Resolving address…</span>
                                   )}

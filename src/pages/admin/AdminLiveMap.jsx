@@ -106,7 +106,6 @@ export default function AdminLiveMap() {
   const [loading, setLoading] = useState(true);
   const [flyCenter, setFlyCenter] = useState(null);
   const [flyZoom, setFlyZoom] = useState(14);
-  const mapRef = useRef(null);
 
   // ─── Socket & data fetch ───────────────────────────────────────────────────
   useEffect(() => {
@@ -275,7 +274,7 @@ export default function AdminLiveMap() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[var(--text-main)] font-semibold text-sm truncate">{loc.name}</p>
-                        <p className="text-[var(--text-muted)] text-xs">{loc.department || 'Field'}</p>
+                        <p className="text-[var(--text-muted)] text-xs">{loc.department || 'Staff'}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-emerald-400 text-xs font-semibold">{(loc.totalDistance || 0).toFixed(1)} km</p>
@@ -284,20 +283,35 @@ export default function AdminLiveMap() {
                     </div>
 
                     {/* Address section */}
-                    <div className="mt-2.5 pt-2.5 border-t border-[var(--border-color)]">
+                    <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-main)]/50 border border-[var(--border-color)]">
                       <div className="flex items-start gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" />
-                        <div className="text-[var(--text-main)] text-xs leading-relaxed opacity-70">
+                        <MapPin className="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
                           {addr ? (
-                            <>
-                              <span className="font-bold text-primary-400 block mb-0.5">{addr.split(',')[0]}</span>
-                              <span className="text-[10px] text-[var(--text-muted)] line-clamp-1">{addr.split(',').slice(1).join(',')}</span>
-                            </>
-                          ) : 'Fetching current address...'}
+                            addr.startsWith('Location') ? (
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono leading-tight block">{addr}</span>
+                            ) : (
+                              <>
+                                <p className="text-[var(--text-main)] text-xs font-bold truncate">
+                                  {addr.split(',')[0]}
+                                </p>
+                                {addr.includes(',') && (
+                                  <p className="text-[var(--text-muted)] text-[10px] truncate">
+                                    {addr.split(',').slice(1).join(',').trim()}
+                                  </p>
+                                )}
+                              </>
+                            )
+                          ) : (
+                            <span className="text-[var(--text-muted)] text-[10px] animate-pulse italic">
+                              Resolving current address...
+                            </span>
+                          )}
                         </div>
                       </div>
+                      
                       {isSelected && loc.path && (
-                        <div className="flex items-center gap-3 mt-2">
+                        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[var(--border-color)]/50">
                           <div className="flex items-center gap-1.5">
                             <Navigation className="w-3 h-3 text-[var(--text-muted)]" />
                             <span className="text-[var(--text-muted)] text-[10px]">{loc.path.length} points</span>
@@ -323,7 +337,6 @@ export default function AdminLiveMap() {
               <MapContainer
                 center={flyCenter || defaultCenter}
                 zoom={flyZoom || 5}
-                ref={mapRef}
                 style={{ height: '100%', width: '100%', borderRadius: '16px' }}
                 zoomControl={false}
               >
