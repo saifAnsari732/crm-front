@@ -57,7 +57,6 @@ const AppRoutes = () => (
     <Route path="/admin/meetings" element={<PrivateRoute roles={['admin', 'hr']}><AdminMeetings /></PrivateRoute>} />
     <Route path="/admin/attendance" element={<PrivateRoute roles={['admin', 'hr']}><AdminAttendance /></PrivateRoute>} />
 
-    <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );
 
