@@ -31,18 +31,18 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
-              <Zap className="w-6 h-6 text-white" />
+              <Zap className="w-6 h-6 text-[var(--text-inverse)]" />
             </div>
-            <span className="text-2xl font-bold text-white">FieldCRM</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">FieldCRM</span>
           </div>
-          <p className="text-white/50 text-sm">Enterprise Employee Tracking System</p>
+          <p className="text-[var(--text-muted)] text-sm">Enterprise Employee Tracking System</p>
         </div>
 
         {/* Card */}
         <div className="glass-card p-8">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-white mb-1">Welcome back</h2>
-            <p className="text-white/40 text-sm">Sign in to your account to continue</p>
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-1">Welcome back</h2>
+            <p className="text-[var(--text-muted)] text-sm">Sign in to your account to continue</p>
           </div>
 
           {/* Demo credentials hint */}
@@ -50,14 +50,14 @@ export default function LoginPage() {
             <Shield className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-primary-300 text-xs font-semibold mb-1">Demo Credentials</p>
-              <p className="text-white/50 text-xs">Admin: admin@fieldcrm.com / admin123</p>
-              <p className="text-white/50 text-xs">Employee: emp@fieldcrm.com / emp123</p>
+              <p className="text-[var(--text-muted)] text-xs">Admin: admin@fieldcrm.com / admin123</p>
+              <p className="text-[var(--text-muted)] text-xs">Employee: emp@fieldcrm.com / emp123</p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Email Address</label>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Email Address</label>
               <input
                 type="email"
                 className="input-field"
@@ -69,7 +69,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Password</label>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={show ? 'text' : 'password'}
@@ -80,7 +80,7 @@ export default function LoginPage() {
                   required
                 />
                 <button type="button" onClick={() => setShow(!show)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -96,7 +96,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-white/40 text-sm mt-6">
+          <p className="text-center text-[var(--text-muted)] text-sm mt-6">
             Don't have an account?{' '}
             <Link to="/register" className="text-primary-400 hover:text-primary-300 font-semibold transition-colors">
               Register
@@ -107,7 +107,7 @@ export default function LoginPage() {
         {/* Features row */}
         <div className="flex items-center justify-center gap-6 mt-6">
           {[['📍', 'Live GPS'], ['📊', 'Analytics'], ['💼', 'CRM']].map(([icon, label]) => (
-            <div key={label} className="flex items-center gap-1.5 text-white/30 text-xs">
+            <div key={label} className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs">
               <span>{icon}</span><span>{label}</span>
             </div>
           ))}

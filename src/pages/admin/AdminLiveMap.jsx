@@ -49,33 +49,28 @@ function FlyTo({ center, zoom }) {
   return null;
 }
 
-// ─── Reverse geocoding cache ─────────────────────────────────────────────────
+// ─── Reverse geocoding via backend proxy (avoids CORS + rate limits) ─────────
 const geocodeCache = {};
+const pendingGeocodes = {};
 async function reverseGeocode(lat, lng) {
   const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
   if (geocodeCache[key]) return geocodeCache[key];
-  try {
-    const resp = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const data = await resp.json();
-    if (data?.address) {
-      const a = data.address;
-      const parts = [
-        a.road || a.neighbourhood || a.suburb || '',
-        a.city || a.town || a.village || a.county || '',
-        a.state || '',
-        a.postcode || '',
-      ].filter(Boolean);
-      const formatted = parts.join(', ');
-      geocodeCache[key] = formatted;
-      return formatted;
-    }
-    return data?.display_name?.split(',').slice(0, 3).join(',') || 'Unknown location';
-  } catch {
-    return 'Address unavailable';
-  }
+  if (pendingGeocodes[key]) return pendingGeocodes[key];
+  
+  const promise = trackingAPI.geocode(lat, lng)
+    .then(res => {
+      const address = res.data?.address || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      geocodeCache[key] = address;
+      delete pendingGeocodes[key];
+      return address;
+    })
+    .catch(() => {
+      delete pendingGeocodes[key];
+      return `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    });
+  
+  pendingGeocodes[key] = promise;
+  return promise;
 }
 
 // ─── Pulse animation style ──────────────────────────────────────────────────
@@ -88,15 +83,15 @@ pulseStyle.textContent = `
   }
   .custom-emp-marker, .custom-waypoint { background: none !important; border: none !important; }
   .leaflet-popup-content-wrapper {
-    background: rgba(15, 23, 42, 0.95) !important;
+    background: var(--bg-sidebar) !important;
     backdrop-filter: blur(20px) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
+    border: 1px solid var(--border-color) !important;
     border-radius: 16px !important;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
-    color: #fff !important;
+    box-shadow: 0 8px 32px var(--shadow-color) !important;
+    color: var(--text-main) !important;
   }
-  .leaflet-popup-tip { background: rgba(15, 23, 42, 0.95) !important; }
-  .leaflet-popup-close-button { color: #fff !important; }
+  .leaflet-popup-tip { background: var(--bg-sidebar) !important; }
+  .leaflet-popup-close-button { color: var(--text-main) !important; }
 `;
 if (!document.getElementById('emp-marker-styles')) {
   pulseStyle.id = 'emp-marker-styles';
@@ -118,7 +113,7 @@ export default function AdminLiveMap() {
     fetchLive();
     const socket = getSocket();
     if (socket) {
-      socket.on('employee_location', (data) => {
+        socket.on('employee_location', (data) => {
         setLocations(prev => {
           const existing = prev[data.employeeId] || {};
           const prevPath = existing.path || [];
@@ -131,8 +126,12 @@ export default function AdminLiveMap() {
             },
           };
         });
-        // Refresh address for this employee
-        fetchAddress(data.employeeId, data.lat, data.lng);
+        // Use backend address if provided, otherwise fetch
+        if (data.address) {
+          setAddresses(prev => ({ ...prev, [data.employeeId]: data.address }));
+        } else {
+          fetchAddress(data.employeeId, data.lat, data.lng);
+        }
       });
       socket.on('employee_tracking_started', (data) => {
         fetchLive();
@@ -177,8 +176,12 @@ export default function AdminLiveMap() {
             totalDistance: l.totalDistance,
             path,
           };
-          // Fetch address for each employee
-          fetchAddress(l.employee._id, last.lat, last.lng);
+          // Use stored address if available
+          if (last.address) {
+            setAddresses(prev => ({ ...prev, [l.employee._id]: last.address }));
+          } else {
+            fetchAddress(l.employee._id, last.lat, last.lng);
+          }
         }
       });
       setLocations(locMap);
@@ -222,7 +225,7 @@ export default function AdminLiveMap() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-white text-2xl font-bold flex items-center gap-3">
+            <h1 className="text-[var(--text-main)] text-2xl font-bold flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary-600/30 border border-primary-500/30 flex items-center justify-center">
                 <MapPinned className="w-5 h-5 text-primary-400" />
               </div>
@@ -241,14 +244,14 @@ export default function AdminLiveMap() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* ─── Employee list (left sidebar) ─────────────────────────────── */}
           <div className="lg:col-span-4 xl:col-span-3 space-y-3">
-            <h3 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Field Employees</h3>
+            <h3 className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider">Field Employees</h3>
             <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 custom-scrollbar">
               {loading ? (
                 <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />)}</div>
               ) : Object.keys(locations).length === 0 ? (
                 <div className="glass-card p-6 text-center">
-                  <MapPin className="w-8 h-8 text-white/20 mx-auto mb-2" />
-                  <p className="text-white/40 text-sm">No employees tracking now</p>
+                  <MapPin className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2" />
+                  <p className="text-[var(--text-muted)] text-sm">No employees tracking now</p>
                 </div>
               ) : Object.entries(locations).map(([empId, loc], idx) => {
                 const color = COLORS[idx % COLORS.length];
@@ -257,46 +260,51 @@ export default function AdminLiveMap() {
                 return (
                   <div key={empId}
                     onClick={() => handleSelectEmployee(empId)}
-                    className={`glass-card p-3.5 cursor-pointer transition-all duration-300 ${isSelected ? 'border-primary-500/50 bg-primary-600/10 shadow-lg shadow-primary-600/10' : 'hover:border-white/20 hover:bg-white/[0.03]'}`}>
+                    className={`glass-card p-3.5 cursor-pointer transition-all duration-300 ${isSelected ? 'border-primary-500/50 bg-primary-600/10 shadow-lg shadow-primary-600/10' : 'hover:border-[var(--border-color)] hover:bg-[var(--bg-card-hover)]'}`}>
                     <div className="flex items-center gap-3">
                       {/* Avatar with color indicator */}
                       <div className="relative flex-shrink-0">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm"
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center text-[var(--text-main)] font-bold text-sm"
                           style={{ background: `${color}30`, border: `1.5px solid ${color}50` }}>
                           {loc.name?.[0]?.toUpperCase()}
                         </div>
-                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-dark-900" />
+                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[var(--bg-main)]" />
                         {/* Color dot to match map marker */}
-                        <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-dark-900"
+                        <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-main)]"
                           style={{ background: color }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold text-sm truncate">{loc.name}</p>
-                        <p className="text-white/40 text-xs">{loc.department || 'Field'}</p>
+                        <p className="text-[var(--text-main)] font-semibold text-sm truncate">{loc.name}</p>
+                        <p className="text-[var(--text-muted)] text-xs">{loc.department || 'Field'}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-emerald-400 text-xs font-semibold">{(loc.totalDistance || 0).toFixed(1)} km</p>
-                        <p className="text-white/30 text-xs">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
+                        <p className="text-[var(--text-muted)] text-xs">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
                       </div>
                     </div>
 
                     {/* Address section */}
-                    <div className="mt-2.5 pt-2.5 border-t border-white/[0.07]">
+                    <div className="mt-2.5 pt-2.5 border-t border-[var(--border-color)]">
                       <div className="flex items-start gap-2">
                         <MapPin className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-white/60 text-xs leading-relaxed">
-                          {addr || 'Fetching address...'}
-                        </p>
+                        <div className="text-[var(--text-main)] text-xs leading-relaxed opacity-70">
+                          {addr ? (
+                            <>
+                              <span className="font-bold text-primary-400 block mb-0.5">{addr.split(',')[0]}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] line-clamp-1">{addr.split(',').slice(1).join(',')}</span>
+                            </>
+                          ) : 'Fetching current address...'}
+                        </div>
                       </div>
                       {isSelected && loc.path && (
                         <div className="flex items-center gap-3 mt-2">
                           <div className="flex items-center gap-1.5">
-                            <Navigation className="w-3 h-3 text-white/30" />
-                            <span className="text-white/30 text-[10px]">{loc.path.length} points</span>
+                            <Navigation className="w-3 h-3 text-[var(--text-muted)]" />
+                            <span className="text-[var(--text-muted)] text-[10px]">{loc.path.length} points</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <Clock className="w-3 h-3 text-white/30" />
-                            <span className="text-white/30 text-[10px]">
+                            <Clock className="w-3 h-3 text-[var(--text-muted)]" />
+                            <span className="text-[var(--text-muted)] text-[10px]">
                               {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
                             </span>
                           </div>
@@ -386,22 +394,29 @@ export default function AdminLiveMap() {
                                 width: '36px', height: '36px', borderRadius: '10px',
                                 background: `${color}30`, border: `2px solid ${color}`,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: '#fff', fontWeight: 700, fontSize: '14px'
+                                color: 'var(--text-main)', fontWeight: 700, fontSize: '14px'
                               }}>{initial}</div>
                               <div>
-                                <div style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>{loc.name || emp?.name}</div>
-                                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>{emp?.department || 'Field'}</div>
+                                <div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '14px' }}>{loc.name || emp?.name}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{emp?.department || 'Field'}</div>
                               </div>
                             </div>
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '8px' }}>
-                              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', marginBottom: '4px' }}>
-                                📍 {addresses[empId] || 'Fetching...'}
+                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>
+                                📍 {addresses[empId] ? (
+                                  <>
+                                    <span style={{ fontWeight: 700, color: '#60a5fa' }}>{addresses[empId].split(',')[0]}</span>
+                                    {addresses[empId].includes(',') && (
+                                      <span style={{ opacity: 0.7 }}>, {addresses[empId].split(',').slice(1).join(',')}</span>
+                                    )}
+                                  </>
+                                ) : 'Fetching...'}
                               </div>
                               <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
                                 <span style={{ color: '#22c55e', fontSize: '12px', fontWeight: 600 }}>
                                   {(loc.totalDistance || 0).toFixed(1)} km
                                 </span>
-                                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
                                   {Math.round((loc.speed || 0) * 3.6)} km/h
                                 </span>
                               </div>
@@ -417,7 +432,7 @@ export default function AdminLiveMap() {
                           icon={createWaypointIcon('S', color)}
                         >
                           <Popup>
-                            <div style={{ color: '#fff', fontSize: '12px' }}>
+                            <div style={{ color: 'var(--text-main)', fontSize: '12px' }}>
                               <strong>Start Point</strong> — {loc.name || emp?.name}
                             </div>
                           </Popup>
@@ -431,16 +446,16 @@ export default function AdminLiveMap() {
               {/* Map legend overlay */}
               {Object.keys(locations).length > 0 && (
                 <div className="absolute top-4 right-4 z-[1000]">
-                  <div className="bg-dark-900/90 backdrop-blur-xl border border-white/10 rounded-xl p-3 space-y-1.5 min-w-[140px]">
-                    <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-2">Employees</p>
+                  <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-3 space-y-1.5 min-w-[140px]">
+                    <p className="text-[var(--text-muted)] text-[10px] font-semibold uppercase tracking-wider mb-2">Employees</p>
                     {Object.entries(locations).map(([empId, loc], idx) => {
                       const color = COLORS[idx % COLORS.length];
                       return (
                         <div key={empId}
                           onClick={() => handleSelectEmployee(empId)}
-                          className={`flex items-center gap-2 cursor-pointer px-2 py-1 rounded-lg transition-all ${selected === empId ? 'bg-white/10' : 'hover:bg-white/5'}`}>
+                          className={`flex items-center gap-2 cursor-pointer px-2 py-1 rounded-lg transition-all ${selected === empId ? 'bg-[var(--bg-card-hover)]' : 'hover:bg-[var(--bg-card)]'}`}>
                           <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
-                          <span className="text-white text-xs font-medium truncate">{loc.name}</span>
+                          <span className="text-[var(--text-main)] text-xs font-medium truncate">{loc.name}</span>
                         </div>
                       );
                     })}
@@ -450,13 +465,13 @@ export default function AdminLiveMap() {
 
               {/* No data overlay */}
               {!loading && Object.keys(locations).length === 0 && (
-                <div className="absolute inset-0 z-[999] flex items-center justify-center bg-dark-900/60 backdrop-blur-sm rounded-2xl">
+                <div className="absolute inset-0 z-[999] flex items-center justify-center bg-[var(--bg-main)]/60 backdrop-blur-sm rounded-2xl">
                   <div className="text-center">
                     <div className="w-16 h-16 rounded-2xl bg-primary-600/20 border border-primary-500/30 flex items-center justify-center mx-auto mb-4">
                       <Locate className="w-8 h-8 text-primary-400" />
                     </div>
-                    <h3 className="text-white font-bold text-lg mb-2">No Active Tracking</h3>
-                    <p className="text-white/40 text-sm">Employee routes will appear here when tracking starts</p>
+                    <h3 className="text-[var(--text-main)] font-bold text-lg mb-2">No Active Tracking</h3>
+                    <p className="text-[var(--text-muted)] text-sm">Employee routes will appear here when tracking starts</p>
                   </div>
                 </div>
               )}

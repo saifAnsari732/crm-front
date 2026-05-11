@@ -31,7 +31,7 @@ export default function AdminLayout({ children }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-full w-64 z-50 flex flex-col border-r border-[var(--border-color)] bg-slate-900 backdrop-blur-xl transition-transform duration-300
+      <aside className={`fixed top-0 left-0 h-full w-64 z-50 flex flex-col border-r border-[var(--border-color)] bg-[var(--bg-sidebar)] backdrop-blur-xl transition-transform duration-300
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
         <div className="p-6 border-b border-[var(--border-color)]">
           <div className="flex items-center gap-3">
@@ -40,7 +40,7 @@ export default function AdminLayout({ children }) {
             </div>
             <div>
               <p className="font-bold text-[var(--text-main)] text-sm">FieldCRM</p>
-              <p className="text-emerald-400 text-xs font-medium">Admin Panel</p>
+              <p className="text-[var(--accent-safe)] text-xs font-medium">Admin Panel</p>
             </div>
           </div>
         </div>
@@ -52,7 +52,7 @@ export default function AdminLayout({ children }) {
             </div>
             <div className="min-w-0">
               <p className="text-[var(--text-main)] font-semibold text-sm truncate">{user?.name}</p>
-              <p className="text-emerald-400 text-xs capitalize">{user?.role}</p>
+              <p className="text-[var(--accent-safe)] text-xs capitalize">{user?.role}</p>
             </div>
           </div>
         </div>
@@ -80,7 +80,7 @@ export default function AdminLayout({ children }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 border-b border-[var(--border-color)] bg-slate-900 backdrop-blur-xl px-4 lg:px-6 py-3 flex items-center justify-between">
+        <header className="sticky top-0 z-30 border-b border-[var(--border-color)] bg-[var(--bg-header)] backdrop-blur-xl px-4 lg:px-6 py-3 flex items-center justify-between">
           <button className="lg:hidden p-2 rounded-lg hover:bg-[var(--bg-card)]" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5 text-[var(--text-main)]" />
           </button>
@@ -94,7 +94,7 @@ export default function AdminLayout({ children }) {
               className="p-2 rounded-xl hover:bg-[var(--bg-card)] transition-colors"
               title="Toggle Theme"
             >
-              {/* {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-blue-600" />} */}
+              {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
             </button>
             <button className="relative p-2 rounded-xl hover:bg-[var(--bg-card)] transition-colors">
               <Bell className="w-5 h-5 text-[var(--text-main)]/70" />
@@ -112,12 +112,12 @@ export default function AdminLayout({ children }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 lg:hidden z-30 border-t border-[var(--border-color)]  backdrop-blur-xl px-2 py-2 flex items-center justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[var(--bg-sidebar)] lg:hidden z-30 border-t border-[var(--border-color)]  backdrop-blur-xl px-2 py-2 flex items-center justify-around">
         {navItems.slice(0, 5).map(({ to, icon: Icon, label, end }) => (
           <NavLink key={to} to={to} end={end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 ${
-                isActive ? 'text-primary-400 bg-primary-600/15' : 'text-white'
+                isActive ? 'text-primary-400 bg-primary-600/15' : 'text-[var(--text-main)]'
               }`}>
             <Icon className="w-5 h-5" />
             <span className="text-[10px] font-medium">{label}</span>

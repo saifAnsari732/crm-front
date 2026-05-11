@@ -57,7 +57,7 @@ export default function EmployeeLayout({ children }) {
               <p className="font-bold text-[var(--text-main)] text-sm">
                 FieldCRM
               </p>
-              <p className="text-[var(--text-muted)] text-xs">
+              <p className="text-[var(--accent-safe)] text-xs">
                 Employee Portal
               </p>
             </div>
@@ -168,7 +168,7 @@ export default function EmployeeLayout({ children }) {
       </div>
 
       {/* Bottom nav (mobile) */}
-      <nav className="fixed bottom-0  left-0 right-0 lg:hidden z-30 bg-black  border-t border-[var(--border-color)] px-2 py-2 flex items-center justify-around">
+      <nav className="fixed bottom-0  left-0 right-0 lg:hidden z-30 bg-[var(--bg-sidebar)]  border-t border-[var(--border-color)] px-2 py-2 flex items-center justify-around">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -177,7 +177,7 @@ export default function EmployeeLayout({ children }) {
               `flex flex-col items-center  gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 ${
                 isActive
                   ? "text-primary-400 bg-primary-600/15"
-                  : "text-white hover:text-[var(--text-main)]"
+                  : "text-[var(--text-main)] hover:text-[var(--text-main)]"
               }`
             }
           >

@@ -5,24 +5,34 @@
 
 :root {
   --bg-main: #080c18;
+  --bg-sidebar: #0f172a;
+  --bg-header: rgba(15, 23, 42, 0.8);
   --bg-card: rgba(255, 255, 255, 0.05);
   --bg-card-hover: rgba(255, 255, 255, 0.08);
   --border-color: rgba(255, 255, 255, 0.1);
   --text-main: #ffffff;
   --text-muted: rgba(255, 255, 255, 0.4);
+  --text-inverse: #000000;
   --primary: #2563eb;
   --primary-muted: rgba(37, 99, 235, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --accent-safe: #34d399; /* emerald-400 */
 }
 
 .light {
-  --bg-main: #f8fafc;
+  --bg-main: #f1f5f9;
+  --bg-sidebar: #ffffff;
+  --bg-header: rgba(255, 255, 255, 0.9);
   --bg-card: #ffffff;
-  --bg-card-hover: #f1f5f9;
+  --bg-card-hover: #f8fafc;
   --border-color: #e2e8f0;
-  --text-main: #000000;
-  --text-muted: #475569;
+  --text-main: #020617;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
   --primary: #2563eb;
   --primary-muted: rgba(37, 99, 235, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --accent-safe: #059669; /* emerald-600 */
 }
 
 @layer base {
@@ -54,25 +64,29 @@
   }
   .input-field {
     background-color: var(--bg-card);
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-color);
     color: var(--text-main);
     @apply w-full rounded-xl px-4 py-3 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500
            transition-all duration-200;
   }
   .input-field::placeholder {
     color: var(--text-muted);
+    opacity: 0.6;
   }
   .nav-item {
     @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm;
-    color: var(--text-muted);
+    color: var(--text-main);
+    opacity: 0.7;
   }
   .nav-item:hover {
     background-color: var(--bg-card-hover);
     color: var(--primary);
+    opacity: 1;
   }
   .nav-item.active {
     background-color: var(--primary-muted);
     color: var(--primary);
+    opacity: 1;
     @apply font-bold;
   }
 }
@@ -80,6 +94,6 @@
 .mesh-bg {
   background-color: var(--bg-main);
   background-image: 
-    radial-gradient(at 0% 0%, var(--primary-muted) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(109, 40, 217, 0.05) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, var(--primary-muted) 0px, transparent 40%),
+    radial-gradient(at 100% 0%, rgba(109, 40, 217, 0.03) 0px, transparent 40%);
 }

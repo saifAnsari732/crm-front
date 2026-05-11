@@ -49,6 +49,7 @@ export const trackingAPI = {
   getToday: () => API.get('/tracking/today'),
   getLive: () => API.get('/tracking/live'),
   getSession: (id) => API.get(`/tracking/session/${id}`),
+  geocode: (lat, lng) => API.get(`/tracking/geocode?lat=${lat}&lng=${lng}`),
 };
 
 // ─── Meetings ─────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ let socket = null;
 export const initSocket = (token) => {
   if (socket?.connected) return socket;
   
-  socket = io('https://crm-b-y8rv.onrender.com/api', {
+  socket = io('https://crm-b-y8rv.onrender.com', {
     auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -14,7 +14,7 @@ export const initSocket = (token) => {
     timeout: 10000,
   });
 
-  // socket = io('http://localhost:5000/api', {
+  // socket = io('http://localhost:5000', {
   //   auth: { token },
   //   reconnection: true,
   //   reconnectionAttempts: Infinity,

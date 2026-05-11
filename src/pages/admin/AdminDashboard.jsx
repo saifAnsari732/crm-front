@@ -70,14 +70,14 @@ export default function AdminDashboard() {
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
         <div>
-          <h1 className="text-white text-2xl font-bold">Overview</h1>
-          <p className="text-white/40 text-sm">Real-time field team analytics</p>
+          <h1 className="text-[var(--text-main)] text-2xl font-bold">Overview</h1>
+          <p className="text-[var(--text-muted)] text-sm">Real-time field team analytics</p>
         </div>
 
         {/* Stats grid */}
         {loading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-24 rounded-2xl bg-white/5 animate-pulse" />)}
+            {[...Array(8)].map((_, i) => <div key={i} className="h-24 rounded-2xl bg-[var(--bg-card)] animate-pulse" />)}
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -92,7 +92,7 @@ export default function AdminDashboard() {
                     {c.dot && <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mt-1" />}
                   </div>
                   <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
-                  <p className="text-white/40 text-xs mt-0.5">{c.label}</p>
+                  <p className="text-[var(--text-muted)] text-xs mt-0.5">{c.label}</p>
                 </div>
               );
             })}
@@ -103,15 +103,15 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Monthly meetings bar chart */}
           <div className="glass-card p-5">
-            <h3 className="text-white font-semibold mb-4">Monthly Meetings</h3>
+            <h3 className="text-[var(--text-main)] font-semibold mb-4">Monthly Meetings</h3>
             {monthlyData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-white/20 text-sm">No data yet</div>
+              <div className="h-48 flex items-center justify-center text-[var(--text-muted)] text-sm">No data yet</div>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={monthlyData} barSize={20}>
-                  <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#fff', fontSize: '12px' }} />
+                  <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '12px' }} />
                   <Bar dataKey="meetings" fill="#3b82f6" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -120,9 +120,9 @@ export default function AdminDashboard() {
 
           {/* Expense by category pie */}
           <div className="glass-card p-5">
-            <h3 className="text-white font-semibold mb-4">Expense Breakdown</h3>
+            <h3 className="text-[var(--text-main)] font-semibold mb-4">Expense Breakdown</h3>
             {pieData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-white/20 text-sm">No data yet</div>
+              <div className="h-48 flex items-center justify-center text-[var(--text-muted)] text-sm">No data yet</div>
             ) : (
               <div className="flex items-center gap-4">
                 <ResponsiveContainer width="60%" height={180}>
@@ -130,15 +130,15 @@ export default function AdminDashboard() {
                     <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
                       {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#fff', fontSize: '12px' }} formatter={v => `₹${v.toLocaleString()}`} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '12px' }} formatter={v => `₹${v.toLocaleString()}`} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="space-y-2 flex-1">
                   {pieData.map((item, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <span className="text-white/60 text-xs capitalize flex-1">{item.name}</span>
-                      <span className="text-white text-xs font-semibold">₹{item.value.toLocaleString()}</span>
+                      <span className="text-[var(--text-muted)] text-xs capitalize flex-1">{item.name}</span>
+                      <span className="text-[var(--text-main)] text-xs font-semibold">₹{item.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
