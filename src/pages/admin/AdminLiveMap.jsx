@@ -13,7 +13,7 @@ const COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'
 function createEmployeeIcon(initial, color, isActive) {
   const pulseRing = isActive
     ? `<div style="position:absolute;top:-6px;left:-6px;width:44px;height:44px;border-radius:50%;background:${color}33;animation:empPulse 2s infinite;"></div>`
-    : '';
+    : ''; 
   return L.divIcon({
     className: 'custom-emp-marker',
     html: `
