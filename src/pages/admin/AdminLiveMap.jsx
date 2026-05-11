@@ -245,71 +245,64 @@ export default function AdminLiveMap() {
             <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 custom-scrollbar">
               {loading ? (
                 <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />)}</div>
-              ) : employees.length === 0 ? (
+              ) : Object.keys(locations).length === 0 ? (
                 <div className="glass-card p-6 text-center">
                   <MapPin className="w-8 h-8 text-white/20 mx-auto mb-2" />
                   <p className="text-white/40 text-sm">No employees tracking now</p>
                 </div>
-              ) : employees.map((emp, idx) => {
-                const loc = locations[emp._id];
+              ) : Object.entries(locations).map(([empId, loc], idx) => {
                 const color = COLORS[idx % COLORS.length];
-                const addr = addresses[emp._id];
-                const isSelected = selected === emp._id;
+                const addr = addresses[empId];
+                const isSelected = selected === empId;
                 return (
-                  <div key={emp._id}
-                    onClick={() => handleSelectEmployee(emp._id)}
+                  <div key={empId}
+                    onClick={() => handleSelectEmployee(empId)}
                     className={`glass-card p-3.5 cursor-pointer transition-all duration-300 ${isSelected ? 'border-primary-500/50 bg-primary-600/10 shadow-lg shadow-primary-600/10' : 'hover:border-white/20 hover:bg-white/[0.03]'}`}>
                     <div className="flex items-center gap-3">
                       {/* Avatar with color indicator */}
                       <div className="relative flex-shrink-0">
                         <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm"
                           style={{ background: `${color}30`, border: `1.5px solid ${color}50` }}>
-                          {emp.name?.[0]?.toUpperCase()}
+                          {loc.name?.[0]?.toUpperCase()}
                         </div>
-                        {emp.isTracking && (
-                          <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-dark-900" />
-                        )}
+                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-dark-900" />
                         {/* Color dot to match map marker */}
                         <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-dark-900"
                           style={{ background: color }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold text-sm truncate">{emp.name}</p>
-                        <p className="text-white/40 text-xs">{emp.department || 'Field'}</p>
+                        <p className="text-white font-semibold text-sm truncate">{loc.name}</p>
+                        <p className="text-white/40 text-xs">{loc.department || 'Field'}</p>
                       </div>
-                      {loc && (
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-emerald-400 text-xs font-semibold">{(loc.totalDistance || 0).toFixed(1)} km</p>
-                          <p className="text-white/30 text-xs">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-emerald-400 text-xs font-semibold">{(loc.totalDistance || 0).toFixed(1)} km</p>
+                        <p className="text-white/30 text-xs">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
+                      </div>
+                    </div>
+
+                    {/* Address section */}
+                    <div className="mt-2.5 pt-2.5 border-t border-white/[0.07]">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-white/60 text-xs leading-relaxed">
+                          {addr || 'Fetching address...'}
+                        </p>
+                      </div>
+                      {isSelected && loc.path && (
+                        <div className="flex items-center gap-3 mt-2">
+                          <div className="flex items-center gap-1.5">
+                            <Navigation className="w-3 h-3 text-white/30" />
+                            <span className="text-white/30 text-[10px]">{loc.path.length} points</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-white/30" />
+                            <span className="text-white/30 text-[10px]">
+                              {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    {/* Address section - always show if we have location */}
-                    {loc && (
-                      <div className="mt-2.5 pt-2.5 border-t border-white/[0.07]">
-                        <div className="flex items-start gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" />
-                          <p className="text-white/60 text-xs leading-relaxed">
-                            {addr || 'Fetching address...'}
-                          </p>
-                        </div>
-                        {isSelected && loc.path && (
-                          <div className="flex items-center gap-3 mt-2">
-                            <div className="flex items-center gap-1.5">
-                              <Navigation className="w-3 h-3 text-white/30" />
-                              <span className="text-white/30 text-[10px]">{loc.path.length} points</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-white/30" />
-                              <span className="text-white/30 text-[10px]">
-                                {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
