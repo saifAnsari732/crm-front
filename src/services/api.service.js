@@ -74,6 +74,7 @@ export const adminAPI = {
   approveEmployee: (id) => API.put(`/admin/employees/${id}/approve`),
   toggleBlock: (id) => API.put(`/admin/employees/${id}/block`),
   getAttendance: (params) => API.get('/admin/attendance', { params }),
+  getHistory: (params) => API.get('/admin/tracking-history', { params }),
 };
 
 // ─── Employees ────────────────────────────────────────────────────────────

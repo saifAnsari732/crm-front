@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
-import useTracking from '../../hooks/useTracking';
+import { useTracking } from '../../contexts/TrackingContext';
 import { MapPin, Navigation, Clock, Zap, Activity, AlertCircle } from 'lucide-react';
 
 export default function TrackingPage() {

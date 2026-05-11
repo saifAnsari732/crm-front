@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TrackingProvider } from './contexts/TrackingContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
@@ -17,6 +19,7 @@ import AdminLiveMap from './pages/admin/AdminLiveMap';
 import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminMeetings from './pages/admin/AdminMeetings';
 import AdminAttendance from './pages/admin/AdminAttendance';
+import AdminTrackingHistory from './pages/admin/AdminTrackingHistory';
 import LoadingScreen from './components/shared/LoadingScreen';
 
 const PrivateRoute = ({ children, roles }) => {
@@ -53,6 +56,7 @@ const AppRoutes = () => (
     <Route path="/admin" element={<PrivateRoute roles={['admin', 'hr']}><AdminDashboard /></PrivateRoute>} />
     <Route path="/admin/employees" element={<PrivateRoute roles={['admin', 'hr']}><AdminEmployees /></PrivateRoute>} />
     <Route path="/admin/live-map" element={<PrivateRoute roles={['admin', 'hr']}><AdminLiveMap /></PrivateRoute>} />
+    <Route path="/admin/tracking-history" element={<PrivateRoute roles={['admin', 'hr']}><AdminTrackingHistory /></PrivateRoute>} />
     <Route path="/admin/expenses" element={<PrivateRoute roles={['admin', 'hr']}><AdminExpenses /></PrivateRoute>} />
     <Route path="/admin/meetings" element={<PrivateRoute roles={['admin', 'hr']}><AdminMeetings /></PrivateRoute>} />
     <Route path="/admin/attendance" element={<PrivateRoute roles={['admin', 'hr']}><AdminAttendance /></PrivateRoute>} />
@@ -63,17 +67,21 @@ const AppRoutes = () => (
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '14px' },
-            success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
-            error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
-          }}
-        />
-      </BrowserRouter>
+      <ThemeProvider>
+        <TrackingProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '14px' },
+                success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+                error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+              }}
+            />
+          </BrowserRouter>
+        </TrackingProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }
