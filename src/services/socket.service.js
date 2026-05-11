@@ -5,7 +5,7 @@ let socket = null;
 export const initSocket = (token) => {
   if (socket?.connected) return socket;
   
-  socket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000', {
+  socket = io('https://crm-b-y8rv.onrender.com', {
     auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity,
