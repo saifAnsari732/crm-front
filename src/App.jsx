@@ -20,7 +20,14 @@ import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminMeetings from './pages/admin/AdminMeetings';
 import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminTrackingHistory from './pages/admin/AdminTrackingHistory';
+import AdminLeaves from './pages/admin/AdminLeaves';
+import AdminTasks from './pages/admin/AdminTasks';
+import LeavePage from './pages/employee/LeavePage';
+import TasksPage from './pages/employee/TasksPage';
 import LoadingScreen from './components/shared/LoadingScreen';
+import OfflineIndicator from './components/shared/OfflineIndicator';
+import NetworkStatus from './components/shared/NetworkStatus';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 
 const PrivateRoute = ({ children, roles }) => {
   const { user, loading, isAuthenticated } = useAuth();
@@ -50,6 +57,8 @@ const AppRoutes = () => (
     <Route path="/tracking" element={<PrivateRoute roles={['employee']}><TrackingPage /></PrivateRoute>} />
     <Route path="/meetings" element={<PrivateRoute roles={['employee']}><MeetingsPage /></PrivateRoute>} />
     <Route path="/expenses" element={<PrivateRoute roles={['employee']}><ExpensesPage /></PrivateRoute>} />
+    <Route path="/leaves" element={<PrivateRoute roles={['employee']}><LeavePage /></PrivateRoute>} />
+    <Route path="/tasks" element={<PrivateRoute roles={['employee']}><TasksPage /></PrivateRoute>} />
     <Route path="/profile" element={<PrivateRoute roles={['employee', 'admin', 'hr']}><ProfilePage /></PrivateRoute>} />
 
     {/* Admin */}
@@ -60,28 +69,34 @@ const AppRoutes = () => (
     <Route path="/admin/expenses" element={<PrivateRoute roles={['admin', 'hr']}><AdminExpenses /></PrivateRoute>} />
     <Route path="/admin/meetings" element={<PrivateRoute roles={['admin', 'hr']}><AdminMeetings /></PrivateRoute>} />
     <Route path="/admin/attendance" element={<PrivateRoute roles={['admin', 'hr']}><AdminAttendance /></PrivateRoute>} />
+    <Route path="/admin/leaves" element={<PrivateRoute roles={['admin', 'hr']}><AdminLeaves /></PrivateRoute>} />
+    <Route path="/admin/tasks" element={<PrivateRoute roles={['admin', 'hr']}><AdminTasks /></PrivateRoute>} />
 
   </Routes>
 );
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <TrackingProvider>
-          <BrowserRouter>
-            <AppRoutes />
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '14px' },
-                success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
-                error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
-              }}
-            />
-          </BrowserRouter>
-        </TrackingProvider>
-      </ThemeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <TrackingProvider>
+            <BrowserRouter>
+              <NetworkStatus />
+              <AppRoutes />
+              <OfflineIndicator />
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '14px' },
+                  success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+                  error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+                }}
+              />
+            </BrowserRouter>
+          </TrackingProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

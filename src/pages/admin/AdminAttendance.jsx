@@ -22,6 +22,28 @@ export default function AdminAttendance() {
 
   const present = records.filter(r => r.status === 'present').length;
 
+  const exportToCSV = () => {
+    const headers = ['Employee Name', 'Employee ID', 'Check In', 'Check Out', 'Distance (km)', 'Status'];
+    const rows = records.map(r => [
+      r.employee?.name || '',
+      r.employee?.employeeId || '',
+      r.checkIn ? new Date(r.checkIn).toLocaleString() : '—',
+      r.checkOut ? new Date(r.checkOut).toLocaleString() : '—',
+      (r.totalDistanceTraveled || 0).toFixed(2),
+      r.status
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `attendance_${date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-5 max-w-5xl mx-auto">
@@ -30,7 +52,12 @@ export default function AdminAttendance() {
             <h1 className="text-white text-2xl font-bold">Attendance</h1>
             <p className="text-white/40 text-sm">{present} present out of {records.length}</p>
           </div>
-          <input type="date" className="input-field w-auto" value={date} onChange={e => setDate(e.target.value)} />
+          <div className="flex items-center gap-3">
+            <button onClick={exportToCSV} className="btn-primary py-2 px-4 !bg-emerald-600 hover:!bg-emerald-500 flex items-center gap-2 text-xs">
+              Download CSV
+            </button>
+            <input type="date" className="input-field w-auto" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {[

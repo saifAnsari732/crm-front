@@ -5,7 +5,7 @@ import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import { adminAPI, attendanceAPI, meetingAPI, expenseAPI, trackingAPI } from '../../services/api.service';
 import {
   MapPin, Users, Receipt, TrendingUp, Clock, ChevronRight,
-  Navigation, CheckCircle, AlertCircle, Calendar, Zap
+  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList
 } from 'lucide-react';
 
 export default function EmployeeDashboard() {
@@ -73,71 +73,93 @@ export default function EmployeeDashboard() {
   ];
 
   const quickActions = [
-    { label: 'Start Tracking', icon: MapPin, color: 'bg-primary-600 hover:bg-primary-500 shadow-glow', to: '/tracking' },
-    { label: 'Add Meeting', icon: Users, color: 'bg-violet-600 hover:bg-violet-500', to: '/meetings' },
-    { label: 'Add Expense', icon: Receipt, color: 'bg-amber-600 hover:bg-amber-500', to: '/expenses' },
+    { label: 'Start Tracking', icon: MapPin, color: 'bg-primary-600 hover:bg-primary-500 shadow-glow shadow-primary-600/30', to: '/tracking' },
+    { label: 'My Tasks', icon: ClipboardList, color: 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20', to: '/tasks' },
+    { label: 'Apply Leave', icon: Calendar, color: 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20', to: '/leaves' },
+    { label: 'Add Meeting', icon: Users, color: 'bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/20', to: '/meetings' },
+    { label: 'Add Expense', icon: Receipt, color: 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20', to: '/expenses' },
   ];
 
   return (
     <EmployeeLayout>
-      <div className="p-4 lg:p-6 space-y-6 max-w-5xl mx-auto">
+      <div className="p-4 lg:p-6 space-y-8 max-w-5xl mx-auto pb-24 lg:pb-6">
         {/* Welcome card */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600/30 via-primary-700/20 to-violet-600/20 border border-primary-500/30 p-6">
-          <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-primary-400/10 blur-2xl -translate-y-12 translate-x-12" />
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary-600 via-primary-700 to-violet-800 border border-white/20 p-8 shadow-2xl shadow-primary-900/20">
+          <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 blur-3xl -translate-y-12 translate-x-12" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-primary-400/10 blur-3xl translate-y-12 -translate-x-12" />
+          
           <div className="relative">
-            <div className="flex items-start justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-primary-300 text-sm font-semibold mb-1">
+                <p className="text-primary-100/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2">
                   {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
-                <h2 className="text-white text-2xl font-bold mb-1">
-                  Hey, {user?.name?.split(' ')[0]}! 👋
+                <h2 className="text-white text-3xl font-black mb-2 tracking-tight">
+                  Hi, {user?.name?.split(' ')[0]}! 👋
                 </h2>
-                <p className="text-white/50 text-sm">
-                  {user?.department} • {user?.designation || 'Field Executive'}
-                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10 text-white/80 text-[10px] font-bold uppercase tracking-wider">
+                    {user?.department}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10 text-white/80 text-[10px] font-bold uppercase tracking-wider">
+                    {user?.designation || 'Field Executive'}
+                  </span>
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-xl flex-shrink-0">
-                {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full rounded-2xl object-cover" /> : '👤'}
+              <div className="w-16 h-16 rounded-[1.25rem] bg-white/10 border border-white/20 p-1 flex-shrink-0 backdrop-blur-md shadow-xl">
+                {user?.avatar ? (
+                  <img src={user.avatar} alt="" className="w-full h-full rounded-[1rem] object-cover" />
+                ) : (
+                  <div className="w-full h-full rounded-[1rem] bg-primary-500/20 flex items-center justify-center text-2xl">👤</div>
+                )}
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${stats.attended ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              <span className="text-white/60 text-xs">{stats.attended ? 'Checked in today' : 'Not checked in'}</span>
-              <span className="text-white/20 mx-1">•</span>
-              <span className="text-white/60 text-xs">ID: {user?.employeeId}</span>
+            
+            <div className="mt-8 flex items-center gap-4">
+              <div className={`px-4 py-2 rounded-2xl flex items-center gap-2 border ${
+                stats.attended ? 'bg-emerald-400/10 border-emerald-400/20' : 'bg-red-400/10 border-red-400/20'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${stats.attended ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                <span className="text-white text-[10px] font-black uppercase tracking-widest">
+                  {stats.attended ? 'Status: Active' : 'Status: Offline'}
+                </span>
+              </div>
+              <span className="text-white/40 text-[10px] font-bold tracking-widest uppercase">EMP ID: {user?.employeeId}</span>
             </div>
           </div>
         </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {statCards.map((card, i) => {
             const Icon = card.icon;
             return (
-              <div key={i} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.color} border ${card.border} p-4`}
-                style={{ animationDelay: `${i * 0.1}s` }}>
-                <div className={`w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center mb-3`}>
-                  <Icon className={`w-4 h-4 ${card.iconColor}`} />
+              <div key={i} className={`group relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br ${card.color} border ${card.border} p-6 hover:scale-[1.03] transition-all duration-300 shadow-lg shadow-black/5`}>
+                <div className="relative z-10">
+                  <div className={`w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-4 group-hover:rotate-12 transition-transform`}>
+                    <Icon className={`w-5 h-5 ${card.iconColor}`} />
+                  </div>
+                  <p className="text-white text-2xl font-black tracking-tight">{loading ? '—' : card.value}</p>
+                  <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">{card.label}</p>
                 </div>
-                <p className="text-white text-xl font-bold">{loading ? '—' : card.value}</p>
-                <p className="text-white/50 text-xs mt-0.5">{card.label}</p>
               </div>
             );
           })}
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions (Mobile-Friendly Horizontal Scroll) */}
         <div>
-          <h3 className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Quick Actions</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <h3 className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-4 ml-1">Quick Operations</h3>
+          <div className="flex lg:grid lg:grid-cols-5 gap-4 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0">
             {quickActions.map((a, i) => {
               const Icon = a.icon;
               return (
                 <button key={i} onClick={() => navigate(a.to)}
-                  className={`${a.color} text-white rounded-2xl p-4 flex flex-col items-center gap-2 transition-all duration-200 active:scale-95`}>
-                  <Icon className="w-6 h-6" />
-                  <span className="text-xs font-semibold text-center leading-tight">{a.label}</span>
+                  className={`${a.color} text-white rounded-[1.5rem] p-5 flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 flex-shrink-0 w-32 lg:w-auto hover:-translate-y-1`}>
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-center leading-tight">{a.label}</span>
                 </button>
               );
             })}

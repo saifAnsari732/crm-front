@@ -135,6 +135,31 @@ export default function AdminTrackingHistory() {
     return null; // still loading
   };
 
+  const exportToCSV = () => {
+    if (!selectedSession || !selectedSession.coordinates) return;
+    
+    const headers = ['#', 'Time', 'Latitude', 'Longitude', 'Speed (km/h)', 'Accuracy (m)', 'Address'];
+    const rows = selectedSession.coordinates.map((c, i) => [
+      i + 1,
+      new Date(c.timestamp).toLocaleString(),
+      c.lat,
+      c.lng,
+      (c.speed * 3.6).toFixed(1),
+      c.accuracy || '',
+      getAddress(c, i) || ''
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `tracking_history_${selectedSession.employee?.name}_${filters.date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -269,7 +294,10 @@ export default function AdminTrackingHistory() {
                       </p>
                     </div>
                   </div>
-                  <button className="btn-primary py-2 px-4 !bg-emerald-600 hover:!bg-emerald-500 flex items-center gap-2 text-xs">
+                  <button 
+                    onClick={exportToCSV}
+                    className="btn-primary py-2 px-4 !bg-emerald-600 hover:!bg-emerald-500 flex items-center gap-2 text-xs"
+                  >
                     <Download className="w-3.5 h-3.5" /> Export Data
                   </button>
                 </div>

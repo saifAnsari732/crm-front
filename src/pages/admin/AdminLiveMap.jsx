@@ -6,6 +6,20 @@ import { MapPin, Users, Activity, RefreshCw, Navigation, MapPinned, Clock, Locat
 import toast from 'react-hot-toast';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { createLayerComponent } from '@react-leaflet/core';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+
+// ─── Proper MarkerClusterGroup wrapper for react-leaflet v4 ────────────────
+const MarkerClusterGroup = createLayerComponent(
+  ({ children, ...props }, context) => {
+    const instance = new L.MarkerClusterGroup(props);
+    return { instance, context: { ...context, layerContainer: instance } };
+  },
+);
+// Actually, let's just use the markers directly if the count is low, 
+// and if high, we'll wrap them.
 
 // ─── Custom marker icon creator ─────────────────────────────────────────────
 const COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
@@ -349,107 +363,71 @@ export default function AdminLiveMap() {
                 {/* Fly to selected employee */}
                 {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
 
-                {/* Render each employee */}
-                {Object.entries(locations).map(([empId, loc], idx) => {
-                  const emp = employees.find(e => e._id === empId);
-                  const color = COLORS[idx % COLORS.length];
-                  const isEmpSelected = selected === empId || !selected;
-                  const initial = (loc.name || emp?.name || '?')[0].toUpperCase();
-                  const path = loc.path || [];
+                <MarkerClusterGroup showCoverageOnHover={false} maxClusterRadius={50}>
+                  {Object.entries(locations).map(([empId, loc], idx) => {
+                    const emp = employees.find(e => e._id === empId);
+                    const color = COLORS[idx % COLORS.length];
+                    const isEmpSelected = selected === empId || !selected;
+                    const initial = (loc.name || emp?.name || '?')[0].toUpperCase();
 
-                  if (!isEmpSelected && selected) return null;
+                    if (!isEmpSelected && selected) return null;
 
-                  return (
-                    <React.Fragment key={empId}>
-                      {/* Route trail polyline */}
-                      {path.length > 1 && (
-                        <Polyline
-                          positions={path.map(p => [p.lat, p.lng])}
-                          pathOptions={{
-                            color: color,
-                            weight: 4,
-                            opacity: 0.8,
-                            dashArray: selected === empId ? null : '8, 8',
-                            lineCap: 'round',
-                            lineJoin: 'round',
-                          }}
-                        />
-                      )}
-
-                      {/* Numbered waypoints along the path (show every ~10th point) */}
-                      {selected === empId && path.length > 2 && (() => {
-                        const step = Math.max(1, Math.floor(path.length / 8));
-                        const waypoints = [];
-                        for (let i = 0; i < path.length - 1; i += step) {
-                          waypoints.push({ ...path[i], num: waypoints.length + 1 });
-                        }
-                        return waypoints.map((wp, wi) => (
-                          <Marker
-                            key={`wp-${empId}-${wi}`}
-                            position={[wp.lat, wp.lng]}
-                            icon={createWaypointIcon(wp.num, color)}
-                          />
-                        ));
-                      })()}
-
-                      {/* Current position marker */}
+                    return (
                       <Marker
+                        key={empId}
                         position={[loc.lat, loc.lng]}
                         icon={createEmployeeIcon(initial, color, true)}
-                        eventHandlers={{
-                          click: () => handleSelectEmployee(empId),
-                        }}
+                        eventHandlers={{ click: () => handleSelectEmployee(empId) }}
                       >
                         <Popup>
-                          <div style={{ minWidth: '200px', padding: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                              <div style={{
-                                width: '36px', height: '36px', borderRadius: '10px',
-                                background: `${color}30`, border: `2px solid ${color}`,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: 'var(--text-main)', fontWeight: 700, fontSize: '14px'
-                              }}>{initial}</div>
+                          <div className="p-1 min-w-[200px]">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" 
+                                   style={{ background: color }}>
+                                {initial}
+                              </div>
                               <div>
-                                <div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '14px' }}>{loc.name || emp?.name}</div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{emp?.department || 'Field'}</div>
+                                <h4 className="font-bold text-sm">{loc.name}</h4>
+                                <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider">{loc.department}</p>
                               </div>
                             </div>
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
-                              <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px' }}>
-                                📍 {addresses[empId] ? (
-                                  <>
-                                    <span style={{ fontWeight: 700, color: '#60a5fa' }}>{addresses[empId].split(',')[0]}</span>
-                                    {addresses[empId].includes(',') && (
-                                      <span style={{ opacity: 0.7 }}>, {addresses[empId].split(',').slice(1).join(',')}</span>
-                                    )}
-                                  </>
-                                ) : 'Fetching...'}
-                              </div>
-                              <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
-                                <span style={{ color: '#22c55e', fontSize: '12px', fontWeight: 600 }}>
-                                  {(loc.totalDistance || 0).toFixed(1)} km
-                                </span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                                  {Math.round((loc.speed || 0) * 3.6)} km/h
-                                </span>
+                            <div className="space-y-2 pt-2 border-t border-white/10">
+                              <p className="text-[10px] leading-tight">
+                                <span className="opacity-60">📍 Address:</span><br/>
+                                <span className="font-semibold text-blue-400">{addresses[empId] || 'Locating...'}</span>
+                              </p>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-emerald-400">{(loc.totalDistance || 0).toFixed(2)} km</span>
+                                <span className="text-[10px] opacity-60">{Math.round((loc.speed || 0) * 3.6)} km/h</span>
                               </div>
                             </div>
                           </div>
                         </Popup>
                       </Marker>
+                    );
+                  })}
+                </MarkerClusterGroup>
 
-                      {/* Start point marker */}
-                      {path.length > 1 && (
-                        <Marker
-                          position={[path[0].lat, path[0].lng]}
-                          icon={createWaypointIcon('S', color)}
-                        >
-                          <Popup>
-                            <div style={{ color: 'var(--text-main)', fontSize: '12px' }}>
-                              <strong>Start Point</strong> — {loc.name || emp?.name}
-                            </div>
-                          </Popup>
-                        </Marker>
+                {/* Render paths separately so they don't cluster */}
+                {Object.entries(locations).map(([empId, loc], idx) => {
+                  const color = COLORS[idx % COLORS.length];
+                  const isEmpSelected = selected === empId || !selected;
+                  const path = loc.path || [];
+
+                  if (!isEmpSelected && selected) return null;
+
+                  return (
+                    <React.Fragment key={`path-${empId}`}>
+                      {(selected === empId || activeCount < 10) && path.length > 1 && (
+                        <Polyline
+                          positions={path.map(p => [p.lat, p.lng])}
+                          pathOptions={{
+                            color: color,
+                            weight: 3,
+                            opacity: 0.6,
+                            dashArray: selected === empId ? null : '5, 10',
+                          }}
+                        />
                       )}
                     </React.Fragment>
                   );
