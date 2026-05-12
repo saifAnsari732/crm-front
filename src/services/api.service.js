@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL:'https://crm-b-y8rv.onrender.com/api',
-  // baseURL: 'http://localhost:5000/api',
+  // baseURL:'https://crm-b-y8rv.onrender.com/api',
+  baseURL: 'http://localhost:5000/api',
   withCredentials: true,
 });
 
@@ -81,6 +81,7 @@ export const trackingAPI = {
   getSession: (id) => API.get(`/tracking/session/${id}`),
   geocode: (lat, lng) => API.get(`/tracking/geocode?lat=${lat}&lng=${lng}`),
   getEmployeeReport: (employeeId, params) => API.get(`/tracking/report/employee/${employeeId}`, { params }),
+  deleteHistory: (employeeId) => API.delete(`/tracking/history/employee/${employeeId}`),
 };
 
 // ─── Meetings ─────────────────────────────────────────────────────────────

@@ -5,8 +5,9 @@ import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import { adminAPI, attendanceAPI, meetingAPI, expenseAPI, trackingAPI } from '../../services/api.service';
 import {
   MapPin, Users, Receipt, TrendingUp, Clock, ChevronRight,
-  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList
+  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList, Locate
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -115,7 +116,7 @@ export default function EmployeeDashboard() {
               </div>
             </div>
             
-            <div className="mt-8 flex items-center gap-4">
+            <div className="mt-8 flex flex-wrap items-center gap-4">
               <div className={`px-4 py-2 rounded-2xl flex items-center gap-2 border ${
                 stats.attended ? 'bg-emerald-400/10 border-emerald-400/20' : 'bg-red-400/10 border-red-400/20'
               }`}>
@@ -124,7 +125,23 @@ export default function EmployeeDashboard() {
                   {stats.attended ? 'Status: Active' : 'Status: Offline'}
                 </span>
               </div>
-              <span className="text-white/40 text-[10px] font-bold tracking-widest uppercase">EMP ID: {user?.employeeId}</span>
+              <button 
+                onClick={() => {
+                  if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                      () => toast.success("Location enabled!"),
+                      (err) => toast.error(`Error: ${err.message}`)
+                    );
+                  } else {
+                    toast.error("Geolocation not supported");
+                  }
+                }}
+                className="px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 flex items-center gap-2 text-white transition-all active:scale-95"
+              >
+                <Locate className="w-3.5 h-3.5 text-primary-300" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Enable Location</span>
+              </button>
+              <span className="text-white/40 text-[10px] font-bold tracking-widest uppercase hidden md:inline">EMP ID: {user?.employeeId}</span>
             </div>
           </div>
         </div>

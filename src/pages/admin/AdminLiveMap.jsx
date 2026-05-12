@@ -297,43 +297,46 @@ export default function AdminLiveMap() {
                     </div>
 
                     {/* Address section */}
-                    <div className="mt-3 p-2.5 rounded-xl bg-[var(--bg-main)]/50 border border-[var(--border-color)]">
-                      <div className="flex items-start gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
+                    <div className="mt-3 p-3 rounded-xl bg-[var(--bg-main)]/50 border border-[var(--border-color)] group-hover:border-primary-500/30 transition-colors">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 p-1 rounded bg-primary-500/10 text-primary-500">
+                          <MapPin className="w-3.5 h-3.5" />
+                        </div>
                         <div className="min-w-0 flex-1">
                           {addr ? (
-                            addr.startsWith('Location') ? (
-                              <span className="text-[10px] text-[var(--text-muted)] font-mono leading-tight block">{addr}</span>
-                            ) : (
+                            !addr.startsWith('Location') ? (
                               <>
-                                <p className="text-[var(--text-main)] text-xs font-bold truncate">
+                                <p className="text-[var(--text-main)] text-xs font-bold leading-tight mb-0.5">
                                   {addr.split(',')[0]}
                                 </p>
                                 {addr.includes(',') && (
-                                  <p className="text-[var(--text-muted)] text-[10px] truncate">
+                                  <p className="text-[var(--text-muted)] text-[10px] leading-tight line-clamp-2">
                                     {addr.split(',').slice(1).join(',').trim()}
                                   </p>
                                 )}
                               </>
+                            ) : (
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono leading-tight block">{addr}</span>
                             )
                           ) : (
-                            <span className="text-[var(--text-muted)] text-[10px] animate-pulse italic">
-                              Resolving current address...
-                            </span>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="h-3 w-3/4 bg-[var(--border-color)] animate-pulse rounded" />
+                              <div className="h-2 w-1/2 bg-[var(--border-color)] animate-pulse rounded" />
+                            </div>
                           )}
                         </div>
                       </div>
                       
                       {isSelected && loc.path && (
-                        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[var(--border-color)]/50">
-                          <div className="flex items-center gap-1.5">
-                            <Navigation className="w-3 h-3 text-[var(--text-muted)]" />
-                            <span className="text-[var(--text-muted)] text-[10px]">{loc.path.length} points</span>
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--border-color)]/50">
+                          <div className="flex items-center gap-2">
+                            <Navigation className="w-3 h-3 text-primary-500" />
+                            <span className="text-[var(--text-main)] text-[10px] font-bold">{loc.path.length} Pings</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             <Clock className="w-3 h-3 text-[var(--text-muted)]" />
-                            <span className="text-[var(--text-muted)] text-[10px]">
-                              {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                            <span className="text-[var(--text-muted)] text-[10px] font-medium">
+                              Last: {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
                             </span>
                           </div>
                         </div>
@@ -379,26 +382,41 @@ export default function AdminLiveMap() {
                         icon={createEmployeeIcon(initial, color, true)}
                         eventHandlers={{ click: () => handleSelectEmployee(empId) }}
                       >
-                        <Popup>
-                          <div className="p-1 min-w-[200px]">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" 
-                                   style={{ background: color }}>
+                        <Popup className="custom-popup">
+                          <div className="p-2 min-w-[220px]">
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg" 
+                                   style={{ background: color, boxShadow: `0 4px 12px ${color}66` }}>
                                 {initial}
                               </div>
                               <div>
-                                <h4 className="font-bold text-sm">{loc.name}</h4>
-                                <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider">{loc.department}</p>
+                                <h4 className="font-bold text-base text-[var(--text-main)]">{loc.name}</h4>
+                                <span className="px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 text-[10px] font-bold uppercase tracking-wider">
+                                  {loc.department || 'Field Staff'}
+                                </span>
                               </div>
                             </div>
-                            <div className="space-y-2 pt-2 border-t border-white/10">
-                              <p className="text-[10px] leading-tight">
-                                <span className="opacity-60">📍 Address:</span><br/>
-                                <span className="font-semibold text-blue-400">{addresses[empId] || 'Locating...'}</span>
-                              </p>
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-emerald-400">{(loc.totalDistance || 0).toFixed(2)} km</span>
-                                <span className="text-[10px] opacity-60">{Math.round((loc.speed || 0) * 3.6)} km/h</span>
+                            
+                            <div className="space-y-3 pt-3 border-t border-[var(--border-color)]">
+                              <div className="flex items-start gap-2">
+                                <MapPin className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-widest mb-1">Current Address</p>
+                                  <p className="text-xs font-semibold text-[var(--text-main)] leading-relaxed">
+                                    {addresses[empId] || 'Fetching location...'}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="bg-[var(--bg-main)]/50 p-2 rounded-xl border border-[var(--border-color)]">
+                                  <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] mb-0.5">Distance</p>
+                                  <p className="text-xs font-bold text-emerald-400">{(loc.totalDistance || 0).toFixed(2)} km</p>
+                                </div>
+                                <div className="bg-[var(--bg-main)]/50 p-2 rounded-xl border border-[var(--border-color)]">
+                                  <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] mb-0.5">Speed</p>
+                                  <p className="text-xs font-bold text-blue-400">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -408,7 +426,7 @@ export default function AdminLiveMap() {
                   })}
                 </MarkerClusterGroup>
 
-                {/* Render paths separately so they don't cluster */}
+                {/* Render paths with professional glow */}
                 {Object.entries(locations).map(([empId, loc], idx) => {
                   const color = COLORS[idx % COLORS.length];
                   const isEmpSelected = selected === empId || !selected;
@@ -419,20 +437,36 @@ export default function AdminLiveMap() {
                   return (
                     <React.Fragment key={`path-${empId}`}>
                       {(selected === empId || activeCount < 10) && path.length > 1 && (
-                        <Polyline
-                          positions={path.map(p => [p.lat, p.lng])}
-                          pathOptions={{
-                            color: color,
-                            weight: 3,
-                            opacity: 0.6,
-                            dashArray: selected === empId ? null : '5, 10',
-                          }}
-                        />
+                        <>
+                          {/* Path Glow */}
+                          <Polyline
+                            positions={path.map(p => [p.lat, p.lng])}
+                            pathOptions={{
+                              color: color,
+                              weight: 8,
+                              opacity: 0.15,
+                              smoothFactor: 2,
+                            }}
+                          />
+                          {/* Main Path Line */}
+                          <Polyline
+                            positions={path.map(p => [p.lat, p.lng])}
+                            pathOptions={{
+                              color: color,
+                              weight: 3,
+                              opacity: 0.8,
+                              dashArray: selected === empId ? null : '6, 12',
+                              smoothFactor: 1.5,
+                              lineCap: 'round',
+                            }}
+                          />
+                        </>
                       )}
                     </React.Fragment>
                   );
                 })}
               </MapContainer>
+
 
               {/* Map legend overlay */}
               {Object.keys(locations).length > 0 && (

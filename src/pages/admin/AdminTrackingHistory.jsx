@@ -1,101 +1,46 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { adminAPI, trackingAPI } from '../../services/api.service';
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
-import { Calendar, MapPin, Navigation, Clock, ChevronRight, Search, Download } from 'lucide-react';
+import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import { Calendar, MapPin, Navigation, Clock, ChevronRight, Search, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import L from 'leaflet';
 
 // Custom Marker Icons
 const startIcon = L.divIcon({
   className: 'custom-start-marker',
-  html: `<div style="width:16px;height:16px;border-radius:50%;background:#22c55e;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-  iconSize: [16, 16], iconAnchor: [8, 8],
+  html: `<div style="width:18px;height:18px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;"></div></div>`,
+  iconSize: [18, 18], iconAnchor: [9, 9],
 });
 const endIcon = L.divIcon({
   className: 'custom-end-marker',
-  html: `<div style="width:16px;height:16px;border-radius:50%;background:#ef4444;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-  iconSize: [16, 16], iconAnchor: [8, 8],
+  html: `<div style="width:18px;height:18px;border-radius:50%;background:#ef4444;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;"></div></div>`,
+  iconSize: [18, 18], iconAnchor: [9, 9],
 });
 
-// Global geocode cache shared across renders
-const geocodeCache = {};
-const pendingGeocodes = {};
-
-async function geocodeViaProxy(lat, lng) {
-  const key = `${parseFloat(lat).toFixed(4)},${parseFloat(lng).toFixed(4)}`;
-  if (geocodeCache[key]) return geocodeCache[key];
-  if (pendingGeocodes[key]) return pendingGeocodes[key];
-
-  const promise = trackingAPI.geocode(lat, lng)
-    .then(res => {
-      const address = res.data?.address || `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
-      geocodeCache[key] = address;
-      delete pendingGeocodes[key];
-      return address;
-    })
-    .catch(() => {
-      const fallback = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
-      delete pendingGeocodes[key];
-      return fallback;
-    });
-
-  pendingGeocodes[key] = promise;
-  return promise;
+// Map re-center helper
+function MapBounds({ coords }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords?.length > 0) {
+      const bounds = L.latLngBounds(coords.map(c => [c.lat, c.lng]));
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+    }
+  }, [coords, map]);
+  return null;
 }
 
 export default function AdminTrackingHistory() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sessionLoading, setSessionLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [filters, setFilters] = useState({ date: new Date().toISOString().slice(0, 10), employeeId: '' });
   const [employees, setEmployees] = useState([]);
-  // Map: coordIndex -> resolved address string
-  const [resolvedAddresses, setResolvedAddresses] = useState({});
-  const geocodingRef = useRef(false);
-
+  
   useEffect(() => {
     fetchEmployees();
     fetchHistory();
-  }, []);
-
-  // When selected session changes, resolve missing addresses
-  useEffect(() => {
-    if (!selectedSession?.coordinates?.length) return;
-    resolveAddresses(selectedSession);
-  }, [selectedSession?._id]);
-
-  const resolveAddresses = useCallback(async (session) => {
-    if (!session?.coordinates?.length || geocodingRef.current) return;
-    geocodingRef.current = true;
-
-    const updates = {};
-    // Only geocode coords that have no stored address — and deduplicate by rounded key
-    const seen = new Set();
-    const tasks = session.coordinates.map(async (coord, idx) => {
-      if (coord.address) {
-        updates[idx] = coord.address;
-        return;
-      }
-      const key = `${parseFloat(coord.lat).toFixed(4)},${parseFloat(coord.lng).toFixed(4)}`;
-      if (seen.has(key)) {
-        // Reuse the address from the first occurrence with same key
-        const firstIdx = session.coordinates.findIndex(
-          c => `${parseFloat(c.lat).toFixed(4)},${parseFloat(c.lng).toFixed(4)}` === key
-        );
-        if (firstIdx !== idx && updates[firstIdx]) {
-          updates[idx] = updates[firstIdx];
-          return;
-        }
-      }
-      seen.add(key);
-      const address = await geocodeViaProxy(coord.lat, coord.lng);
-      updates[idx] = address;
-    });
-
-    await Promise.all(tasks);
-    setResolvedAddresses(updates);
-    geocodingRef.current = false;
   }, []);
 
   const fetchEmployees = async () => {
@@ -107,33 +52,64 @@ export default function AdminTrackingHistory() {
 
   const fetchHistory = async () => {
     setLoading(true);
-    setResolvedAddresses({});
     try {
       const { data } = await adminAPI.getHistory(filters);
       setHistory(data.history || []);
       if (data.history?.length > 0) {
-        const first = data.history[0];
-        setSelectedSession(first);
+        handleSelectSession(data.history[0]);
+      } else {
+        setSelectedSession(null);
       }
     } catch { toast.error('Failed to load history'); }
     finally { setLoading(false); }
   };
 
-  const handleSelectSession = (session) => {
-    setResolvedAddresses({});
-    geocodingRef.current = false;
-    setSelectedSession(session);
+  const handleDeleteHistory = async () => {
+    if (!filters.employeeId) return;
+    
+    const employeeName = employees.find(e => e._id === filters.employeeId)?.name || 'this employee';
+    
+    if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE ALL history for ${employeeName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { data } = await trackingAPI.deleteHistory(filters.employeeId);
+      if (data.success) {
+        toast.success(data.message);
+        fetchHistory(); // Refresh the list
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete history');
+    }
+  };
+
+  const handleSelectSession = async (session) => {
+    if (selectedSession?._id === session._id && selectedSession.coordinates) return;
+    
+    // If coordinates already exist (unlikely with optimization), just set it
+    if (session.coordinates) {
+      setSelectedSession(session);
+      return;
+    }
+
+    setSessionLoading(true);
+    try {
+      const { data } = await trackingAPI.getSession(session._id);
+      if (data.success) {
+        setSelectedSession(data.session);
+      }
+    } catch {
+      toast.error('Failed to load session details');
+      setSelectedSession(session); // Fallback to session without coords
+    } finally {
+      setSessionLoading(false);
+    }
   };
 
   const mapCenter = selectedSession?.coordinates?.length > 0
     ? [selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]
     : [20.5937, 78.9629];
-
-  const getAddress = (coord, idx) => {
-    if (coord.address) return coord.address;
-    if (resolvedAddresses[idx]) return resolvedAddresses[idx];
-    return null; // still loading
-  };
 
   const exportToCSV = () => {
     if (!selectedSession || !selectedSession.coordinates) return;
@@ -146,7 +122,7 @@ export default function AdminTrackingHistory() {
       c.lng,
       (c.speed * 3.6).toFixed(1),
       c.accuracy || '',
-      getAddress(c, i) || ''
+      c.address || ''
     ]);
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -154,7 +130,7 @@ export default function AdminTrackingHistory() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `tracking_history_${selectedSession.employee?.name}_${filters.date}.csv`);
+    link.setAttribute("download", `tracking_${selectedSession.employee?.name}_${filters.date}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -182,7 +158,7 @@ export default function AdminTrackingHistory() {
             <select
               value={filters.employeeId}
               onChange={(e) => setFilters(f => ({ ...f, employeeId: e.target.value }))}
-              className="input-field py-2 text-sm w-48 bg-teal-700"
+              className="input-field py-2 text-sm w-48"
             >
               <option value="">All Employees</option>
               {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
@@ -190,6 +166,14 @@ export default function AdminTrackingHistory() {
             <button onClick={fetchHistory} className="btn-primary py-2 px-4 flex items-center gap-2 text-sm">
               <Search className="w-4 h-4" /> Filter
             </button>
+            {filters.employeeId && (
+              <button 
+                onClick={handleDeleteHistory} 
+                className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+              >
+                Delete All History
+              </button>
+            )}
           </div>
         </div>
 
@@ -253,21 +237,59 @@ export default function AdminTrackingHistory() {
           {/* Main Panel */}
           <div className="lg:col-span-8 xl:col-span-9 space-y-6">
             {/* Map */}
-            <div className="glass-card overflow-hidden h-[400px] relative">
+            <div className="glass-card overflow-hidden h-[450px] relative">
+              {sessionLoading && (
+                <div className="absolute inset-0 z-[1000] bg-[var(--bg-main)]/40 backdrop-blur-[2px] flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+                    <p className="text-primary-500 font-bold text-sm">Loading Route Path...</p>
+                  </div>
+                </div>
+              )}
+              
               {selectedSession ? (
                 <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }}>
                   <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                  
                   {selectedSession.coordinates?.length > 1 && (
                     <>
+                      <MapBounds coords={selectedSession.coordinates} />
+                      {/* Outer Glow for Polyline */}
                       <Polyline
                         positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                        pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.85 }}
+                        pathOptions={{ color: '#3b82f6', weight: 8, opacity: 0.2 }}
                       />
+                      {/* Main Real Path Line */}
+                      <Polyline
+                        positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
+                        pathOptions={{ 
+                          color: '#3b82f6', 
+                          weight: 4, 
+                          opacity: 1,
+                          lineCap: 'round',
+                          lineJoin: 'round',
+                          smoothFactor: 1.5 // Improves "Real Path" look by smoothing corners
+                        }}
+                      />
+                      
                       <Marker position={[selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]} icon={startIcon}>
-                        <Popup>🟢 Start — {getAddress(selectedSession.coordinates[0], 0) || '...'}</Popup>
+                        <Popup>
+                          <div className="p-1">
+                            <p className="text-[10px] font-bold text-emerald-500 uppercase mb-1">Start Point</p>
+                            <p className="text-xs font-semibold">{selectedSession.startAddress || 'Initial Location'}</p>
+                            <p className="text-[10px] opacity-60 mt-1">{new Date(selectedSession.startTime).toLocaleTimeString()}</p>
+                          </div>
+                        </Popup>
                       </Marker>
+                      
                       <Marker position={[selectedSession.coordinates[selectedSession.coordinates.length - 1].lat, selectedSession.coordinates[selectedSession.coordinates.length - 1].lng]} icon={endIcon}>
-                        <Popup>🔴 End — {getAddress(selectedSession.coordinates[selectedSession.coordinates.length - 1], selectedSession.coordinates.length - 1) || '...'}</Popup>
+                        <Popup>
+                          <div className="p-1">
+                            <p className="text-[10px] font-bold text-red-500 uppercase mb-1">End Point</p>
+                            <p className="text-xs font-semibold">{selectedSession.endAddress || 'Final Location'}</p>
+                            <p className="text-[10px] opacity-60 mt-1">{new Date(selectedSession.endTime || selectedSession.updatedAt).toLocaleTimeString()}</p>
+                          </div>
+                        </Popup>
                       </Marker>
                     </>
                   )}
@@ -280,7 +302,7 @@ export default function AdminTrackingHistory() {
             </div>
 
             {/* Activity Timeline Table */}
-            {selectedSession && (
+            {selectedSession && selectedSession.coordinates && (
               <div className="glass-card overflow-hidden shadow-xl border-[var(--border-color)]">
                 <div className="p-5 border-b border-[var(--border-color)] flex items-center justify-between bg-[var(--bg-card)]">
                   <div className="flex items-center gap-3">
@@ -290,7 +312,7 @@ export default function AdminTrackingHistory() {
                     <div>
                       <h3 className="text-[var(--text-main)] font-bold">Activity Timeline</h3>
                       <p className="text-[var(--text-muted)] text-xs">
-                        {selectedSession.coordinates?.length || 0} location pings recorded
+                        {selectedSession.coordinates.length} locations recorded
                       </p>
                     </div>
                   </div>
@@ -313,9 +335,9 @@ export default function AdminTrackingHistory() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
-                      {selectedSession.coordinates?.slice().reverse().map((coord, idx) => {
+                      {selectedSession.coordinates.slice().reverse().map((coord, idx) => {
                         const realIdx = selectedSession.coordinates.length - 1 - idx;
-                        const addr = getAddress(coord, realIdx);
+                        const addr = coord.address || `Location (${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)})`;
                         return (
                           <tr key={idx} className="hover:bg-[var(--bg-card-hover)] transition-colors group">
                             <td className="px-5 py-4 text-[var(--text-muted)] text-xs font-mono">
@@ -329,24 +351,20 @@ export default function AdminTrackingHistory() {
                                 <div className="mt-0.5 p-1 rounded bg-primary-500/10 group-hover:bg-primary-500 transition-colors flex-shrink-0">
                                   <MapPin className="w-3 h-3 text-primary-500 group-hover:text-[var(--text-inverse)]" />
                                 </div>
-                                <div>
-                                  {addr ? (
-                                    addr.startsWith('Location') ? (
-                                      <span className="text-xs text-[var(--text-muted)] font-mono">{addr}</span>
-                                    ) : (
-                                      <>
-                                        <span className="font-semibold text-primary-500 block text-sm">
-                                          {addr.split(',')[0]}
+                                <div className="min-w-0">
+                                  {!addr.startsWith('Location') ? (
+                                    <>
+                                      <span className="font-semibold text-primary-500 block text-sm truncate">
+                                        {addr.split(',')[0]}
+                                      </span>
+                                      {addr.includes(',') && (
+                                        <span className="text-xs text-[var(--text-muted)] line-clamp-1">
+                                          {addr.split(',').slice(1).join(',').trim()}
                                         </span>
-                                        {addr.includes(',') && (
-                                          <span className="text-xs text-[var(--text-muted)] line-clamp-1">
-                                            {addr.split(',').slice(1).join(',').trim()}
-                                          </span>
-                                        )}
-                                      </>
-                                    )
+                                      )}
+                                    </>
                                   ) : (
-                                    <span className="text-[var(--text-muted)] text-xs animate-pulse">Resolving address…</span>
+                                    <span className="text-xs text-[var(--text-muted)] font-mono">{addr}</span>
                                   )}
                                 </div>
                               </div>
@@ -356,12 +374,6 @@ export default function AdminTrackingHistory() {
                                 <span className="text-emerald-500 font-bold font-mono text-sm">
                                   {Math.round((coord.speed || 0) * 3.6)} <small className="text-[10px]">km/h</small>
                                 </span>
-                                <div className="w-12 h-1 bg-[var(--bg-main)] rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-emerald-500 rounded-full"
-                                    style={{ width: `${Math.min(((coord.speed || 0) * 3.6) / 80 * 100, 100)}%` }}
-                                  />
-                                </div>
                               </div>
                             </td>
                             <td className="px-5 py-4 text-right whitespace-nowrap">

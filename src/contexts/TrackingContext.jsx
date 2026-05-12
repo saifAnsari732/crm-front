@@ -14,6 +14,7 @@ const SYNC_CHECK_INTERVAL = 5000; // Check for offline coordinates every 5s
 export const TrackingProvider = ({ children }) => {
   const [isTracking, setIsTracking] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [currentAddress, setCurrentAddress] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [totalDistance, setTotalDistance] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
@@ -147,6 +148,11 @@ export const TrackingProvider = ({ children }) => {
       setRoutePath([pos]);
       setCurrentLocation(pos);
 
+      // Fetch initial address
+      trackingAPI.geocode(pos.lat, pos.lng).then(res => {
+        if (res.data?.address) setCurrentAddress(res.data.address);
+      }).catch(() => {});
+
       // Emit tracking started
       emitTrackingStarted({ ...pos, sessionId: sid });
 
@@ -165,6 +171,12 @@ export const TrackingProvider = ({ children }) => {
           setCurrentLocation({ lat: coord.lat, lng: coord.lng });
           setCurrentSpeed(Math.round((coord.speed || 0) * 3.6)); // m/s to km/h
           setRoutePath(prev => [...prev, { lat: coord.lat, lng: coord.lng }]);
+          
+          // Decode address for UI
+          trackingAPI.geocode(coord.lat, coord.lng).then(res => {
+            if (res.data?.address) setCurrentAddress(res.data.address);
+          }).catch(() => {});
+
           coordsBuffer.current.push(coord);
 
           emitLocation({
@@ -257,6 +269,7 @@ export const TrackingProvider = ({ children }) => {
       value={{
         isTracking,
         currentLocation,
+        currentAddress,
         totalDistance,
         currentSpeed,
         routePath,
