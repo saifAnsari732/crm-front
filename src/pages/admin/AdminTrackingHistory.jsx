@@ -158,10 +158,10 @@ export default function AdminTrackingHistory() {
             <select
               value={filters.employeeId}
               onChange={(e) => setFilters(f => ({ ...f, employeeId: e.target.value }))}
-              className="input-field py-2 text-sm w-48"
+              className="input-field py-2 text-sm w-48  "
             >
               <option value="">All Employees</option>
-              {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+              {employees.map(e => <option className='bg-primary-600/10 text-black' key={e._id} value={e._id}>{e.name}</option>)}
             </select>
             <button onClick={fetchHistory} className="btn-primary py-2 px-4 flex items-center gap-2 text-sm">
               <Search className="w-4 h-4" /> Filter
