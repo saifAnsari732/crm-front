@@ -12,10 +12,10 @@ const BATCH_SIZE = 5;
 const SYNC_CHECK_INTERVAL = 5000; // Check for offline coordinates every 5s
 
 export const TrackingProvider = ({ children }) => {
-  const [isTracking, setIsTracking] = useState(false);
+  const [isTracking, setIsTracking] = useState(() => localStorage.getItem('isTracking') === 'true');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [currentAddress, setCurrentAddress] = useState(null);
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionId, setSessionId] = useState(() => localStorage.getItem('sessionId'));
   const [totalDistance, setTotalDistance] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [routePath, setRoutePath] = useState([]);
@@ -142,6 +142,11 @@ export const TrackingProvider = ({ children }) => {
 
       const { data } = await trackingAPI.start(pos);
       const sid = data.session.sessionId;
+      
+      // Persist to localStorage
+      localStorage.setItem('isTracking', 'true');
+      localStorage.setItem('sessionId', sid);
+      
       sessionIdRef.current = sid;
       setSessionId(sid);
       setIsTracking(true);
@@ -240,6 +245,10 @@ export const TrackingProvider = ({ children }) => {
       toast.error('Error stopping tracking');
     }
 
+    // Clear persistence
+    localStorage.removeItem('isTracking');
+    localStorage.removeItem('sessionId');
+
     setIsTracking(false);
     setSessionId(null);
     sessionIdRef.current = null;
@@ -255,14 +264,68 @@ export const TrackingProvider = ({ children }) => {
     }
   }, [isTracking, startTracking, stopTracking]);
 
-  // Cleanup on unmount
+  // Auto-resume tracking on mount if state says so
   useEffect(() => {
+    const resumeTracking = async () => {
+      const persistedTracking = localStorage.getItem('isTracking') === 'true';
+      const persistedSessionId = localStorage.getItem('sessionId');
+
+      if (persistedTracking && persistedSessionId && !watchIdRef.current) {
+        console.log('🔄 Resuming tracking session:', persistedSessionId);
+        sessionIdRef.current = persistedSessionId;
+        
+        // Re-setup watchPosition
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (position) => {
+            const coord = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              speed: position.coords.speed || 0,
+              accuracy: position.coords.accuracy,
+              timestamp: new Date().toISOString(),
+            };
+
+            setCurrentLocation({ lat: coord.lat, lng: coord.lng });
+            setCurrentSpeed(Math.round((coord.speed || 0) * 3.6));
+            setRoutePath(prev => [...prev, { lat: coord.lat, lng: coord.lng }]);
+            
+            trackingAPI.geocode(coord.lat, coord.lng).then(res => {
+              if (res.data?.address) setCurrentAddress(res.data.address);
+            }).catch(() => {});
+
+            coordsBuffer.current.push(coord);
+
+            emitLocation({
+              lat: coord.lat,
+              lng: coord.lng,
+              speed: coord.speed,
+              accuracy: coord.accuracy,
+              sessionId: persistedSessionId,
+            });
+
+            if (coordsBuffer.current.length >= BATCH_SIZE) {
+              flushCoords();
+            }
+          },
+          (err) => {
+            console.error('GPS error on resume:', err);
+            setError(err.message);
+          },
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+        );
+
+        flushTimerRef.current = setInterval(flushCoords, 30000);
+      }
+    };
+
+    resumeTracking();
+
     return () => {
       if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
       clearInterval(flushTimerRef.current);
       clearInterval(syncCheckRef.current);
     };
-  }, []);
+  }, [flushCoords]);
 
   return (
     <TrackingContext.Provider

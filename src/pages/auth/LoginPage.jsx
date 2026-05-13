@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Eye, EyeOff, Zap, MapPin, ArrowRight, Shield } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, authError } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [show, setShow] = useState(false);
@@ -13,10 +13,13 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const res = await login(form.email, form.password);
-    setLoading(false);
-    if (res?.success) {
-      navigate(res.role === 'employee' ? '/dashboard' : '/admin');
+    try {
+      const res = await login(form.email, form.password);
+      if (res?.success) {
+        navigate(res.role === 'employee' ? '/dashboard' : '/admin');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,15 +48,15 @@ export default function LoginPage() {
             <p className="text-[var(--text-muted)] text-sm">Sign in to your account to continue</p>
           </div>
 
-          {/* Demo credentials hint */}
-          <div className="mb-5 p-3 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-start gap-2">
-            <Shield className="w-4 h-4 text-primary-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-primary-300 text-xs font-semibold mb-1">Demo Credentials</p>
-              <p className="text-[var(--text-muted)] text-xs">Admin: admin@fieldcrm.com / admin123</p>
-              <p className="text-[var(--text-muted)] text-xs">Employee: emp@fieldcrm.com / emp123</p>
+          {/* Error Alert */}
+          {authError && (
+            <div className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 animate-shake">
+              <Shield className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <p className="text-red-500 text-xs font-bold">Invalide Email Or password</p>
             </div>
-          </div>
+          )}
+
+         
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

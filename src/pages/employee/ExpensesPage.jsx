@@ -54,8 +54,8 @@ export default function ExpensesPage() {
       <div className="p-4 lg:p-6 space-y-5 max-w-3xl mx-auto">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-white text-2xl font-bold">Expenses</h1>
-            <p className="text-white/40 text-sm">{expenses.length} entries</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-bold">Expenses</h1>
+            <p className="text-[var(--text-muted)] text-sm">{expenses.length} entries</p>
           </div>
           <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 py-2.5 px-4 text-sm">
             <Plus className="w-4 h-4" /> Add
@@ -65,19 +65,19 @@ export default function ExpensesPage() {
         {/* Summary cards */}
         <div className="grid grid-cols-2 gap-3">
           <div className="glass-card p-4">
-            <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-1">Approved</p>
-            <p className="text-white text-2xl font-bold">₹{totalApproved.toLocaleString()}</p>
+            <p className="text-emerald-500 text-xs font-semibold uppercase tracking-wider mb-1">Approved</p>
+            <p className="text-[var(--text-main)] text-2xl font-bold">₹{totalApproved.toLocaleString()}</p>
           </div>
           <div className="glass-card p-4">
-            <p className="text-amber-400 text-xs font-semibold uppercase tracking-wider mb-1">Pending</p>
-            <p className="text-white text-2xl font-bold">₹{totalPending.toLocaleString()}</p>
+            <p className="text-amber-500 text-xs font-semibold uppercase tracking-wider mb-1">Pending</p>
+            <p className="text-[var(--text-main)] text-2xl font-bold">₹{totalPending.toLocaleString()}</p>
           </div>
         </div>
 
         {/* Category filter chips */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
           {['all', ...CATEGORIES].map(cat => (
-            <button key={cat} className="flex-shrink-0 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/60 text-xs font-medium hover:bg-white/10 capitalize transition-colors">
+            <button key={cat} className="flex-shrink-0 px-3 py-1.5 rounded-full bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-muted)] text-xs font-medium hover:bg-[var(--bg-card-hover)] capitalize transition-colors">
               {cat !== 'all' ? CATEGORY_EMOJI[cat] + ' ' : ''}{cat}
             </button>
           ))}
@@ -89,25 +89,25 @@ export default function ExpensesPage() {
         ) : expenses.length === 0 ? (
           <div className="glass-card p-10 text-center">
             <div className="text-4xl mb-3">🧾</div>
-            <p className="text-white/50 font-medium">No expenses yet</p>
-            <p className="text-white/30 text-sm mt-1">Track your field expenses here</p>
+            <p className="text-[var(--text-main)] opacity-50 font-medium">No expenses yet</p>
+            <p className="text-[var(--text-muted)] text-sm mt-1">Track your field expenses here</p>
           </div>
         ) : (
           <div className="space-y-2">
             {expenses.map(exp => (
               <div key={exp._id} className="glass-card p-4 flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl flex-shrink-0">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 flex items-center justify-center text-xl flex-shrink-0">
                   {CATEGORY_EMOJI[exp.category]}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-white font-semibold text-sm capitalize">{exp.category}</p>
+                    <p className="text-[var(--text-main)] font-semibold text-sm capitalize">{exp.category}</p>
                     <span className={`badge ${statusColor[exp.status]} capitalize`}>{exp.status}</span>
                   </div>
-                  {exp.description && <p className="text-white/40 text-xs truncate">{exp.description}</p>}
-                  <p className="text-white/30 text-xs">{new Date(exp.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  {exp.description && <p className="text-[var(--text-muted)] text-xs truncate">{exp.description}</p>}
+                  <p className="text-[var(--text-muted)] opacity-60 text-[10px]">{new Date(exp.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
-                <p className="text-white font-bold text-sm flex-shrink-0">₹{exp.amount.toLocaleString()}</p>
+                <p className="text-[var(--text-main)] font-bold text-sm flex-shrink-0">₹{exp.amount.toLocaleString()}</p>
               </div>
             ))}
           </div>
@@ -119,8 +119,8 @@ export default function ExpensesPage() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="w-full max-w-md glass-card p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-bold text-lg">Add Expense</h2>
-              <button onClick={() => setShowForm(false)} className="p-2 rounded-xl hover:bg-white/10"><X className="w-5 h-5 text-white/60" /></button>
+              <h2 className="text-[var(--text-main)] font-bold text-lg">Add Expense</h2>
+              <button onClick={() => setShowForm(false)} className="p-2 rounded-xl hover:bg-[var(--bg-card-hover)]"><X className="w-5 h-5 text-[var(--text-muted)]" /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -128,23 +128,23 @@ export default function ExpensesPage() {
                 <div className="grid grid-cols-5 gap-2">
                   {CATEGORIES.map(cat => (
                     <button type="button" key={cat} onClick={() => setForm(p => ({ ...p, category: cat }))}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${form.category === cat ? 'border-primary-500 bg-primary-500/20' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                      className={`p-2.5 rounded-xl border text-center transition-all ${form.category === cat ? 'border-primary-500 bg-primary-500/10' : 'border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)]'}`}>
                       <div className="text-xl">{CATEGORY_EMOJI[cat]}</div>
-                      <div className="text-white/60 text-[10px] capitalize mt-0.5">{cat}</div>
+                      <div className="text-[var(--text-muted)] text-[10px] capitalize mt-0.5">{cat}</div>
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Amount (₹) *</label>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Amount (₹) *</label>
                 <input type="number" className="input-field" placeholder="0.00" value={form.amount} onChange={set('amount')} required />
               </div>
               <div>
-                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Description</label>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Description</label>
                 <input className="input-field" placeholder="Brief description..." value={form.description} onChange={set('description')} />
               </div>
               <div>
-                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Date</label>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Date</label>
                 <input type="date" className="input-field" value={form.date} onChange={set('date')} />
               </div>
               <div className="flex gap-3 pt-2">

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { trackingAPI } from '../../services/api.service';
 import { getSocket } from '../../services/socket.service';
-import { MapPin, Users, Activity, RefreshCw, Navigation, MapPinned, Clock, Locate } from 'lucide-react';
+import { MapPin, Users, Activity, RefreshCw, Navigation, MapPinned, Clock, Locate, History, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -116,10 +116,34 @@ export default function AdminLiveMap() {
   const [employees, setEmployees] = useState([]);
   const [locations, setLocations] = useState({});   // { empId: { lat, lng, name, speed, totalDistance, path: [{lat,lng}], avatar } }
   const [addresses, setAddresses] = useState({});    // { empId: "formatted address" }
-  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [flyCenter, setFlyCenter] = useState(null);
   const [flyZoom, setFlyZoom] = useState(14);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [selected, setSelected] = useState(null);
+
+  // Derive stats for filters
+  const stats = {
+    All: employees.length,
+    Active: Object.values(locations).filter(l => l.isActive).length,
+    Away: Object.values(locations).filter(l => !l.isActive).length,
+    PunchOut: employees.length - Object.keys(locations).length,
+    NoLocation: employees.filter(e => locations[e._id] && !locations[e._id].lat).length
+  };
+
+  const filteredEmployees = employees.filter(emp => {
+    const loc = locations[emp._id];
+    const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (activeFilter === 'All') return true;
+    if (activeFilter === 'Active') return loc?.isActive;
+    if (activeFilter === 'Away') return loc && !loc.isActive;
+    if (activeFilter === 'PunchOut') return !loc;
+    if (activeFilter === 'NoLocation') return loc && !loc.lat;
+    return true;
+  });
 
   // ─── Socket & data fetch ───────────────────────────────────────────────────
   useEffect(() => {
@@ -229,277 +253,189 @@ export default function AdminLiveMap() {
     }
   };
 
-  const activeCount = Object.keys(locations).length;
   const defaultCenter = [20.5937, 78.9629]; // India center fallback
 
   return (
     <AdminLayout>
-      <div className="p-4 lg:p-6 space-y-5 max-w-[1600px] mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[var(--text-main)] text-2xl font-bold flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary-600/30 border border-primary-500/30 flex items-center justify-center">
-                <MapPinned className="w-5 h-5 text-primary-400" />
-              </div>
-              Live Tracking
-            </h1>
-            <div className="flex items-center gap-2 mt-1.5 ml-[52px]">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="text-emerald-400 text-sm font-medium">{activeCount} employee{activeCount !== 1 ? 's' : ''} tracking live</p>
-            </div>
+      <div className="p-4 lg:p-6 space-y-6 max-w-[1800px] mx-auto h-[calc(100vh-80px)] flex flex-col">
+        {/* Header & Search */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
+             <MapPinned className="w-4 h-4" />
+             <span className="font-bold">My Team</span>
           </div>
-          <button onClick={fetchLive} className="btn-ghost flex items-center gap-2 py-2 px-4 text-sm">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+             <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input 
+                  type="text" 
+                  placeholder="Search staff..." 
+                  className="input-field pl-10 py-2 w-64 text-sm"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+             </div>
+             <button onClick={fetchLive} className="btn-secondary py-2 px-3">
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+             </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'All', label: 'All', color: 'bg-primary-500' },
+            { id: 'Active', label: 'Active', color: 'bg-emerald-500' },
+            { id: 'Away', label: 'Away', color: 'bg-amber-500' },
+            { id: 'PunchOut', label: 'Punch Out', color: 'bg-slate-500' },
+            { id: 'NoLocation', label: 'No Location', color: 'bg-red-500' }
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setActiveFilter(f.id)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+                activeFilter === f.id 
+                  ? `${f.color} text-white border-transparent shadow-lg` 
+                  : 'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border-color)] hover:border-primary-500/50'
+              }`}
+            >
+              <span className="uppercase">{f.label}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeFilter === f.id ? 'bg-white/20' : 'bg-[var(--bg-main)]'}`}>
+                {stats[f.id]}
+              </span>
+            </button>
+          ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* ─── Employee list (left sidebar) ─────────────────────────────── */}
-          <div className="lg:col-span-4 xl:col-span-3 space-y-3">
-            <h3 className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider">Field Employees</h3>
-            <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 custom-scrollbar">
+        <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-hidden">
+          {/* 1. Map Panel (Left) */}
+          <div className="flex-1 glass-card overflow-hidden relative border-[var(--border-color)] shadow-2xl">
+            <MapContainer
+              center={flyCenter || defaultCenter}
+              zoom={flyZoom || 5}
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+            >
+              <TileLayer
+                attribution='&copy; Google Maps'
+                url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
+              />
+              {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
+              
+              <MarkerClusterGroup showCoverageOnHover={false} maxClusterRadius={40}>
+                {Object.entries(locations).map(([empId, loc], idx) => {
+                  const color = COLORS[idx % COLORS.length];
+                  const initial = (loc.name || '?')[0].toUpperCase();
+                  const isSelected = selected === empId;
+                  
+                  return (
+                    <Marker
+                      key={empId}
+                      position={[loc.lat, loc.lng]}
+                      zIndexOffset={isSelected ? 1000 : 0}
+                      icon={createEmployeeIcon(initial, color, loc.isActive)}
+                      eventHandlers={{ click: () => handleSelectEmployee(empId) }}
+                    >
+                      <Popup className="custom-popup">
+                         <div className="p-3 min-w-[200px]">
+                            <p className="font-black text-sm text-[var(--text-main)] mb-1">{loc.name}</p>
+                            <p className="text-[10px] text-[var(--text-muted)] mb-3">{addresses[empId] || 'Locating...'}</p>
+                            <div className="grid grid-cols-2 gap-2">
+                               <div className="bg-primary-500/10 p-2 rounded-lg">
+                                  <p className="text-[9px] font-bold text-primary-500 uppercase">Speed</p>
+                                  <p className="text-xs font-black text-[var(--text-main)]">{Math.round((loc.speed || 0) * 3.6)} <small>km/h</small></p>
+                               </div>
+                               <div className="bg-emerald-500/10 p-2 rounded-lg">
+                                  <p className="text-[9px] font-bold text-emerald-500 uppercase">Today</p>
+                                  <p className="text-xs font-black text-[var(--text-main)]">{(loc.totalDistance || 0).toFixed(1)} <small>km</small></p>
+                               </div>
+                            </div>
+                            <button 
+                              onClick={() => window.location.href = `/admin/tracking-history?employee=${empId}`}
+                              className="w-full mt-3 py-2 rounded-xl bg-primary-600/10 hover:bg-primary-600 text-primary-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-primary-500/20"
+                            >
+                               <History className="w-3 h-3" />
+                               View History
+                            </button>
+                         </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+              </MarkerClusterGroup>
+
+              {/* Render paths */}
+              {selected && locations[selected]?.path?.length > 1 && (
+                <>
+                  <Polyline positions={locations[selected].path.map(p => [p.lat, p.lng])} pathOptions={{ color: '#3b82f6', weight: 8, opacity: 0.2 }} />
+                  <Polyline positions={locations[selected].path.map(p => [p.lat, p.lng])} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 1, lineCap: 'round' }} />
+                </>
+              )}
+            </MapContainer>
+          </div>
+
+          {/* 2. Employee Sidebar (Right) */}
+          <div className="w-full lg:w-96 glass-card flex flex-col border-[var(--border-color)] overflow-hidden">
+            <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)] flex items-center justify-between">
+              <h3 className="text-[var(--text-main)] font-black text-xs uppercase tracking-widest">Team Directory</h3>
+              <span className="text-[10px] font-bold text-primary-500">{filteredEmployees.length} Shown</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-1">
               {loading ? (
-                <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />)}</div>
-              ) : Object.keys(locations).length === 0 ? (
-                <div className="glass-card p-6 text-center">
-                  <MapPin className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2" />
-                  <p className="text-[var(--text-muted)] text-sm">No employees tracking now</p>
-                </div>
-              ) : Object.entries(locations).map(([empId, loc], idx) => {
+                [1,2,3,4,5].map(i => <div key={i} className="h-16 rounded-xl bg-[var(--bg-card)] animate-pulse m-2" />)
+              ) : filteredEmployees.length === 0 ? (
+                <div className="p-8 text-center text-[var(--text-muted)] text-sm italic">No matching employees</div>
+              ) : filteredEmployees.map((emp, idx) => {
+                const loc = locations[emp._id];
                 const color = COLORS[idx % COLORS.length];
-                const addr = addresses[empId];
-                const isSelected = selected === empId;
+                const isSelected = selected === emp._id;
+                
                 return (
-                  <div key={empId}
-                    onClick={() => handleSelectEmployee(empId)}
-                    className={`glass-card p-3.5 cursor-pointer transition-all duration-300 ${isSelected ? 'border-primary-500/50 bg-primary-600/10 shadow-lg shadow-primary-600/10' : 'hover:border-[var(--border-color)] hover:bg-[var(--bg-card-hover)]'}`}>
-                    <div className="flex items-center gap-3">
-                      {/* Avatar with color indicator */}
-                      <div className="relative flex-shrink-0">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center text-[var(--text-main)] font-bold text-sm"
-                          style={{ background: `${color}30`, border: `1.5px solid ${color}50` }}>
-                          {loc.name?.[0]?.toUpperCase()}
-                        </div>
-                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[var(--bg-main)]" />
-                        {/* Color dot to match map marker */}
-                        <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-main)]"
-                          style={{ background: color }} />
+                  <div key={emp._id}
+                    onClick={() => handleSelectEmployee(emp._id)}
+                    className={`group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                      isSelected ? 'bg-primary-600/10 shadow-inner' : 'hover:bg-[var(--bg-card-hover)]'
+                    }`}
+                  >
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg transition-transform group-hover:scale-105"
+                        style={{ background: color }}>
+                        {emp.name[0].toUpperCase()}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[var(--text-main)] font-semibold text-sm truncate">{loc.name}</p>
-                        <p className="text-[var(--text-muted)] text-xs">{loc.department || 'Staff'}</p>
+                      {loc?.isActive && (
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--bg-sidebar)]" />
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[var(--text-main)] font-bold text-sm truncate">{emp.name}</p>
+                        {loc && <span className="text-primary-500 text-[10px] font-black italic">{(loc.totalDistance || 0).toFixed(1)} km</span>}
                       </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-emerald-400 text-xs font-semibold">{(loc.totalDistance || 0).toFixed(1)} km</p>
-                        <p className="text-[var(--text-muted)] text-xs">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
+                      <div className="flex items-center justify-between">
+                         <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase truncate">
+                           {loc ? (addresses[emp._id]?.split(',')[0] || 'Locating...') : 'Not Punch In'}
+                         </p>
+                         {loc?.timestamp && (
+                           <span className="text-[var(--text-muted)] text-[10px] font-medium">
+                             {new Date(loc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                           </span>
+                         )}
                       </div>
                     </div>
 
-                    {/* Address section */}
-                    <div className="mt-3 p-3 rounded-xl bg-[var(--bg-main)]/50 border border-[var(--border-color)] group-hover:border-primary-500/30 transition-colors">
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 p-1 rounded bg-primary-500/10 text-primary-500">
-                          <MapPin className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {addr ? (
-                            !addr.startsWith('Location') ? (
-                              <>
-                                <p className="text-[var(--text-main)] text-xs font-bold leading-tight mb-0.5">
-                                  {addr.split(',')[0]}
-                                </p>
-                                {addr.includes(',') && (
-                                  <p className="text-[var(--text-muted)] text-[10px] leading-tight line-clamp-2">
-                                    {addr.split(',').slice(1).join(',').trim()}
-                                  </p>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-[var(--text-muted)] font-mono leading-tight block">{addr}</span>
-                            )
-                          ) : (
-                            <div className="flex flex-col gap-1.5">
-                              <div className="h-3 w-3/4 bg-[var(--border-color)] animate-pulse rounded" />
-                              <div className="h-2 w-1/2 bg-[var(--border-color)] animate-pulse rounded" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {isSelected && loc.path && (
-                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--border-color)]/50">
-                          <div className="flex items-center gap-2">
-                            <Navigation className="w-3 h-3 text-primary-500" />
-                            <span className="text-[var(--text-main)] text-[10px] font-bold">{loc.path.length} Pings</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-3 h-3 text-[var(--text-muted)]" />
-                            <span className="text-[var(--text-muted)] text-[10px] font-medium">
-                              Last: {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'}
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button 
+                        onClick={(e) => { e.stopPropagation(); window.location.href = `/admin/tracking-history?employee=${emp._id}`; }}
+                        className="p-1.5 rounded-lg bg-[var(--bg-main)] text-[var(--text-muted)] hover:text-primary-500 hover:bg-primary-500/10 transition-all"
+                        title="View History"
+                       >
+                          <History className="w-3.5 h-3.5" />
+                       </button>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* ─── Interactive Map ───────────────────────────────────────────── */}
-          <div className="lg:col-span-8 xl:col-span-9">
-            <div className="glass-card overflow-hidden" style={{ height: 'calc(100vh - 180px)', minHeight: '500px' }}>
-              <MapContainer
-                center={flyCenter || defaultCenter}
-                zoom={flyZoom || 5}
-                style={{ height: '100%', width: '100%', borderRadius: '16px' }}
-                zoomControl={false}
-              >
-                {/* Dark-themed map tiles */}
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://carto.com/">CARTO</a>'
-                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                />
-
-                {/* Fly to selected employee */}
-                {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
-
-                <MarkerClusterGroup showCoverageOnHover={false} maxClusterRadius={50}>
-                  {Object.entries(locations).map(([empId, loc], idx) => {
-                    const emp = employees.find(e => e._id === empId);
-                    const color = COLORS[idx % COLORS.length];
-                    const isEmpSelected = selected === empId || !selected;
-                    const initial = (loc.name || emp?.name || '?')[0].toUpperCase();
-
-                    if (!isEmpSelected && selected) return null;
-
-                    return (
-                      <Marker
-                        key={empId}
-                        position={[loc.lat, loc.lng]}
-                        icon={createEmployeeIcon(initial, color, true)}
-                        eventHandlers={{ click: () => handleSelectEmployee(empId) }}
-                      >
-                        <Popup className="custom-popup">
-                          <div className="p-2 min-w-[220px]">
-                            <div className="flex items-center gap-3 mb-4">
-                              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg" 
-                                   style={{ background: color, boxShadow: `0 4px 12px ${color}66` }}>
-                                {initial}
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-base text-[var(--text-main)]">{loc.name}</h4>
-                                <span className="px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 text-[10px] font-bold uppercase tracking-wider">
-                                  {loc.department || 'Field Staff'}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-3 pt-3 border-t border-[var(--border-color)]">
-                              <div className="flex items-start gap-2">
-                                <MapPin className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-widest mb-1">Current Address</p>
-                                  <p className="text-xs font-semibold text-[var(--text-main)] leading-relaxed">
-                                    {addresses[empId] || 'Fetching location...'}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="grid grid-cols-2 gap-3 pt-1">
-                                <div className="bg-[var(--bg-main)]/50 p-2 rounded-xl border border-[var(--border-color)]">
-                                  <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] mb-0.5">Distance</p>
-                                  <p className="text-xs font-bold text-emerald-400">{(loc.totalDistance || 0).toFixed(2)} km</p>
-                                </div>
-                                <div className="bg-[var(--bg-main)]/50 p-2 rounded-xl border border-[var(--border-color)]">
-                                  <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] mb-0.5">Speed</p>
-                                  <p className="text-xs font-bold text-blue-400">{Math.round((loc.speed || 0) * 3.6)} km/h</p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Popup>
-                      </Marker>
-                    );
-                  })}
-                </MarkerClusterGroup>
-
-                {/* Render paths with professional glow */}
-                {Object.entries(locations).map(([empId, loc], idx) => {
-                  const color = COLORS[idx % COLORS.length];
-                  const isEmpSelected = selected === empId || !selected;
-                  const path = loc.path || [];
-
-                  if (!isEmpSelected && selected) return null;
-
-                  return (
-                    <React.Fragment key={`path-${empId}`}>
-                      {(selected === empId || activeCount < 10) && path.length > 1 && (
-                        <>
-                          {/* Path Glow */}
-                          <Polyline
-                            positions={path.map(p => [p.lat, p.lng])}
-                            pathOptions={{
-                              color: color,
-                              weight: 8,
-                              opacity: 0.15,
-                              smoothFactor: 2,
-                            }}
-                          />
-                          {/* Main Path Line */}
-                          <Polyline
-                            positions={path.map(p => [p.lat, p.lng])}
-                            pathOptions={{
-                              color: color,
-                              weight: 3,
-                              opacity: 0.8,
-                              dashArray: selected === empId ? null : '6, 12',
-                              smoothFactor: 1.5,
-                              lineCap: 'round',
-                            }}
-                          />
-                        </>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </MapContainer>
-
-
-              {/* Map legend overlay */}
-              {Object.keys(locations).length > 0 && (
-                <div className="absolute top-4 right-4 z-[1000]">
-                  <div className="bg-[var(--bg-sidebar)] border border-[var(--border-color)] rounded-xl p-3 space-y-1.5 min-w-[140px]">
-                    <p className="text-[var(--text-muted)] text-[10px] font-semibold uppercase tracking-wider mb-2">Employees</p>
-                    {Object.entries(locations).map(([empId, loc], idx) => {
-                      const color = COLORS[idx % COLORS.length];
-                      return (
-                        <div key={empId}
-                          onClick={() => handleSelectEmployee(empId)}
-                          className={`flex items-center gap-2 cursor-pointer px-2 py-1 rounded-lg transition-all ${selected === empId ? 'bg-[var(--bg-card-hover)]' : 'hover:bg-[var(--bg-card)]'}`}>
-                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
-                          <span className="text-[var(--text-main)] text-xs font-medium truncate">{loc.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* No data overlay */}
-              {!loading && Object.keys(locations).length === 0 && (
-                <div className="absolute inset-0 z-[999] flex items-center justify-center bg-[var(--bg-main)]/60 backdrop-blur-sm rounded-2xl">
-                  <div className="text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-primary-600/20 border border-primary-500/30 flex items-center justify-center mx-auto mb-4">
-                      <Locate className="w-8 h-8 text-primary-400" />
-                    </div>
-                    <h3 className="text-[var(--text-main)] font-bold text-lg mb-2">No Active Tracking</h3>
-                    <p className="text-[var(--text-muted)] text-sm">Employee routes will appear here when tracking starts</p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

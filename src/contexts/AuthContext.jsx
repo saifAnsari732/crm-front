@@ -140,6 +140,8 @@ export const AuthProvider = ({ children }) => {
 
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('isTracking');
+    localStorage.removeItem('sessionId');
     disconnectSocket();
     clearTokenRefresh();
     setUser(null);

@@ -42,85 +42,127 @@ export default function AdminExpenses() {
 
   return (
     <AdminLayout>
-      <div className="p-4 lg:p-6 space-y-5 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-white text-2xl font-bold">Expenses</h1>
-            <p className="text-white/40 text-sm">{total} entries • ₹{totalAmount.toLocaleString()} total</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-black tracking-tight flex items-center gap-3">
+               <Receipt className="w-6 h-6 text-primary-500" />
+               Expense Audit
+            </h1>
+            <div className="flex items-center gap-4 mt-2">
+               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20">
+                  <span className="text-[10px] font-black text-primary-500 uppercase tracking-widest">Grand Total</span>
+                  <span className="text-sm font-black text-[var(--text-main)]">₹{totalAmount.toLocaleString()}</span>
+               </div>
+               <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">{total} Total Entries</p>
+            </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          
+          <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1.5 rounded-[1.25rem] border border-[var(--border-color)] shadow-xl">
             {['', 'pending', 'approved', 'rejected'].map(s => (
-              <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold capitalize transition-all ${statusFilter === s ? 'bg-primary-600 border-primary-500 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
-                {s || 'All'}
+              <button 
+                key={s} 
+                onClick={() => { setStatusFilter(s); setPage(1); }}
+                className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  statusFilter === s 
+                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/5'
+                }`}
+              >
+                {s || 'All Items'}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="glass-card overflow-hidden">
+        {/* Table */}
+        <div className="glass-card overflow-hidden border-[var(--border-color)] shadow-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10">
-                  {['Employee', 'Category', 'Amount', 'Date', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="text-left text-white/40 text-xs font-semibold uppercase tracking-wider px-4 py-3">{h}</th>
-                  ))}
+            <table className="w-full text-left">
+              <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-widest text-[10px] border-b border-[var(--border-color)]">
+                <tr>
+                  <th className="px-6 py-4">Field Agent</th>
+                  <th className="px-6 py-4">Classification</th>
+                  <th className="px-6 py-4 text-right">Amount</th>
+                  <th className="px-6 py-4">Submission Date</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Audit Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
                 {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i}><td colSpan={6} className="px-4 py-3"><div className="h-10 rounded-lg bg-white/5 animate-pulse" /></td></tr>
+                  [...Array(6)].map((_, i) => (
+                    <tr key={i}><td colSpan={6} className="px-6 py-4"><div className="h-12 rounded-xl bg-white/5 animate-pulse" /></td></tr>
                   ))
                 ) : expenses.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-12">
-                    <Receipt className="w-8 h-8 text-white/20 mx-auto mb-2" />
-                    <p className="text-white/40 text-sm">No expenses found</p>
+                  <tr><td colSpan={6} className="text-center py-20">
+                    <div className="flex flex-col items-center">
+                       <div className="w-16 h-16 rounded-2xl bg-[var(--bg-main)] flex items-center justify-center mb-4">
+                          <Receipt className="w-8 h-8 text-[var(--text-muted)] opacity-20" />
+                       </div>
+                       <h3 className="text-[var(--text-main)] font-black text-lg uppercase tracking-tight">No Expense Claims</h3>
+                       <p className="text-[var(--text-muted)] text-sm mt-1">New expense submissions will appear here for audit.</p>
+                    </div>
                   </td></tr>
                 ) : expenses.map(exp => (
-                  <tr key={exp._id} className="hover:bg-white/3 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary-600/30 flex items-center justify-center text-primary-300 font-bold text-xs flex-shrink-0">
-                          {exp.employee?.name?.[0]?.toUpperCase()}
+                  <tr key={exp._id} className="hover:bg-[var(--bg-card-hover)] transition-all group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-400 font-black text-sm shadow-inner group-hover:scale-105 transition-transform uppercase">
+                          {exp.employee?.name?.[0]}
                         </div>
                         <div>
-                          <p className="text-white font-semibold text-sm">{exp.employee?.name}</p>
-                          <p className="text-white/30 text-xs">{exp.employee?.employeeId}</p>
+                          <p className="text-[var(--text-main)] font-black text-sm tracking-tight group-hover:text-primary-400 transition-colors truncate">{exp.employee?.name}</p>
+                          <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest truncate">{exp.employee?.employeeId || 'ID Pending'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{CATEGORY_EMOJI[exp.category]}</span>
-                        <span className="text-white/70 text-sm capitalize">{exp.category}</span>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-[var(--bg-main)] flex items-center justify-center text-xl shadow-inner">
+                           {CATEGORY_EMOJI[exp.category] || '💰'}
+                        </div>
+                        <div>
+                          <p className="text-[var(--text-main)] text-xs font-black uppercase tracking-widest">{exp.category}</p>
+                          {exp.description && <p className="text-[var(--text-muted)] text-[10px] font-medium truncate max-w-[150px] italic">"{exp.description}"</p>}
+                        </div>
                       </div>
-                      {exp.description && <p className="text-white/30 text-xs truncate max-w-32">{exp.description}</p>}
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-white font-bold">₹{exp.amount.toLocaleString()}</p>
+                    <td className="px-6 py-4 text-right">
+                      <p className="text-[var(--text-main)] font-black text-lg tracking-tight">₹{exp.amount.toLocaleString()}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-white/60 text-sm">{new Date(exp.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    <td className="px-6 py-4">
+                      <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">{new Date(exp.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${statusColor[exp.status]} capitalize`}>{exp.status}</span>
+                    <td className="px-6 py-4">
+                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                         exp.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                         exp.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                         'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                       }`}>
+                          <span className={`w-1 h-1 rounded-full ${
+                            exp.status === 'approved' ? 'bg-emerald-500' :
+                            exp.status === 'rejected' ? 'bg-red-500' : 'bg-amber-500'
+                          }`} />
+                         {exp.status}
+                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {exp.status === 'pending' && (
-                        <div className="flex items-center gap-2">
+                    <td className="px-6 py-4 text-right">
+                      {exp.status === 'pending' ? (
+                        <div className="flex items-center justify-end gap-2">
                           <button onClick={() => handleAction(exp._id, 'approved', exp.employee?.name)} disabled={actionLoading[exp._id]}
-                            className="p-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 transition-colors disabled:opacity-50" title="Approve">
-                            {actionLoading[exp._id] ? <div className="w-4 h-4 border border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            className="w-9 h-9 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white transition-all duration-300 flex items-center justify-center border border-emerald-500/20 disabled:opacity-50" title="Approve Claim">
+                            {actionLoading[exp._id] ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4.5 h-4.5" />}
                           </button>
                           <button onClick={() => handleAction(exp._id, 'rejected', exp.employee?.name)} disabled={actionLoading[exp._id]}
-                            className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors disabled:opacity-50" title="Reject">
-                            <XCircle className="w-4 h-4" />
+                            className="w-9 h-9 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all duration-300 flex items-center justify-center border border-red-500/20 disabled:opacity-50" title="Reject Claim">
+                            <XCircle className="w-4.5 h-4.5" />
                           </button>
                         </div>
+                      ) : (
+                        <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest opacity-30">— Audited —</span>
                       )}
-                      {exp.status !== 'pending' && <span className="text-white/20 text-xs">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -129,11 +171,16 @@ export default function AdminExpenses() {
           </div>
         </div>
 
+        {/* Pagination */}
         {total > 15 && (
-          <div className="flex items-center justify-center gap-3">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-ghost px-4 py-2 text-sm disabled:opacity-40">← Prev</button>
-            <span className="text-white/40 text-sm">{page} / {Math.ceil(total / 15)}</span>
-            <button disabled={page * 15 >= total} onClick={() => setPage(p => p + 1)} className="btn-ghost px-4 py-2 text-sm disabled:opacity-40">Next →</button>
+          <div className="flex items-center justify-center gap-6 py-4">
+            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary px-6 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-40 transition-all active:scale-95">Prev</button>
+            <div className="flex items-center gap-2">
+               <span className="text-primary-500 text-sm font-black">{page}</span>
+               <span className="text-[var(--text-muted)] text-sm">/</span>
+               <span className="text-[var(--text-muted)] text-sm font-bold">{Math.ceil(total / 15)}</span>
+            </div>
+            <button disabled={page * 15 >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary px-6 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-40 transition-all active:scale-95">Next</button>
           </div>
         )}
       </div>

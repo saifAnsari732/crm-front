@@ -1,33 +1,36 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TrackingProvider } from './contexts/TrackingContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
-// Pages
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import EmployeeDashboard from './pages/employee/EmployeeDashboard';
-import TrackingPage from './pages/employee/TrackingPage';
-import MeetingsPage from './pages/employee/MeetingsPage';
-import ExpensesPage from './pages/employee/ExpensesPage';
-import ProfilePage from './pages/employee/ProfilePage';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminEmployees from './pages/admin/AdminEmployees';
-import AdminLiveMap from './pages/admin/AdminLiveMap';
-import AdminExpenses from './pages/admin/AdminExpenses';
-import AdminMeetings from './pages/admin/AdminMeetings';
-import AdminAttendance from './pages/admin/AdminAttendance';
-import AdminTrackingHistory from './pages/admin/AdminTrackingHistory';
-import AdminLeaves from './pages/admin/AdminLeaves';
-import AdminTasks from './pages/admin/AdminTasks';
-import LeavePage from './pages/employee/LeavePage';
-import TasksPage from './pages/employee/TasksPage';
+// Components
 import LoadingScreen from './components/shared/LoadingScreen';
 import OfflineIndicator from './components/shared/OfflineIndicator';
 import NetworkStatus from './components/shared/NetworkStatus';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+
+// Lazy Loaded Pages
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
+const EmployeeDashboard = lazy(() => import('./pages/employee/EmployeeDashboard'));
+const TrackingPage = lazy(() => import('./pages/employee/TrackingPage'));
+const MeetingsPage = lazy(() => import('./pages/employee/MeetingsPage'));
+const ExpensesPage = lazy(() => import('./pages/employee/ExpensesPage'));
+const ProfilePage = lazy(() => import('./pages/employee/ProfilePage'));
+const LeavePage = lazy(() => import('./pages/employee/LeavePage'));
+const TasksPage = lazy(() => import('./pages/employee/TasksPage'));
+
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminEmployees = lazy(() => import('./pages/admin/AdminEmployees'));
+const AdminLiveMap = lazy(() => import('./pages/admin/AdminLiveMap'));
+const AdminExpenses = lazy(() => import('./pages/admin/AdminExpenses'));
+const AdminMeetings = lazy(() => import('./pages/admin/AdminMeetings'));
+const AdminAttendance = lazy(() => import('./pages/admin/AdminAttendance'));
+const AdminTrackingHistory = lazy(() => import('./pages/admin/AdminTrackingHistory'));
+const AdminLeaves = lazy(() => import('./pages/admin/AdminLeaves'));
+const AdminTasks = lazy(() => import('./pages/admin/AdminTasks'));
 
 const PrivateRoute = ({ children, roles }) => {
   const { user, loading, isAuthenticated } = useAuth();
@@ -83,7 +86,9 @@ export default function App() {
           <TrackingProvider>
             <BrowserRouter>
               <NetworkStatus />
-              <AppRoutes />
+              <Suspense fallback={<LoadingScreen />}>
+                <AppRoutes />
+              </Suspense>
               <OfflineIndicator />
               <Toaster
                 position="top-right"

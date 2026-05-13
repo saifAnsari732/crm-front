@@ -49,16 +49,16 @@ export default function TasksPage() {
       <div className="p-4 lg:p-6 space-y-6 max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-white text-2xl font-bold">My Tasks</h1>
-            <p className="text-white/50 text-sm">View and manage your assigned field tasks</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-bold">My Tasks</h1>
+            <p className="text-[var(--text-muted)] text-sm">View and manage your assigned field tasks</p>
           </div>
-          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+          <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border-color)]">
             {['pending', 'in-progress', 'completed', 'all'].map((s) => (
               <button
                 key={s}
                 onClick={() => setFilter(s)}
                 className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  filter === s ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' : 'text-white/40 hover:text-white/60'
+                  filter === s ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 {s}
@@ -72,8 +72,8 @@ export default function TasksPage() {
             [1, 2, 3].map(i => <div key={i} className="h-40 rounded-2xl bg-white/5 animate-pulse" />)
           ) : tasks.length === 0 ? (
             <div className="glass-card p-12 text-center">
-              <ClipboardList className="w-12 h-12 text-white/10 mx-auto mb-4" />
-              <p className="text-white/40">No tasks found for this status</p>
+              <ClipboardList className="w-12 h-12 text-[var(--text-muted)] opacity-20 mx-auto mb-4" />
+              <p className="text-[var(--text-muted)]">No tasks found for this status</p>
             </div>
           ) : (
             tasks.map((task) => (
@@ -81,7 +81,7 @@ export default function TasksPage() {
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-white font-bold text-lg group-hover:text-primary-400 transition-colors">{task.title}</h3>
+                      <h3 className="text-[var(--text-main)] font-bold text-lg group-hover:text-primary-400 transition-colors">{task.title}</h3>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border ${getStatusColor(task.status)}`}>
                         {task.status}
                       </span>
@@ -93,15 +93,15 @@ export default function TasksPage() {
                         {task.priority}
                       </span>
                     </div>
-                    <p className="text-white/60 text-sm leading-relaxed mb-4">{task.description}</p>
+                    <p className="text-[var(--text-muted)] text-sm leading-relaxed mb-4">{task.description}</p>
                     
                     <div className="flex flex-wrap items-center gap-4">
-                      <div className="flex items-center gap-1.5 text-white/40">
+                      <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                         <Clock className="w-4 h-4 text-primary-500" />
                         <span className="text-xs font-semibold">Due: {new Date(task.dueDate).toLocaleDateString()}</span>
                       </div>
                       {task.location?.address && (
-                        <div className="flex items-center gap-1.5 text-white/40">
+                        <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                           <MapPin className="w-4 h-4 text-primary-500" />
                           <span className="text-xs font-semibold truncate max-w-xs">{task.location.address}</span>
                         </div>

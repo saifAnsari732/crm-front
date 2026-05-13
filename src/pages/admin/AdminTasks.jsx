@@ -57,102 +57,123 @@ export default function AdminTasks() {
   return (
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-[var(--text-main)] text-2xl font-bold">Field Tasks</h1>
-            <p className="text-[var(--text-muted)] text-sm">Assign and track employee tasks</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-black tracking-tight flex items-center gap-3">
+               <ClipboardList className="w-6 h-6 text-primary-500" />
+               Operational Tasks
+            </h1>
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-1">Delegation & Progress Monitoring</p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="btn-primary py-2.5 px-6 rounded-xl flex items-center gap-2"
+            className={`py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center gap-2 active:scale-95 shadow-2xl ${
+              showForm 
+                ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500 hover:text-white' 
+                : 'bg-primary-600 text-white hover:bg-primary-500 shadow-primary-600/20'
+            }`}
           >
-            {showForm ? 'Cancel' : <><Plus className="w-5 h-5" /> Assign Task</>}
+            {showForm ? 'Cancel Operation' : <><Plus className="w-5 h-5" /> Assign New Task</>}
           </button>
         </div>
 
         {showForm && (
-          <div className="glass-card p-6 border-primary-500/30 animate-in fade-in slide-in-from-top-4 duration-300">
-            <h3 className="text-[var(--text-main)] font-bold mb-6 flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-primary-500" />
-              Create New Task
+          <div className="glass-card p-8 border-primary-500/30 animate-in fade-in slide-in-from-top-10 duration-500 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+               <Plus className="w-64 h-64 rotate-12" />
+            </div>
+            
+            <h3 className="text-[var(--text-main)] font-black text-lg uppercase tracking-tight mb-8 flex items-center gap-3 relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-primary-600/10 flex items-center justify-center">
+                 <ClipboardList className="w-5 h-5 text-primary-500" />
+              </div>
+              Create Operational Directive
             </h3>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Task Title</label>
+            
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
+              <div className="lg:col-span-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Directive Title</label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="e.g. Visit Client for Installation"
-                    className="input-field w-full"
+                    placeholder="e.g. Critical Client Site Inspection"
+                    className="input-field w-full py-4 px-5 text-sm font-semibold"
                     required
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Description</label>
+                <div className="space-y-2">
+                  <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Detailed Instructions</label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Provide details about the task..."
-                    className="input-field w-full h-32 resize-none"
+                    placeholder="Provide step-by-step guidance for the field agent..."
+                    className="input-field w-full h-44 resize-none p-5 text-sm font-medium leading-relaxed"
                     required
                   />
                 </div>
               </div>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Assign To</label>
-                  <select
-                    value={formData.employeeId}
-                    onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                    className="input-field w-full"
-                    required
-                  >
-                    <option value="">Select Employee</option>
-                    {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name} ({emp.department})</option>)}
-                  </select>
+              
+              <div className="lg:col-span-4 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Assigned Personnel</label>
+                  <div className="relative">
+                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-primary-500" />
+                     <select
+                        value={formData.employeeId}
+                        onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                        className="input-field w-full pl-12 py-4 appearance-none font-bold text-sm"
+                        required
+                      >
+                        <option value="">Select Field Agent</option>
+                        {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name} — {emp.department}</option>)}
+                      </select>
+                  </div>
                 </div>
+                
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Priority</label>
+                  <div className="space-y-2">
+                    <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Priority</label>
                     <select
                       value={formData.priority}
                       onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                      className="input-field w-full"
+                      className="input-field w-full py-4 font-black uppercase text-[10px] tracking-widest"
                     >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
+                      <option value="low">Low Priority</option>
+                      <option value="medium">Medium Priority</option>
+                      <option value="high">High Priority</option>
                     </select>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Due Date</label>
+                  <div className="space-y-2">
+                    <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Deadline</label>
                     <input
                       type="date"
                       value={formData.dueDate}
                       onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                      className="input-field w-full"
+                      className="input-field w-full py-3.5 font-bold text-sm"
                       required
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest px-1">Location Address</label>
+                
+                <div className="space-y-2">
+                  <label className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] px-1">Target Location</label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-primary-500" />
                     <input
                       type="text"
                       value={formData.location.address}
                       onChange={(e) => setFormData({ ...formData, location: { ...formData.location, address: e.target.value } })}
-                      placeholder="Task location address..."
-                      className="input-field w-full pl-10"
+                      placeholder="Street, City, Pin..."
+                      className="input-field w-full pl-12 py-4 text-sm font-semibold"
                     />
                   </div>
                 </div>
-                <button type="submit" className="btn-primary w-full py-3.5 rounded-xl flex items-center justify-center gap-2 mt-2">
-                  <Plus className="w-5 h-5" />
-                  Assign Task
+                
+                <button type="submit" className="w-full py-4 rounded-[1.5rem] bg-primary-600 text-white font-black uppercase tracking-[0.2em] hover:bg-primary-500 transition-all shadow-xl shadow-primary-600/20 flex items-center justify-center gap-3 active:scale-95 mt-2">
+                  <Navigation className="w-5 h-5" />
+                  Dispatch Directive
                 </button>
               </div>
             </form>
@@ -161,59 +182,74 @@ export default function AdminTasks() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {loading ? (
-            [1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-48 rounded-2xl bg-[var(--bg-card)] animate-pulse" />)
+            [1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-64 rounded-[2.5rem] bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
           ) : tasks.length === 0 ? (
-            <div className="col-span-full glass-card p-12 text-center">
-              <ClipboardList className="w-12 h-12 text-[var(--text-muted)]/20 mx-auto mb-4" />
-              <p className="text-[var(--text-muted)]">No tasks assigned yet</p>
+            <div className="col-span-full glass-card p-20 text-center flex flex-col items-center">
+              <div className="w-20 h-20 rounded-3xl bg-[var(--bg-main)] flex items-center justify-center mb-6">
+                 <ClipboardList className="w-10 h-10 text-[var(--text-muted)] opacity-20" />
+              </div>
+              <h3 className="text-[var(--text-main)] font-black text-xl uppercase tracking-tight">System Idle</h3>
+              <p className="text-[var(--text-muted)] text-sm mt-2 max-w-sm">No active directives found in the operational queue. Start by assigning a task to your field team.</p>
             </div>
           ) : (
             tasks.map((task) => (
-              <div key={task._id} className="glass-card p-5 group hover:border-primary-500/50 transition-all">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary-600/10 flex items-center justify-center">
-                      <ClipboardList className="w-5 h-5 text-primary-500" />
+              <div key={task._id} className="group glass-card p-7 border-2 border-transparent hover:border-primary-500/40 transition-all duration-500 shadow-xl hover:shadow-primary-500/5 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500">
+                   <ClipboardList className="w-32 h-32 rotate-12" />
+                </div>
+                
+                <div className="flex items-start justify-between mb-6 relative z-10">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                        task.priority === 'high' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                        task.priority === 'medium' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                        'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      }`}>
+                         <span className={`w-1 h-1 rounded-full ${
+                           task.priority === 'high' ? 'bg-red-500' :
+                           task.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                         }`} />
+                        {task.priority} Priority
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                        task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                        task.status === 'overdue' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                        'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        {task.status}
+                      </span>
                     </div>
-                    <div>
-                      <h3 className="text-[var(--text-main)] font-bold leading-tight group-hover:text-primary-500 transition-colors">{task.title}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
-                          task.priority === 'high' ? 'bg-red-500/10 text-red-500' :
-                          task.priority === 'medium' ? 'bg-amber-500/10 text-amber-500' :
-                          'bg-emerald-500/10 text-emerald-500'
-                        }`}>
-                          {task.priority}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
-                          task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
-                          task.status === 'overdue' ? 'bg-red-500/10 text-red-400' :
-                          'bg-amber-500/10 text-amber-400'
-                        }`}>
-                          {task.status}
-                        </span>
-                      </div>
-                    </div>
+                    <h3 className="text-[var(--text-main)] font-black text-lg leading-tight group-hover:text-primary-400 transition-colors">{task.title}</h3>
                   </div>
                 </div>
-                <p className="text-[var(--text-muted)] text-xs mb-4 line-clamp-2">{task.description}</p>
-                <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
+                
+                <p className="text-[var(--text-muted)] text-[11px] font-medium mb-6 line-clamp-3 leading-relaxed relative z-10">{task.description}</p>
+                
+                <div className="space-y-4 pt-6 border-t border-[var(--border-color)] relative z-10">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-[var(--bg-main)] flex items-center justify-center text-[10px] font-bold text-primary-500 overflow-hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-[11px] font-black text-primary-500 uppercase shadow-inner overflow-hidden">
                         {task.employee?.avatar ? <img src={task.employee.avatar} className="w-full h-full object-cover" /> : task.employee?.name?.[0]}
                       </div>
-                      <span className="text-[var(--text-main)] text-xs font-semibold">{task.employee?.name}</span>
+                      <div>
+                         <p className="text-[var(--text-main)] text-xs font-black tracking-tight">{task.employee?.name}</p>
+                         <p className="text-[var(--text-muted)] text-[9px] font-bold uppercase tracking-widest">{task.employee?.department || 'Field Staff'}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-bold">{new Date(task.dueDate).toLocaleDateString()}</span>
+                    <div className="flex flex-col items-end">
+                       <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-0.5">Deadline</p>
+                       <div className="flex items-center gap-1.5 text-primary-400">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-black uppercase">{new Date(task.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                       </div>
                     </div>
                   </div>
+                  
                   {task.location?.address && (
-                    <div className="flex items-start gap-2 p-2.5 rounded-xl bg-[var(--bg-main)]/50 border border-[var(--border-color)]">
-                      <MapPin className="w-3.5 h-3.5 text-primary-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-[10px] text-[var(--text-muted)] line-clamp-1">{task.location.address}</span>
+                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-[var(--bg-main)]/50 border border-[var(--border-color)] group/loc hover:bg-[var(--bg-main)] transition-colors">
+                      <MapPin className="w-4 h-4 text-primary-500 flex-shrink-0 mt-0.5 group-hover/loc:animate-bounce" />
+                      <span className="text-[10px] font-bold text-[var(--text-muted)] leading-relaxed line-clamp-2">{task.location.address}</span>
                     </div>
                   )}
                 </div>

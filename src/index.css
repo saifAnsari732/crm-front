@@ -17,22 +17,24 @@
   --primary-muted: rgba(37, 99, 235, 0.1);
   --shadow-color: rgba(0, 0, 0, 0.5);
   --accent-safe: #34d399; /* emerald-400 */
+  --bg-surface: rgba(255, 255, 255, 0.03);
 }
 
 .light {
-  --bg-main: #f1f5f9;
+  --bg-main: #f8fafc;
   --bg-sidebar: #ffffff;
-  --bg-header: rgba(255, 255, 255, 0.9);
+  --bg-header: rgba(255, 255, 255, 0.95);
   --bg-card: #ffffff;
-  --bg-card-hover: #f8fafc;
+  --bg-card-hover: #f1f5f9;
   --border-color: #e2e8f0;
-  --text-main: #020617;
-  --text-muted: #64748b;
+  --text-main: #000000;
+  --text-muted: #475569;
   --text-inverse: #ffffff;
   --primary: #2563eb;
   --primary-muted: rgba(37, 99, 235, 0.1);
   --shadow-color: rgba(0, 0, 0, 0.1);
   --accent-safe: #059669; /* emerald-600 */
+  --bg-surface: rgba(0, 0, 0, 0.03);
 }
 
 @layer base {
@@ -96,4 +98,47 @@
   background-image: 
     radial-gradient(at 0% 0%, var(--primary-muted) 0px, transparent 40%),
     radial-gradient(at 100% 0%, rgba(109, 40, 217, 0.03) 0px, transparent 40%);
+}
+
+/* Badge Utilities */
+.badge {
+  @apply px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors;
+}
+.badge-blue { @apply bg-blue-500/10 text-blue-500 border-blue-500/20; }
+.badge-green { @apply bg-emerald-500/10 text-emerald-500 border-emerald-500/20; }
+.badge-red { @apply bg-red-500/10 text-red-500 border-red-500/20; }
+.badge-yellow { @apply bg-amber-500/10 text-amber-500 border-amber-500/20; }
+
+.light .badge-blue { @apply bg-blue-100 text-blue-700 border-blue-200; }
+.light .badge-green { @apply bg-emerald-100 text-emerald-700 border-emerald-200; }
+.light .badge-red { @apply bg-red-100 text-red-700 border-red-200; }
+.light .badge-yellow { @apply bg-amber-100 text-amber-700 border-amber-200; }
+
+/* Button Utilities */
+.btn-secondary {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  @apply font-semibold px-6 py-3 rounded-xl transition-all duration-200 active:scale-95 flex items-center justify-center gap-2;
+}
+.btn-secondary:hover {
+  background-color: var(--bg-card-hover);
+  @apply shadow-sm;
+}
+
+.btn-ghost {
+  @apply font-semibold px-4 py-2 rounded-xl transition-all duration-200 active:scale-95 flex items-center justify-center gap-2;
+  color: var(--text-muted);
+}
+.btn-ghost:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.animate-shake {
+  animation: shake 0.2s ease-in-out 0s 2;
 }

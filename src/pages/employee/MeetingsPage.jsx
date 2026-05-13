@@ -56,8 +56,8 @@ export default function MeetingsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-white text-2xl font-bold">Meetings</h1>
-            <p className="text-white/40 text-sm">{total} total meetings</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-bold">Meetings</h1>
+            <p className="text-[var(--text-muted)] text-sm">{total} total meetings</p>
           </div>
           <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 py-2.5 px-4 text-sm">
             <Plus className="w-4 h-4" /> Add
@@ -66,7 +66,7 @@ export default function MeetingsPage() {
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] opacity-50" />
           <input className="input-field pl-10" placeholder="Search by client or company..." value={filter} onChange={e => setFilter(e.target.value)} />
         </div>
 
@@ -76,8 +76,8 @@ export default function MeetingsPage() {
         ) : filtered.length === 0 ? (
           <div className="glass-card p-10 text-center">
             <div className="text-4xl mb-3">🤝</div>
-            <p className="text-white/50 font-medium">No meetings found</p>
-            <p className="text-white/30 text-sm mt-1">Tap the Add button to log your first meeting</p>
+            <p className="text-[var(--text-main)] opacity-50 font-medium">No meetings found</p>
+            <p className="text-[var(--text-muted)] text-sm mt-1">Tap the Add button to log your first meeting</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -89,7 +89,7 @@ export default function MeetingsPage() {
         {total > 10 && (
           <div className="flex items-center justify-center gap-3 pt-2">
             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-ghost px-4 py-2 text-sm disabled:opacity-40">← Prev</button>
-            <span className="text-white/40 text-sm">{page} / {Math.ceil(total / 10)}</span>
+            <span className="text-[var(--text-muted)] text-sm">{page} / {Math.ceil(total / 10)}</span>
             <button disabled={page * 10 >= total} onClick={() => setPage(p => p + 1)} className="btn-ghost px-4 py-2 text-sm disabled:opacity-40">Next →</button>
           </div>
         )}
@@ -100,8 +100,8 @@ export default function MeetingsPage() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="w-full max-w-lg glass-card p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-bold text-lg">Log Meeting</h2>
-              <button onClick={() => setShowForm(false)} className="p-2 rounded-xl hover:bg-white/10"><X className="w-5 h-5 text-white/60" /></button>
+              <h2 className="text-[var(--text-main)] font-bold text-lg">Log Meeting</h2>
+              <button onClick={() => setShowForm(false)} className="p-2 rounded-xl hover:bg-[var(--bg-card-hover)]"><X className="w-5 h-5 text-[var(--text-muted)]" /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -112,14 +112,14 @@ export default function MeetingsPage() {
               </div>
               <Field label="Meeting Address" placeholder="Office address or location" value={form.meetingAddress} onChange={set('meetingAddress')} />
               <div>
-                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Meeting Notes</label>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Meeting Notes</label>
                 <textarea rows={3} className="input-field resize-none" placeholder="Key points discussed..." value={form.meetingNotes} onChange={set('meetingNotes')} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Status</label>
+                  <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Status</label>
                   <select className="input-field" value={form.status} onChange={set('status')}>
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s} className="bg-dark-900 capitalize">{s}</option>)}
+                    {STATUS_OPTIONS.map(s => <option key={s} value={s} className="bg-[var(--bg-sidebar)] capitalize">{s}</option>)}
                   </select>
                 </div>
                 <Field label="Follow-up Date" icon={Calendar} type="date" value={form.followUpDate} onChange={set('followUpDate')} />
@@ -146,17 +146,17 @@ function MeetingCard({ meeting: m }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-white font-semibold">{m.clientName}</p>
-            {m.companyName && <p className="text-white/50 text-xs">{m.companyName}</p>}
+            <p className="text-[var(--text-main)] font-semibold">{m.clientName}</p>
+            {m.companyName && <p className="text-[var(--text-muted)] text-xs">{m.companyName}</p>}
           </div>
           <span className={`badge ${statusColors[m.status] || 'badge-blue'} capitalize flex-shrink-0`}>{m.status}</span>
         </div>
         <div className="flex items-center gap-3 mt-2 flex-wrap">
-          {m.dealAmount > 0 && <span className="text-emerald-400 text-xs font-semibold">₹{m.dealAmount.toLocaleString()}</span>}
-          <span className="text-white/30 text-xs">{new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-          {m.followUpDate && <span className="text-amber-400 text-xs">↩ {new Date(m.followUpDate).toLocaleDateString('en-IN')}</span>}
+          {m.dealAmount > 0 && <span className="text-emerald-500 text-xs font-semibold">₹{m.dealAmount.toLocaleString()}</span>}
+          <span className="text-[var(--text-muted)] text-xs">{new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+          {m.followUpDate && <span className="text-amber-500 text-xs">↩ {new Date(m.followUpDate).toLocaleDateString('en-IN')}</span>}
         </div>
-        {m.meetingNotes && <p className="text-white/40 text-xs mt-1 line-clamp-1">{m.meetingNotes}</p>}
+        {m.meetingNotes && <p className="text-[var(--text-muted)] text-xs mt-1 line-clamp-1 italic">{m.meetingNotes}</p>}
       </div>
     </div>
   );
@@ -164,10 +164,10 @@ function MeetingCard({ meeting: m }) {
 
 function Field({ label, icon: Icon, ...props }) {
   return (
-    <div>
-      {label && <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">{label}</label>}
+    <div className="w-full">
+      {label && <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">{label}</label>}
       <div className="relative">
-        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />}
+        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] opacity-50" />}
         <input className={`input-field ${Icon ? 'pl-10' : ''}`} {...props} />
       </div>
     </div>

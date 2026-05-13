@@ -42,13 +42,14 @@ export default function NetworkStatus() {
         </div>
       )}
 
-      {/* Socket Disconnected */}
+      {/* Socket Disconnected - Removed as requested */}
+      {/* 
       {isOnline && !socketConnected && (
-        <div className="bg-amber-600 text-white px-4 py-2 flex items-center gap-2 justify-center animate-in fade-in border-b border-amber-700">
-          <AlertTriangle className="w-4 h-4" />
+        <div className="bg-teal-800 text-white px-4 py-2 flex items-center gap-2 justify-center animate-in fade-in border-b border-amber-700">
           <span className="text-sm font-medium">Connecting to server...</span>
         </div>
       )}
+      */}
 
       {/* Connected */}
       {isOnline && socketConnected && show && (

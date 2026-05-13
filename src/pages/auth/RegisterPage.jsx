@@ -38,14 +38,14 @@ export default function RegisterPage() {
             <div className="w-12 h-12 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
               <Zap className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">FieldCRM</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">FieldCRM</span>
           </div>
-          <p className="text-white/50 text-sm">Create your employee account</p>
+          <p className="text-[var(--text-muted)] text-sm">Create your employee account</p>
         </div>
 
         <div className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-white mb-1">Join FieldCRM</h2>
-          <p className="text-white/40 text-sm mb-6">Fill in your details to request access</p>
+          <h2 className="text-2xl font-bold text-[var(--text-main)] mb-1">Join FieldCRM</h2>
+          <p className="text-[var(--text-muted)] text-sm mb-6 opacity-70">Fill in your details to request access</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
@@ -56,7 +56,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Department</label>
+              <label className="block text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest mb-1.5 opacity-80">Department</label>
               <select className="input-field" value={form.department} onChange={set('department')}>
                 <option value="">Select Department</option>
                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
@@ -73,9 +73,9 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <p className="text-center text-white/40 text-sm mt-5">
+          <p className="text-center text-[var(--text-muted)] text-sm mt-5">
             Already have an account?{' '}
-            <Link to="/login" className="text-primary-400 hover:text-primary-300 font-semibold">Sign In</Link>
+            <Link to="/login" className="text-primary-500 hover:text-primary-400 font-bold">Sign In</Link>
           </p>
         </div>
       </div>
@@ -86,9 +86,9 @@ export default function RegisterPage() {
 function InputField({ label, icon: Icon, ...props }) {
   return (
     <div>
-      <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">{label}</label>
+      <label className="block text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest mb-1.5 opacity-80">{label}</label>
       <div className="relative">
-        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />}
+        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] opacity-50" />}
         <input className={`input-field ${Icon ? 'pl-10' : ''}`} {...props} />
       </div>
     </div>

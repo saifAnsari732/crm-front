@@ -49,8 +49,8 @@ export default function TrackingPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-white text-2xl font-bold">Live Tracking</h1>
-            <p className="text-white/40 text-sm">Monitor your field activity in real-time</p>
+            <h1 className="text-[var(--text-main)] text-2xl font-bold">Live Tracking</h1>
+            <p className="text-[var(--text-muted)] text-sm">Monitor your field activity in real-time</p>
           </div>
           {isTracking && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
@@ -74,7 +74,7 @@ export default function TrackingPage() {
               className={`relative w-32 h-32 rounded-full border-4 transition-all duration-500 flex flex-col items-center justify-center gap-1 font-bold text-lg active:scale-95
                 ${isTracking
                   ? 'bg-emerald-600 border-emerald-400 text-white shadow-glow-green'
-                  : 'bg-dark-800 border-white/20 text-white hover:border-primary-500/60 hover:bg-dark-700 shadow-xl'
+                  : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-main)] hover:bg-[var(--bg-card-hover)] shadow-xl'
                 }`}>
               {isTracking ? (
                 <>
@@ -98,10 +98,10 @@ export default function TrackingPage() {
             { label: 'Speed', value: `${currentSpeed} km/h`, icon: Activity, color: 'text-violet-400' },
             { label: 'Time', value: isTracking ? formatTime(elapsed) : '00:00:00', icon: Clock, color: 'text-amber-400' },
           ].map((s, i) => (
-            <div key={i} className="glass-card p-4 text-center border-white/5">
+            <div key={i} className="glass-card p-4 text-center border-[var(--border-color)] bg-[var(--bg-card)]">
               <s.icon className={`w-4 h-4 ${s.color} mx-auto mb-2`} />
-              <p className={`font-black text-sm tracking-tight ${isTracking ? 'text-white' : 'text-white/40'}`}>{s.value}</p>
-              <p className="text-white/30 text-[9px] font-bold uppercase tracking-widest mt-1">{s.label}</p>
+              <p className={`font-black text-sm tracking-tight ${isTracking ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-60'}`}>{s.value}</p>
+              <p className="text-[var(--text-muted)] text-[9px] font-bold uppercase tracking-widest mt-1 opacity-70">{s.label}</p>
             </div>
           ))}
         </div>
@@ -111,8 +111,8 @@ export default function TrackingPage() {
           <div className="glass-card p-5 border-white/10 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary-400" />
-                <h3 className="text-white font-bold text-xs uppercase tracking-wider">Current GPS Status</h3>
+                <MapPin className="w-4 h-4 text-primary-500" />
+                <h3 className="text-[var(--text-main)] font-bold text-xs uppercase tracking-wider">Current GPS Status</h3>
               </div>
               <button 
                 onClick={openInGoogleMaps}
@@ -123,13 +123,13 @@ export default function TrackingPage() {
             </div>
             
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-dark-950/40 border border-white/5 rounded-2xl p-3">
-                <p className="text-white/30 text-[9px] font-bold uppercase tracking-widest mb-1">Latitude</p>
-                <p className="text-white font-mono text-xs">{currentLocation.lat.toFixed(6)}</p>
+              <div className="bg-[var(--bg-main)]/50 border border-[var(--border-color)] rounded-2xl p-3">
+                <p className="text-[var(--text-muted)] text-[9px] font-bold uppercase tracking-widest mb-1 opacity-70">Latitude</p>
+                <p className="text-[var(--text-main)] font-mono text-xs font-bold">{currentLocation.lat.toFixed(6)}</p>
               </div>
-              <div className="bg-dark-950/40 border border-white/5 rounded-2xl p-3">
-                <p className="text-white/30 text-[9px] font-bold uppercase tracking-widest mb-1">Longitude</p>
-                <p className="text-white font-mono text-xs">{currentLocation.lng.toFixed(6)}</p>
+              <div className="bg-[var(--bg-main)]/50 border border-[var(--border-color)] rounded-2xl p-3">
+                <p className="text-[var(--text-muted)] text-[9px] font-bold uppercase tracking-widest mb-1 opacity-70">Longitude</p>
+                <p className="text-[var(--text-main)] font-mono text-xs font-bold">{currentLocation.lng.toFixed(6)}</p>
               </div>
             </div>
             
@@ -151,24 +151,24 @@ export default function TrackingPage() {
               
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-7 h-7 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                  <Locate className="w-4 h-4 text-primary-400" />
+                  <Locate className="w-4 h-4 text-primary-500" />
                 </div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-400">Actual Address</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-500">Actual Address</p>
               </div>
 
-              <p className="text-white text-sm font-bold leading-relaxed pr-8">
+              <p className="text-[var(--text-main)] text-sm font-bold leading-relaxed pr-8">
                 {currentAddress || 'Resolving professional address...'}
               </p>
             </div>
 
             {/* Simple route visualization */}
-            <div className="mt-4 h-36 rounded-2xl bg-dark-950/60 border border-white/5 flex items-center justify-center overflow-hidden relative shadow-inner">
+            <div className="mt-4 h-36 rounded-2xl bg-[var(--bg-main)]/50 border border-[var(--border-color)] flex items-center justify-center overflow-hidden relative shadow-inner">
               {routePath.length > 1 ? (
                 <RouteSVG path={routePath} />
               ) : (
                 <div className="text-center">
                   <Navigation className="w-6 h-6 text-primary-500/30 mx-auto mb-2" />
-                  <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">Live Route Preview</p>
+                  <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest opacity-30">Live Route Preview</p>
                 </div>
               )}
               {isTracking && (

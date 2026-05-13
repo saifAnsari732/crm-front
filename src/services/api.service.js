@@ -11,6 +11,9 @@ let refreshTokenPromise = null;
 /**
  * Request interceptor: Attach token to all requests
  */
+/**
+ * Request interceptor: Attach token to all requests
+ */
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -28,7 +31,9 @@ API.interceptors.response.use(
     const originalRequest = err.config;
 
     // Handle 401 (Unauthorized)
-    if (err.response?.status === 401 && !originalRequest._retry) {
+    const isAuthRequest = originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh-token');
+    
+    if (err.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
 
       try {

@@ -30,21 +30,7 @@ export default function OfflineIndicator() {
       )}
 
       {/* Sync Status */}
-      {unsyncedCount > 0 && (
-        <div className="bg-amber-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            <span className="text-sm font-medium">{unsyncedCount} location(s) queued</span>
-          </div>
-          <button
-            onClick={handleSync}
-            disabled={syncing || !isOnline}
-            className="text-xs font-semibold px-2 py-1 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded transition"
-          >
-            {syncing ? 'Syncing...' : 'Sync'}
-          </button>
-        </div>
-      )}
+   
 
       {/* Synced Indicator */}
       {isOnline && unsyncedCount === 0 && (

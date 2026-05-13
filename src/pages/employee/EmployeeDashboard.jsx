@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
@@ -17,11 +17,36 @@ export default function EmployeeDashboard() {
   const [recentMeetings, setRecentMeetings] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const statCards = useMemo(() => [
+    {
+      label: 'Distance Today', value: `${stats.distance.toFixed(1)} km`,
+      icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
+    },
+    {
+      label: 'Meetings', value: stats.meetings,
+      icon: Users, color: 'from-violet-500/20 to-violet-600/5', iconColor: 'text-violet-400', border: 'border-violet-500/20'
+    },
+    {
+      label: 'Expenses', value: `₹${stats.expenses.toLocaleString()}`,
+      icon: Receipt, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', border: 'border-amber-500/20'
+    },
+    {
+      label: 'Status', value: stats.attended ? 'Present' : 'Absent',
+      icon: CheckCircle, color: stats.attended ? 'from-emerald-500/20 to-emerald-600/5' : 'from-red-500/20 to-red-600/5',
+      iconColor: stats.attended ? 'text-emerald-400' : 'text-red-400',
+      border: stats.attended ? 'border-emerald-500/20' : 'border-red-500/20'
+    },
+  ], [stats]);
 
-  const fetchData = async () => {
+  const quickActions = useMemo(() => [
+    { label: 'Start Tracking', icon: MapPin, color: 'bg-primary-600 hover:bg-primary-500 shadow-glow shadow-primary-600/30', to: '/tracking' },
+    { label: 'My Tasks', icon: ClipboardList, color: 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20', to: '/tasks' },
+    { label: 'Apply Leave', icon: Calendar, color: 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20', to: '/leaves' },
+    { label: 'Add Meeting', icon: Users, color: 'bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/20', to: '/meetings' },
+    { label: 'Add Expense', icon: Receipt, color: 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20', to: '/expenses' },
+  ], []);
+
+  const fetchData = useCallback(async () => {
     try {
       const [meetRes, expRes, attRes, trackRes] = await Promise.allSettled([
         meetingAPI.getMy({ limit: 3 }),
@@ -50,36 +75,11 @@ export default function EmployeeDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const statCards = [
-    {
-      label: 'Distance Today', value: `${stats.distance.toFixed(1)} km`,
-      icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
-    },
-    {
-      label: 'Meetings', value: stats.meetings,
-      icon: Users, color: 'from-violet-500/20 to-violet-600/5', iconColor: 'text-violet-400', border: 'border-violet-500/20'
-    },
-    {
-      label: 'Expenses', value: `₹${stats.expenses.toLocaleString()}`,
-      icon: Receipt, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', border: 'border-amber-500/20'
-    },
-    {
-      label: 'Status', value: stats.attended ? 'Present' : 'Absent',
-      icon: CheckCircle, color: stats.attended ? 'from-emerald-500/20 to-emerald-600/5' : 'from-red-500/20 to-red-600/5',
-      iconColor: stats.attended ? 'text-emerald-400' : 'text-red-400',
-      border: stats.attended ? 'border-emerald-500/20' : 'border-red-500/20'
-    },
-  ];
-
-  const quickActions = [
-    { label: 'Start Tracking', icon: MapPin, color: 'bg-primary-600 hover:bg-primary-500 shadow-glow shadow-primary-600/30', to: '/tracking' },
-    { label: 'My Tasks', icon: ClipboardList, color: 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20', to: '/tasks' },
-    { label: 'Apply Leave', icon: Calendar, color: 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20', to: '/leaves' },
-    { label: 'Add Meeting', icon: Users, color: 'bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/20', to: '/meetings' },
-    { label: 'Add Expense', icon: Receipt, color: 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20', to: '/expenses' },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return (
     <EmployeeLayout>
@@ -126,53 +126,41 @@ export default function EmployeeDashboard() {
                 </span>
               </div>
               <button 
-                onClick={() => {
-                  if ("geolocation" in navigator) {
-                    navigator.geolocation.getCurrentPosition(
-                      () => toast.success("Location enabled!"),
-                      (err) => toast.error(`Error: ${err.message}`)
-                    );
-                  } else {
-                    toast.error("Geolocation not supported");
-                  }
-                }}
-                className="px-4 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 flex items-center gap-2 text-white transition-all active:scale-95"
+                onClick={() => navigate('/tracking')}
+                className="px-4 py-2 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] flex items-center gap-2 text-[var(--text-main)] transition-all active:scale-95"
               >
                 <Locate className="w-3.5 h-3.5 text-primary-300" />
                 <span className="text-[10px] font-black uppercase tracking-widest">Enable Location</span>
               </button>
-              <span className="text-white/40 text-[10px] font-bold tracking-widest uppercase hidden md:inline">EMP ID: {user?.employeeId}</span>
+              <span className="text-[var(--text-muted)] text-[10px] font-bold tracking-widest uppercase hidden md:inline">EMP ID: {user?.employeeId}</span>
             </div>
           </div>
         </div>
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((card, i) => {
-            const Icon = card.icon;
-            return (
-              <div key={i} className={`group relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br ${card.color} border ${card.border} p-6 hover:scale-[1.03] transition-all duration-300 shadow-lg shadow-black/5`}>
-                <div className="relative z-10">
-                  <div className={`w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-4 group-hover:rotate-12 transition-transform`}>
-                    <Icon className={`w-5 h-5 ${card.iconColor}`} />
-                  </div>
-                  <p className="text-white text-2xl font-black tracking-tight">{loading ? '—' : card.value}</p>
-                  <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">{card.label}</p>
-                </div>
+          {statCards.map((card, i) => (
+            <div key={i} className={`glass-card p-5 bg-gradient-to-br ${card.color} ${card.border} group relative overflow-hidden`}>
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <card.icon className="w-12 h-12" />
               </div>
-            );
-          })}
+              <div className="relative">
+                <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-wider mb-2">{card.label}</p>
+                <p className="text-[var(--text-main)] text-2xl font-black">{loading ? '—' : card.value}</p>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Quick Actions (Mobile-Friendly Horizontal Scroll) */}
         <div>
-          <h3 className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-4 ml-1">Quick Operations</h3>
-          <div className="flex lg:grid lg:grid-cols-5 gap-4 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0">
+          <h3 className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em] mb-4 ml-1">Quick Operations</h3>
+          <div className="grid grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-6">
             {quickActions.map((a, i) => {
               const Icon = a.icon;
               return (
-                <button key={i} onClick={() => navigate(a.to)}
-                  className={`${a.color} text-white rounded-[1.5rem] p-5 flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 flex-shrink-0 w-32 lg:w-auto hover:-translate-y-1`}>
+                <button key={a.label} onClick={() => navigate(a.to)}
+                  className={`${a.color} text-white rounded-[1.5rem] p-4 lg:p-5 flex flex-col items-center gap-2 lg:gap-3 transition-all duration-300 active:scale-95 w-full hover:-translate-y-1 shadow-lg shadow-black/10`}>
                   <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
                     <Icon className="w-5 h-5" />
                   </div>
@@ -185,18 +173,21 @@ export default function EmployeeDashboard() {
 
         {/* Recent Meetings */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold text-sm">Recent Meetings</h3>
-            <button onClick={() => navigate('/meetings')} className="text-primary-400 text-xs flex items-center gap-1 hover:text-primary-300">
-              View all <ChevronRight className="w-3 h-3" />
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[var(--text-main)] font-black text-lg tracking-tight">Recent Meetings</h3>
+            <button onClick={() => navigate('/meetings')} className="text-primary-500 text-xs font-bold flex items-center gap-1 hover:gap-2 transition-all">
+              View All <ChevronRight className="w-4 h-4" />
             </button>
           </div>
           {loading ? (
             <div className="space-y-3">
-              {[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-white/5 animate-pulse" />)}
+              {[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-[var(--bg-surface)] animate-pulse" />)}
             </div>
           ) : recentMeetings.length === 0 ? (
-            <EmptyState icon="🤝" text="No meetings recorded yet" />
+            <div className="glass-card p-8 text-center bg-[var(--bg-surface)]">
+              <Users className="w-10 h-10 text-[var(--text-muted)] opacity-20 mx-auto mb-3" />
+              <p className="text-[var(--text-muted)] text-sm">No meetings logged today</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {recentMeetings.map(m => (
@@ -205,8 +196,8 @@ export default function EmployeeDashboard() {
                     <Users className="w-5 h-5 text-violet-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold text-sm truncate">{m.clientName}</p>
-                    <p className="text-white/40 text-xs truncate">{m.companyName} • {new Date(m.date).toLocaleDateString('en-IN')}</p>
+                    <p className="text-[var(--text-main)] font-semibold text-sm truncate">{m.clientName}</p>
+                    <p className="text-[var(--text-muted)] text-xs truncate">{m.companyName} • {new Date(m.date).toLocaleDateString('en-IN')}</p>
                   </div>
                   <StatusBadge status={m.status} />
                 </div>
@@ -218,13 +209,13 @@ export default function EmployeeDashboard() {
         {/* Recent Expenses */}
         <div className="pb-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold text-sm">Recent Expenses</h3>
+            <h3 className="text-[var(--text-main)] font-semibold text-sm">Recent Expenses</h3>
             <button onClick={() => navigate('/expenses')} className="text-primary-400 text-xs flex items-center gap-1 hover:text-primary-300">
               View all <ChevronRight className="w-3 h-3" />
             </button>
           </div>
           {loading ? (
-            <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-white/5 animate-pulse" />)}</div>
+            <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-[var(--bg-surface)] animate-pulse" />)}</div>
           ) : recentExpenses.length === 0 ? (
             <EmptyState icon="🧾" text="No expenses submitted yet" />
           ) : (
@@ -235,11 +226,11 @@ export default function EmployeeDashboard() {
                     {categoryEmoji(exp.category)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold text-sm capitalize">{exp.category}</p>
-                    <p className="text-white/40 text-xs">{new Date(exp.date).toLocaleDateString('en-IN')}</p>
+                    <p className="text-[var(--text-main)] font-semibold text-sm capitalize">{exp.category}</p>
+                    <p className="text-[var(--text-muted)] text-xs">{new Date(exp.date).toLocaleDateString('en-IN')}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-white font-bold text-sm">₹{exp.amount.toLocaleString()}</p>
+                    <p className="text-[var(--text-main)] font-bold text-sm">₹{exp.amount.toLocaleString()}</p>
                     <StatusBadge status={exp.status} />
                   </div>
                 </div>
@@ -266,7 +257,7 @@ function EmptyState({ icon, text }) {
   return (
     <div className="glass-card p-6 text-center">
       <div className="text-3xl mb-2">{icon}</div>
-      <p className="text-white/40 text-sm">{text}</p>
+      <p className="text-[var(--text-muted)] text-sm">{text}</p>
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function ProfilePage() {
   return (
     <Layout>
       <div className="p-4 lg:p-6 space-y-6 max-w-2xl mx-auto">
-        <h1 className="text-white text-2xl font-bold">Profile</h1>
+        <h1 className="text-[var(--text-main)] text-2xl font-bold">Profile</h1>
 
         {/* Avatar + badge */}
         <div className="glass-card p-6 flex items-center gap-5">
@@ -54,8 +54,8 @@ export default function ProfilePage() {
             {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full rounded-2xl object-cover" /> : user?.name?.[0]?.toUpperCase()}
           </div>
           <div>
-            <h2 className="text-white text-xl font-bold">{user?.name}</h2>
-            <p className="text-white/50 text-sm">{user?.email}</p>
+            <h2 className="text-[var(--text-main)] text-xl font-bold">{user?.name}</h2>
+            <p className="text-[var(--text-muted)] text-sm">{user?.email}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className={`badge ${user?.role === 'employee' ? 'badge-blue' : 'badge-green'} capitalize`}>{user?.role}</span>
               {user?.employeeId && <span className="badge badge-yellow">{user.employeeId}</span>}
@@ -72,12 +72,12 @@ export default function ProfilePage() {
             { icon: User, label: 'Manager', value: user?.manager?.name || '—' },
           ].map(({ icon: Icon, label, value }) => (
             <div key={label} className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
-                <Icon className="w-4 h-4 text-white/40" />
+              <div className="w-9 h-9 rounded-xl bg-[var(--bg-surface)] flex items-center justify-center flex-shrink-0">
+                <Icon className="w-4 h-4 text-[var(--text-muted)] opacity-60" />
               </div>
               <div>
-                <p className="text-white/40 text-xs">{label}</p>
-                <p className="text-white text-sm font-medium">{value || '—'}</p>
+                <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-wider">{label}</p>
+                <p className="text-[var(--text-main)] text-sm font-semibold">{value || '—'}</p>
               </div>
             </div>
           ))}
@@ -85,19 +85,19 @@ export default function ProfilePage() {
 
         {/* Edit profile */}
         <div className="glass-card p-5">
-          <h3 className="text-white font-semibold mb-4">Edit Profile</h3>
+          <h3 className="text-[var(--text-main)] font-semibold mb-4">Edit Profile</h3>
           <form onSubmit={handleSave} className="space-y-4">
             <div>
-              <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Full Name</label>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Full Name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] opacity-50" />
                 <input className="input-field pl-10" value={form.name} onChange={set('name')} />
               </div>
             </div>
             <div>
-              <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">Phone</label>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Phone</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] opacity-50" />
                 <input className="input-field pl-10" type="tel" value={form.phone} onChange={set('phone')} />
               </div>
             </div>
@@ -109,7 +109,7 @@ export default function ProfilePage() {
 
         {/* Change password */}
         <div className="glass-card p-5">
-          <h3 className="text-white font-semibold mb-4 flex items-center gap-2"><Lock className="w-4 h-4 text-white/40" /> Change Password</h3>
+          <h3 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2"><Lock className="w-4 h-4 text-[var(--text-muted)]" /> Change Password</h3>
           <form onSubmit={handleChangePw} className="space-y-4">
             {[
               { key: 'currentPassword', label: 'Current Password' },
@@ -117,7 +117,7 @@ export default function ProfilePage() {
               { key: 'confirm', label: 'Confirm New Password' },
             ].map(({ key, label }) => (
               <div key={key}>
-                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">{label}</label>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">{label}</label>
                 <input type="password" className="input-field" value={pwForm[key]} onChange={setPw(key)} required />
               </div>
             ))}
