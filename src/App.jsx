@@ -21,6 +21,7 @@ const ExpensesPage = lazy(() => import('./pages/employee/ExpensesPage'));
 const ProfilePage = lazy(() => import('./pages/employee/ProfilePage'));
 const LeavePage = lazy(() => import('./pages/employee/LeavePage'));
 const TasksPage = lazy(() => import('./pages/employee/TasksPage'));
+const EmployeeLeads = lazy(() => import('./pages/employee/EmployeeLeads'));
 
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminEmployees = lazy(() => import('./pages/admin/AdminEmployees'));
@@ -31,6 +32,8 @@ const AdminAttendance = lazy(() => import('./pages/admin/AdminAttendance'));
 const AdminTrackingHistory = lazy(() => import('./pages/admin/AdminTrackingHistory'));
 const AdminLeaves = lazy(() => import('./pages/admin/AdminLeaves'));
 const AdminTasks = lazy(() => import('./pages/admin/AdminTasks'));
+const AdminLeads = lazy(() => import('./pages/admin/AdminLeads'));
+const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 
 const PrivateRoute = ({ children, roles }) => {
   const { user, loading, isAuthenticated } = useAuth();
@@ -62,6 +65,7 @@ const AppRoutes = () => (
     <Route path="/expenses" element={<PrivateRoute roles={['employee']}><ExpensesPage /></PrivateRoute>} />
     <Route path="/leaves" element={<PrivateRoute roles={['employee']}><LeavePage /></PrivateRoute>} />
     <Route path="/tasks" element={<PrivateRoute roles={['employee']}><TasksPage /></PrivateRoute>} />
+    <Route path="/leads" element={<PrivateRoute roles={['employee']}><EmployeeLeads /></PrivateRoute>} />
     <Route path="/profile" element={<PrivateRoute roles={['employee', 'admin', 'hr']}><ProfilePage /></PrivateRoute>} />
 
     {/* Admin */}
@@ -74,6 +78,8 @@ const AppRoutes = () => (
     <Route path="/admin/attendance" element={<PrivateRoute roles={['admin', 'hr']}><AdminAttendance /></PrivateRoute>} />
     <Route path="/admin/leaves" element={<PrivateRoute roles={['admin', 'hr']}><AdminLeaves /></PrivateRoute>} />
     <Route path="/admin/tasks" element={<PrivateRoute roles={['admin', 'hr']}><AdminTasks /></PrivateRoute>} />
+    <Route path="/admin/leads" element={<PrivateRoute roles={['admin', 'hr']}><AdminLeads /></PrivateRoute>} />
+    <Route path="/admin/reports" element={<PrivateRoute roles={['admin', 'hr']}><AdminReports /></PrivateRoute>} />
 
   </Routes>
 );

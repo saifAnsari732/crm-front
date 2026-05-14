@@ -111,8 +111,10 @@ export const adminAPI = {
   getEmployees: (params) => API.get('/admin/employees', { params }),
   approveEmployee: (id) => API.put(`/admin/employees/${id}/approve`),
   toggleBlock: (id) => API.put(`/admin/employees/${id}/block`),
+  updateEmployee: (id, data) => API.put(`/admin/employees/${id}`, data),
   getAttendance: (params) => API.get('/admin/attendance', { params }),
   getHistory: (params) => API.get('/admin/tracking-history', { params }),
+  getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
 };
 
 // ─── Employees ────────────────────────────────────────────────────────────
@@ -155,6 +157,21 @@ export const taskAPI = {
   getAll: (params) => API.get('/tasks/all', { params }),
   getMy: (params) => API.get('/tasks/my', { params }),
   updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
+};
+
+// ─── Leads ────────────────────────────────────────────────────────────────
+export const leadAPI = {
+  create: (data) => API.post('/leads', data),
+  getAll: () => API.get('/leads'),
+  update: (id, data) => API.put(`/leads/${id}`, data),
+  delete: (id) => API.delete(`/leads/${id}`),
+};
+
+// ─── Travel ───────────────────────────────────────────────────────────────
+export const travelAPI = {
+  create: (data) => API.post('/travel', data),
+  getAll: (params) => API.get('/travel', { params }),
+  delete: (id) => API.delete(`/travel/${id}`),
 };
 
 export default API;

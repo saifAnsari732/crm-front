@@ -128,7 +128,7 @@ export const initSocket = (token) => {
   socket.on('heartbeat_ack', (data) => {
     // Heartbeat acknowledged, connection is healthy
   });
-
+ 
   return socket;
 };
 

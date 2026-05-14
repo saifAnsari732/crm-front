@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import { useTracking } from '../../contexts/TrackingContext';
-import { MapPin, Navigation, Clock, Zap, Activity, AlertCircle, CheckCircle, ClipboardList, Locate, ChevronRight } from 'lucide-react';
+import { MapPin, Navigation, Clock, Zap, Activity, AlertCircle, CheckCircle, ClipboardList, Locate, ChevronRight, Train, Bus, Plus, Image as ImageIcon, Loader2, X } from 'lucide-react';
+import { uploadAPI, travelAPI } from '../../services/api.service';
 
 import toast from 'react-hot-toast';
 
@@ -10,6 +11,10 @@ export default function TrackingPage() {
   const [elapsed, setElapsed] = useState(0);
   const [startTime, setStartTime] = useState(null);
   const [copying, setCopying] = useState(false);
+  const [showTravelModal, setShowTravelModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [travelForm, setTravelForm] = useState({ type: 'bus', source: '', destination: '', ticketUrl: '' });
+  const [submitting, setSubmitting] = useState(false);
 
 
   useEffect(() => {
@@ -43,6 +48,33 @@ export default function TrackingPage() {
     window.open(`https://www.google.com/maps/search/?api=1&query=${currentLocation.lat},${currentLocation.lng}`, '_blank');
   };
 
+  const handleTicketUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { data } = await uploadAPI.uploadImage(formData);
+      setTravelForm(p => ({ ...p, ticketUrl: data.url }));
+      toast.success('Ticket uploaded');
+    } catch { toast.error('Upload failed'); }
+    finally { setUploading(false); }
+  };
+
+  const handleTravelSubmit = async (e) => {
+    e.preventDefault();
+    if (!travelForm.ticketUrl) return toast.error('Please upload ticket photo');
+    setSubmitting(true);
+    try {
+      await travelAPI.create(travelForm);
+      toast.success('Travel logged successfully');
+      setShowTravelModal(false);
+      setTravelForm({ type: 'bus', source: '', destination: '', ticketUrl: '' });
+    } catch { toast.error('Failed to log travel'); }
+    finally { setSubmitting(false); }
+  };
+
   return (
     <EmployeeLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-2xl mx-auto">
@@ -58,6 +90,9 @@ export default function TrackingPage() {
               Live
             </div>
           )}
+          <button onClick={() => setShowTravelModal(true)} className="btn-secondary py-1.5 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+             <Train className="w-3.5 h-3.5" /> Public Transport
+          </button>
         </div>
 
         {/* Big Toggle Button */}
@@ -207,6 +242,64 @@ export default function TrackingPage() {
               <p className="text-white font-semibold text-sm">{routePath.length} GPS Points Recorded</p>
               <p className="text-white/40 text-xs">Route data is being synced to server</p>
             </div>
+          </div>
+        )}
+
+        {/* Travel Modal */}
+        {showTravelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+             <div className="glass-card w-full max-w-md p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                   <h2 className="text-lg font-bold text-[var(--text-main)] uppercase tracking-tight flex items-center gap-2">
+                      <Train className="w-5 h-5 text-primary-500" /> Log Public Travel
+                   </h2>
+                   <button onClick={() => setShowTravelModal(false)} className="p-2 rounded-xl hover:bg-white/5"><X className="w-5 h-5 text-[var(--text-muted)]" /></button>
+                </div>
+                <form onSubmit={handleTravelSubmit} className="space-y-4">
+                   <div className="flex gap-2">
+                      {['bus', 'train'].map(t => (
+                        <button key={t} type="button" onClick={() => setTravelForm(p => ({ ...p, type: t }))}
+                          className={`flex-1 py-2 rounded-xl border flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest transition-all ${
+                            travelForm.type === t ? 'bg-primary-600 border-primary-500 text-white' : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)]'
+                          }`}>
+                          {t === 'bus' ? <Bus className="w-4 h-4" /> : <Train className="w-4 h-4" />} {t}
+                        </button>
+                      ))}
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-[var(--text-muted)] uppercase mb-1.5">Source</label>
+                        <input className="input-field" required value={travelForm.source} onChange={e => setTravelForm(p => ({ ...p, source: e.target.value }))} placeholder="From station..." />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-[var(--text-muted)] uppercase mb-1.5">Destination</label>
+                        <input className="input-field" required value={travelForm.destination} onChange={e => setTravelForm(p => ({ ...p, destination: e.target.value }))} placeholder="To station..." />
+                      </div>
+                   </div>
+                   <div>
+                      <label className="block text-[10px] font-black text-[var(--text-muted)] uppercase mb-1.5">Ticket Photo</label>
+                      {travelForm.ticketUrl ? (
+                        <div className="relative rounded-2xl overflow-hidden border-2 border-primary-500/30 h-40 group">
+                           <img src={travelForm.ticketUrl} className="w-full h-full object-cover" alt="Ticket" />
+                           <button type="button" onClick={() => setTravelForm(p => ({ ...p, ticketUrl: '' }))} className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X className="w-4 h-4" />
+                           </button>
+                        </div>
+                      ) : (
+                        <label className="h-40 rounded-2xl border-2 border-dashed border-[var(--border-color)] flex flex-col items-center justify-center cursor-pointer hover:border-primary-500 transition-all hover:bg-primary-500/5">
+                           {uploading ? <Loader2 className="w-8 h-8 animate-spin text-primary-500" /> : <><Plus className="w-8 h-8 text-[var(--text-muted)] mb-2" /><span className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Upload Ticket</span></>}
+                           <input type="file" className="hidden" accept="image/*" onChange={handleTicketUpload} disabled={uploading} />
+                        </label>
+                      )}
+                   </div>
+                   <div className="flex gap-3 pt-2">
+                      <button type="button" onClick={() => setShowTravelModal(false)} className="btn-secondary flex-1 py-4">Cancel</button>
+                      <button type="submit" disabled={submitting || uploading} className="btn-primary flex-1 py-4 flex items-center justify-center gap-2">
+                         {submitting ? 'Logging...' : 'Confirm Travel'}
+                      </button>
+                   </div>
+                </form>
+             </div>
           </div>
         )}
       </div>

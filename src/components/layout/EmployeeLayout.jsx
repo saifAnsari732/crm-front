@@ -15,12 +15,16 @@ import {
   Zap,
   Sun,
   Moon,
+  Target,
+  ClipboardList,
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tracking", icon: MapPin, label: "Tracking" },
+  { to: "/leads", icon: Target, label: "Leads" },
+  { to: "/tasks", icon: ClipboardList, label: "Action Plan" },
   { to: "/meetings", icon: Users, label: "Meetings" },
   { to: "/expenses", icon: Receipt, label: "Expenses" },
   { to: "/profile", icon: User, label: "Profile" },

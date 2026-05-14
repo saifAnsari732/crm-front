@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { expenseAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Search, CheckCircle, XCircle, Filter, Receipt } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Filter, Receipt, Image as ImageIcon, X } from 'lucide-react';
 
 const CATEGORY_EMOJI = { fuel: '⛽', food: '🍽️', hotel: '🏨', travel: '🚗', misc: '📦' };
 
@@ -14,6 +14,7 @@ export default function AdminExpenses() {
   const [total, setTotal] = useState(0);
   const [actionLoading, setActionLoading] = useState({});
   const [totalAmount, setTotalAmount] = useState(0);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
 
   useEffect(() => { fetchExpenses(); }, [page, statusFilter]);
 
@@ -125,7 +126,19 @@ export default function AdminExpenses() {
                         </div>
                         <div>
                           <p className="text-[var(--text-main)] text-xs font-black uppercase tracking-widest">{exp.category}</p>
-                          {exp.description && <p className="text-[var(--text-muted)] text-[10px] font-medium truncate max-w-[150px] italic">"{exp.description}"</p>}
+                          {exp.category === 'travel' && exp.travelDetails && (
+                             <p className="text-primary-400 text-[10px] font-black uppercase tracking-tight mt-0.5">
+                                {exp.travelDetails.mode} | {exp.travelDetails.source} → {exp.travelDetails.destination}
+                             </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            {exp.description && <p className="text-[var(--text-muted)] text-[10px] font-medium truncate max-w-[150px] italic">"{exp.description}"</p>}
+                            {exp.receipts?.length > 0 && (
+                              <button onClick={() => setSelectedReceipt(exp.receipts[0])} className="p-1 rounded-lg bg-primary-500/10 text-primary-500 hover:bg-primary-500 hover:text-white transition-all">
+                                <ImageIcon className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -181,6 +194,18 @@ export default function AdminExpenses() {
                <span className="text-[var(--text-muted)] text-sm font-bold">{Math.ceil(total / 15)}</span>
             </div>
             <button disabled={page * 15 >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary px-6 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-40 transition-all active:scale-95">Next</button>
+          </div>
+        )}
+
+        {/* Receipt Modal */}
+        {selectedReceipt && (
+          <div className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center p-4" onClick={() => setSelectedReceipt(null)}>
+            <div className="relative max-w-4xl w-full">
+              <button onClick={() => setSelectedReceipt(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-primary-400 transition-colors">
+                <X className="w-8 h-8" />
+              </button>
+              <img src={selectedReceipt} alt="Receipt" className="w-full h-auto rounded-2xl shadow-2xl border-4 border-white/10" />
+            </div>
           </div>
         )}
       </div>

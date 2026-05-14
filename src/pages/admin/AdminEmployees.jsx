@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Search, Users, UserCheck, UserX, Shield, ShieldOff, CheckCircle, Clock, AlertTriangle, Activity } from 'lucide-react';
+import { Search, Users, UserCheck, UserX, Shield, ShieldOff, CheckCircle, Clock, AlertTriangle, Activity, Edit2, X, MapPin, IndianRupee } from 'lucide-react';
 
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState([]);
@@ -11,6 +11,10 @@ export default function AdminEmployees() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [actionLoading, setActionLoading] = useState({});
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ salary: 0, TA: 0, DA: 0, allocatedArea: '' });
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => { fetchEmployees(); }, [page, search]);
 
@@ -42,6 +46,29 @@ export default function AdminEmployees() {
       fetchEmployees();
     } catch { toast.error('Failed'); }
     finally { setActionLoading(p => ({ ...p, [id + '_block']: false })); }
+  };
+
+  const openEdit = (emp) => {
+    setSelectedEmp(emp);
+    setEditForm({
+      salary: emp.salary || 0,
+      TA: emp.TA || 0,
+      DA: emp.DA || 0,
+      allocatedArea: emp.allocatedArea || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setUpdating(true);
+    try {
+      await adminAPI.updateEmployee(selectedEmp._id, editForm);
+      toast.success('Employee updated');
+      setShowEditModal(false);
+      fetchEmployees();
+    } catch { toast.error('Update failed'); }
+    finally { setUpdating(false); }
   };
 
   const pendingCount = employees.filter(e => !e.isApproved).length;
@@ -170,6 +197,11 @@ export default function AdminEmployees() {
                             {actionLoading[emp._id + '_approve'] ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <UserCheck className="w-4.5 h-4.5" />}
                           </button>
                         )}
+                        <button onClick={() => openEdit(emp)}
+                          className="w-9 h-9 rounded-xl bg-primary-500/10 hover:bg-primary-500 text-primary-500 hover:text-white transition-all duration-300 flex items-center justify-center border border-primary-500/20"
+                          title="Edit Details">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button onClick={() => handleToggleBlock(emp._id, emp.name, emp.isBlocked)} disabled={actionLoading[emp._id + '_block']}
                           className={`w-9 h-9 rounded-xl transition-all duration-300 flex items-center justify-center border disabled:opacity-50 ${emp.isBlocked ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 border-emerald-500/20 hover:text-white' : 'bg-red-500/10 hover:bg-red-500 text-red-500 border-red-500/20 hover:text-white'}`}
                           title={emp.isBlocked ? 'Unblock Account' : 'Block Account'}>
@@ -194,6 +226,46 @@ export default function AdminEmployees() {
                <span className="text-[var(--text-muted)] text-sm font-bold">{Math.ceil(total / 15)}</span>
             </div>
             <button disabled={page * 15 >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary px-6 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-40 transition-all active:scale-95">Next</button>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-lg p-6 shadow-2xl border-[var(--border-color)]">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-black text-[var(--text-main)] uppercase tracking-tight">Edit Employee Profile</h2>
+                <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-white/5 rounded-xl"><X className="w-5 h-5 text-[var(--text-muted)]" /></button>
+              </div>
+              <form onSubmit={handleUpdate} className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-primary-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                    <MapPin className="w-3 h-3" /> Allocated Area
+                  </label>
+                  <input className="input-field" value={editForm.allocatedArea} onChange={e => setEditForm(p => ({ ...p, allocatedArea: e.target.value }))} placeholder="e.g. South Delhi, Zone 4" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                    <IndianRupee className="w-3 h-3" /> Monthly Salary
+                  </label>
+                  <input type="number" className="input-field" value={editForm.salary} onChange={e => setEditForm(p => ({ ...p, salary: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1.5">Travel Allowance (TA)</label>
+                  <input type="number" className="input-field" value={editForm.TA} onChange={e => setEditForm(p => ({ ...p, TA: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-violet-500 uppercase tracking-widest mb-1.5">Daily Allowance (DA)</label>
+                  <input type="number" className="input-field" value={editForm.DA} onChange={e => setEditForm(p => ({ ...p, DA: Number(e.target.value) }))} />
+                </div>
+                <div className="col-span-2 pt-4 flex gap-3">
+                   <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1 py-3">Cancel</button>
+                   <button type="submit" disabled={updating} className="btn-primary flex-1 py-3 flex items-center justify-center gap-2">
+                      {updating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Save Changes'}
+                   </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>
