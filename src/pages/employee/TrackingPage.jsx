@@ -90,9 +90,7 @@ export default function TrackingPage() {
               Live
             </div>
           )}
-          <button onClick={() => setShowTravelModal(true)} className="btn-secondary py-1.5 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-             <Train className="w-3.5 h-3.5" /> Public Transport
-          </button>
+
         </div>
 
         {/* Big Toggle Button */}

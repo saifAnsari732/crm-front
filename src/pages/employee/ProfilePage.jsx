@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { authAPI } from '../../services/api.service';
+import { authAPI, employeeAPI, uploadAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { User, Mail, Phone, Building, Calendar, Shield, Lock, Save } from 'lucide-react';
 
@@ -15,6 +15,12 @@ export default function ProfilePage() {
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
+  const [daAmount, setDaAmount] = useState(user?.DA ?? 0);
+  const [daFile, setDaFile] = useState(null);
+  const [daPreview, setDaPreview] = useState(user?.daReceipt || '');
+  const [uploadingDA, setUploadingDA] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
   const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
   const setPw = k => e => setPwForm(p => ({ ...p, [k]: e.target.value }));
@@ -41,6 +47,73 @@ export default function ProfilePage() {
       setPwForm({ currentPassword: '', newPassword: '', confirm: '' });
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setChangingPw(false); }
+  };
+
+  // Fetch employees list for admin/hr
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchEmployees = async () => {
+      if (!isAdmin) return;
+      setLoadingEmployees(true);
+      try {
+        const { data } = await employeeAPI.getAll();
+        if (mounted) setEmployees(data.employees || []);
+      } catch (err) {
+        console.error('Failed to load employees', err);
+      } finally { setLoadingEmployees(false); }
+    };
+    fetchEmployees();
+    return () => { mounted = false; };
+  }, [isAdmin]);
+
+  const handleDaFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setDaFile(f);
+    setDaPreview(URL.createObjectURL(f));
+  };
+
+  const handleDaSubmit = async (e) => {
+    e.preventDefault();
+    if ((daAmount === 0 || daAmount === '' || daAmount === null) && !daFile) return toast.error('Enter amount or attach receipt');
+    setUploadingDA(true);
+    try {
+      const payload = {};
+      // Har baar upload par DA ADD ho (replace nahi)
+      if (daAmount !== '' && daAmount !== null) {
+        const amountNumber = Number(daAmount);
+        if (Number.isNaN(amountNumber) || amountNumber < 0) {
+          toast.error('Enter a valid DA amount');
+          setUploadingDA(false);
+          return;
+        }
+        // server par jo DA currently hai woh read hoke add hoga (we send increment)
+        payload.DA = amountNumber;
+      }
+      if (daFile) {
+        const fd = new FormData();
+        fd.append('image', daFile);
+        const res = await uploadAPI.uploadImage(fd);
+        payload.daReceipt = res.data.url;
+      }
+      if (!Object.keys(payload).length) {
+        toast.error('Nothing to update');
+        setUploadingDA(false);
+        return;
+      }
+      // increment mode: server DA ko add karega (payload.DA = increment)
+      console.log('DA submit payload:', payload);
+      const res2 = await authAPI.updateProfile(payload);
+      console.log('DA update response user:', res2?.data?.user);
+      updateUser(res2.data.user);
+      setDaAmount('');
+      setDaPreview(res2.data.user.daReceipt || '');
+      setDaFile(null);
+      toast.success('DA updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update DA');
+    } finally { setUploadingDA(false); }
   };
 
   return (
@@ -126,6 +199,69 @@ export default function ProfilePage() {
             </button>
           </form>
         </div>
+
+        {/* Daily Allowance (DA) */}
+        <div className="glass-card p-5">
+          <h3 className="text-[var(--text-main)] font-semibold mb-4">Daily Allowance (DA)</h3>
+          <form onSubmit={handleDaSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Amount</label>
+              <input
+                className="input-field"
+                type="number"
+                value={daAmount}
+                onChange={(e) => setDaAmount(Number(e.target.value) || 0)}
+                placeholder="Enter DA amount"
+              />
+            </div>
+            <div>
+              <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-1.5">Receipt (optional)</label>
+              <input type="file" accept="image/*" onChange={handleDaFile} />
+              {daPreview && (
+                <img src={daPreview} alt="receipt" className="mt-2 max-h-36 rounded-md object-contain" />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="submit" disabled={uploadingDA} className="btn-primary flex items-center gap-2 py-2.5 px-5">
+                {uploadingDA ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Upload / Update DA'}
+              </button>
+            </div>
+          </form>
+          <div className="mt-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-4 text-sm text-[var(--text-main)]">
+            <p className="font-semibold mb-2">Stored DA details</p>
+            <p>Amount: ₹{user?.DA ?? 0}</p>
+            {user?.daReceipt ? (
+              <p>
+                Receipt: <a href={user.daReceipt} target="_blank" rel="noreferrer" className="text-primary-400 underline">View</a>
+              </p>
+            ) : (
+              <p className="text-[var(--text-muted)]">No receipt uploaded yet</p>
+            )}
+          </div>
+        </div>
+
+        {/* Employees list (admin/hr only) */}
+        {isAdmin && (
+          <div className="glass-card p-5">
+            <h3 className="text-[var(--text-main)] font-semibold mb-4">Employees</h3>
+            {loadingEmployees ? (
+              <p className="text-[var(--text-muted)]">Loading…</p>
+            ) : (
+              <div className="space-y-3">
+                {employees.map(emp => (
+                  <div key={emp._id} className="p-3 rounded-xl bg-[var(--bg-surface)] flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold">{emp.name}</p>
+                      <p className="text-[var(--text-muted)] text-sm">{emp.email} • {emp.phone || '—'}</p>
+                    </div>
+                    <div className="text-sm text-[var(--text-muted)]">{emp.department || '—'}</div>
+                  </div>
+                ))}
+                {employees.length === 0 && <p className="text-[var(--text-muted)]">No employees found</p>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Layout>
   );

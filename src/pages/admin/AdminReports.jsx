@@ -3,6 +3,8 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { FileText, Download, Calendar, User, Search, MapPin, Receipt, Briefcase, CheckCircle, Target } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function AdminReports() {
   const [employees, setEmployees] = useState([]);
@@ -11,6 +13,7 @@ export default function AdminReports() {
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
+
 
   useEffect(() => {
     fetchEmployees();
@@ -22,6 +25,7 @@ export default function AdminReports() {
       setEmployees(data.employees || []);
     } catch { }
   };
+  console.log(employees)
 
   const handleGenerate = async () => {
     if (!selectedEmp) return toast.error('Select an employee');
@@ -38,14 +42,134 @@ export default function AdminReports() {
     finally { setLoading(false); }
   };
 
+  const handleExportJSON = () => {
+    if (!reportData) return;
+    const jsonData = {
+      exportDate: new Date().toISOString(),
+      period: { startDate, endDate },
+      employee: reportData.employee,
+      summary: reportData.summary,
+      activities: {
+        meetings: reportData.meetings,
+        expenses: reportData.expenses,
+        tasks: reportData.tasks,
+        leads: reportData.leads,
+        daHistory: (reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || [])?.filter(da => {
+            const daDate = new Date(da.date).toISOString().slice(0, 10);
+            return daDate >= startDate && daDate <= endDate;
+        }) || []
+      }
+    };
+    const filename = `en_dreport_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.json`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' }));
+    link.download = filename;
+    link.click();
+    toast.success('JSON exported');
+  };
+
   const handleExport = () => {
     if (!reportData) return;
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Report_${reportData.employee.name}_${startDate}.json`;
-    link.click();
+
+    try {
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      doc.setFontSize(16);
+      doc.text('Unified Activity Report', 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+      doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+
+      // Employee Details
+      const empDetailsStart = 96;
+      const empDetailsBody = [
+        ['Name', reportData.employee.name],
+        ['Employee ID', reportData.employee.employeeId || '-'],
+        ['Department', reportData.employee.department || '-'],
+        ['Designation', reportData.employee.designation || '-'],
+        ['Phone', reportData.employee.phone || '-'],
+        ['Allocated Area', reportData.employee.allocatedArea || '-'],
+        ['Monthly Salary', `₹${reportData.employee.salary || 12000}`],
+        ['Travel Rate (TA)', `₹${reportData.employee.TA || 2.5} / km`],
+        ['Daily Allowance (DA)', `₹${reportData.employee.DA || 0}`],
+      ];
+      // @ts-ignore
+      doc.autoTable({ startY: empDetailsStart, head: [['Field','Value']], body: empDetailsBody, styles: { fontSize: 8 } });
+
+      let y = doc.previousAutoTable.finalY + 18;
+
+      // Summary
+      doc.setFontSize(12);
+      doc.text('Activity Summary', 40, y);
+      const summaryBody = [
+        ['Total Km', `${reportData.summary.totalKm.toFixed(2)} km`],
+        ['Travel Pay (₹2.50/km)', `₹${(reportData.summary.totalKm * 2.5).toFixed(2)}`],
+        ['Meetings', String(reportData.summary.totalMeetings)],
+        ['Expenses (₹)', String(reportData.summary.totalExpenses)],
+        ['Tasks', String(reportData.summary.totalTasks)],
+        ['Leads', String(reportData.summary.totalLeads)],
+      ];
+      // @ts-ignore
+      doc.autoTable({ startY: y + 6, head: [['Metric','Value']], body: summaryBody, styles: { fontSize: 8 } });
+
+      y = doc.previousAutoTable.finalY + 18;
+
+      // Meetings
+      if (reportData.meetings && reportData.meetings.length > 0) {
+        doc.setFontSize(12);
+        doc.text('Meetings', 40, y);
+        // @ts-ignore
+        doc.autoTable({ startY: y + 6, head: [['Date','Client','Purpose']], body: reportData.meetings.map(m => [new Date(m.date).toLocaleString(), m.clientName, (m.purpose || m.meetingNotes || '').slice(0, 80)]), styles: { fontSize: 8 }, margin: { left: 40, right: 40 } });
+        y = doc.previousAutoTable.finalY + 12;
+      }
+
+      // Expenses
+      if (reportData.expenses && reportData.expenses.length > 0) {
+        doc.setFontSize(12);
+        doc.text('Expenses', 40, y);
+        // @ts-ignore
+        doc.autoTable({ startY: y + 6, head: [['Date','Category','Amount','Status']], body: reportData.expenses.map(e => [new Date(e.date).toLocaleDateString(), e.category, `₹${e.amount}`, e.status]), styles: { fontSize: 8 }, margin: { left: 40, right: 40 } });
+        y = doc.previousAutoTable.finalY + 12;
+      }
+
+      // Tasks
+      if (reportData.tasks && reportData.tasks.length > 0) {
+        doc.setFontSize(12);
+        doc.text('Tasks', 40, y);
+        // @ts-ignore
+        doc.autoTable({ startY: y + 6, head: [['Title','Due','Status']], body: reportData.tasks.map(t => [t.title, t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '-', t.status]), styles: { fontSize: 8 }, margin: { left: 40, right: 40 } });
+        y = doc.previousAutoTable.finalY + 12;
+      }
+
+      // Leads
+      if (reportData.leads && reportData.leads.length > 0) {
+        doc.setFontSize(12);
+        doc.text('Leads', 40, y);
+        // @ts-ignore
+        doc.autoTable({ startY: y + 6, head: [['Name','Address','Feedback']], body: reportData.leads.map(l => [l.name, l.address || '-', (l.feedback || '').slice(0,80)]), styles: { fontSize: 8 }, margin: { left: 40, right: 40 } });
+        y = doc.previousAutoTable.finalY + 12;
+      }
+
+      // DA History
+      const employeeDaHistory = reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || [];
+      const filteredDaHistory = employeeDaHistory.filter(da => {
+         const daDate = new Date(da.date).toISOString().slice(0, 10);
+         return daDate >= startDate && daDate <= endDate;
+      });
+
+      if (filteredDaHistory.length > 0) {
+        doc.setFontSize(12);
+        doc.text('DA Upload History', 40, y);
+        // @ts-ignore
+        doc.autoTable({ startY: y + 6, head: [['Date','Amount','Receipt']], body: filteredDaHistory.map(da => [new Date(da.date).toLocaleString(), `₹${da.amount}`, da.receipt ? 'Yes (Link in system)' : 'No Receipt']), styles: { fontSize: 8 }, margin: { left: 40, right: 40 } });
+      }
+
+      const filename = `Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate || 'start'}.pdf`;
+      doc.save(filename);
+      toast.success('PDF exported');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate PDF');
+    }
   };
 
   return (
@@ -59,9 +183,14 @@ export default function AdminReports() {
             <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-1">Consolidated data audit for field operations</p>
           </div>
           {reportData && (
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-2 py-2.5 px-6 rounded-2xl">
-              <Download className="w-4 h-4" /> <span className="text-[10px] font-black uppercase tracking-widest">Export JSON</span>
-            </button>
+            <div className="flex gap-3">
+              <button onClick={handleExport} className="btn-secondary flex items-center gap-2 py-2.5 px-6 rounded-2xl">
+                <Download className="w-4 h-4" /> <span className="text-[10px] font-black uppercase tracking-widest">Export PDF</span>
+              </button>
+              <button onClick={handleExportJSON} className="btn-secondary flex items-center gap-2 py-2.5 px-6 rounded-2xl">
+                <FileText className="w-4 h-4" /> <span className="text-[10px] font-black uppercase tracking-widest">Export JSON</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -89,6 +218,50 @@ export default function AdminReports() {
 
         {reportData && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {console.log('reportData.employee.daHistory:', reportData.employee.daHistory)}
+            {/* Employee Details Card */}
+            <div className="glass-card p-6 border-[var(--border-color)] shadow-xl">
+              <h3 className="text-xs font-black uppercase tracking-widest text-primary-500 mb-4">Employee Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Name</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.name}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Employee ID</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.employeeId || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Designation</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.designation || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Department</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.department || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Phone</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.phone || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Allocated Area</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.allocatedArea || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Salary (₹/Month)</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.salary || 12000}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Travel Rate (TA)</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.TA || 2.5}/km</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Daily Allowance (DA)</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.DA || 0}</p>
+                </div>
+              </div>
+            </div>
+
             {/* Stats Summary */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                {[
@@ -106,7 +279,7 @@ export default function AdminReports() {
                ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                {/* Detail Sections */}
                <div className="glass-card overflow-hidden">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
@@ -147,7 +320,38 @@ export default function AdminReports() {
                   </div>
                </div>
 
-               <div className="glass-card overflow-hidden lg:col-span-2">
+               <div className="glass-card overflow-hidden">
+                  <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
+                     <h3 className="text-xs font-black uppercase tracking-widest text-blue-500">DA History</h3>
+                  </div>
+                  <div className="divide-y divide-[var(--border-color)] max-h-[400px] overflow-auto">
+                     {!(reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || []).some(da => {
+                         const d = new Date(da.date).toISOString().slice(0, 10);
+                         return d >= startDate && d <= endDate;
+                     }) ? <p className="p-8 text-center text-[var(--text-muted)] text-sm">No DA claimed</p> : 
+                      (reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || []).filter(da => {
+                         const d = new Date(da.date).toISOString().slice(0, 10);
+                         return d >= startDate && d <= endDate;
+                      }).map(da => (
+                        <div key={da._id} className="p-4 hover:bg-white/5 transition-colors flex items-center justify-between">
+                           <div>
+                              <p className="text-[var(--text-main)] font-bold text-sm">DA Claim</p>
+                              <p className="text-[var(--text-muted)] text-[10px]">{new Date(da.date).toLocaleDateString()}</p>
+                           </div>
+                           <div className="text-right">
+                              <p className="text-[var(--text-main)] font-black">₹{da.amount}</p>
+                              {da.receipt ? (
+                                <a href={da.receipt} target="_blank" rel="noreferrer" className="text-[9px] font-black uppercase text-blue-500 underline">View Receipt</a>
+                              ) : (
+                                <span className="text-[9px] font-black uppercase text-[var(--text-muted)]">No Receipt</span>
+                              )}
+                           </div>
+                        </div>
+                      ))}
+                  </div>
+               </div>
+
+               <div className="glass-card overflow-hidden lg:col-span-3">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
                      <h3 className="text-xs font-black uppercase tracking-widest text-amber-500">Daily Action Items & Leads</h3>
                   </div>

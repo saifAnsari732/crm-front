@@ -2,41 +2,74 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
-import { adminAPI, attendanceAPI, meetingAPI, expenseAPI, trackingAPI } from '../../services/api.service';
+import { adminAPI, attendanceAPI, authAPI, meetingAPI, expenseAPI, trackingAPI, employeeAPI, uploadAPI } from '../../services/api.service';
 import {
   MapPin, Users, Receipt, TrendingUp, Clock, ChevronRight,
-  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList, Locate
+  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList, Locate, Upload
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ meetings: 0, expenses: 0, distance: 0, attended: false });
+  const [stats, setStats] = useState({ meetings: 0, expenses: 0, distance: 0, attended: false, totalDistanceAll: 0 });
   const [loading, setLoading] = useState(true);
   const [recentMeetings, setRecentMeetings] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
+  const [employeeDetails, setEmployeeDetails] = useState(null);
+  const [daReceiptUrl, setDaReceiptUrl] = useState('');
+  const [daAmount, setDaAmount] = useState(0);
+  const [daFile, setDaFile] = useState(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
-  const statCards = useMemo(() => [
-    {
-      label: 'Distance Today', value: `${stats.distance.toFixed(1)} km`,
-      icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
-    },
-    {
-      label: 'Meetings', value: stats.meetings,
-      icon: Users, color: 'from-violet-500/20 to-violet-600/5', iconColor: 'text-violet-400', border: 'border-violet-500/20'
-    },
-    {
-      label: 'Expenses', value: `₹${stats.expenses.toLocaleString()}`,
-      icon: Receipt, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', border: 'border-amber-500/20'
-    },
-    {
-      label: 'Status', value: stats.attended ? 'Present' : 'Absent',
-      icon: CheckCircle, color: stats.attended ? 'from-emerald-500/20 to-emerald-600/5' : 'from-red-500/20 to-red-600/5',
-      iconColor: stats.attended ? 'text-emerald-400' : 'text-red-400',
-      border: stats.attended ? 'border-emerald-500/20' : 'border-red-500/20'
-    },
-  ], [stats]);
+
+  const travelPay = employeeDetails ? +(stats.distance * (employeeDetails.TA || 2.5)).toFixed(2) : 0;
+  const travelPayTotal = employeeDetails ? +((stats.totalDistanceAll || 0) * (employeeDetails.TA || 2.5)).toFixed(2) : 0;
+
+  const statCardsFinal = useMemo(() => {
+    const base = [
+      {
+        label: 'Distance Today', value: `${stats.distance.toFixed(1)} km`,
+        icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
+      },
+      {
+        label: 'Meetings', value: stats.meetings,
+        icon: Users, color: 'from-violet-500/20 to-violet-600/5', iconColor: 'text-violet-400', border: 'border-violet-500/20'
+      },
+      {
+        label: 'Expenses', value: `₹${stats.expenses.toLocaleString()}`,
+        icon: Receipt, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', border: 'border-amber-500/20'
+      },
+      {
+        label: 'Travel Rate', value: `₹${(employeeDetails?.TA || 2.5).toFixed(2)} / km`,
+        icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
+      },
+      {
+        label: 'Total Distance', value: `${(stats.totalDistanceAll || 0).toFixed(1)} km`,
+        icon: Navigation, color: 'from-blue-500/20 to-blue-600/5', iconColor: 'text-blue-400', border: 'border-blue-500/20'
+      },
+      {
+        label: 'Daily Allowance', value: `₹${(employeeDetails?.DA || 0).toLocaleString()}`,
+        icon: Calendar, color: 'from-emerald-500/20 to-emerald-600/5', iconColor: 'text-emerald-400', border: 'border-emerald-500/20'
+      },
+      {
+        label: 'Status', value: stats.attended ? 'Present' : 'Absent',
+        icon: CheckCircle, color: stats.attended ? 'from-emerald-500/20 to-emerald-600/5' : 'from-red-500/20 to-red-600/5',
+        iconColor: stats.attended ? 'text-emerald-400' : 'text-red-400',
+        border: stats.attended ? 'border-emerald-500/20' : 'border-red-500/20'
+      }
+    ];
+
+    if (employeeDetails) {
+
+      base.push({
+        label: 'Travel Pay (All)', value: `₹${travelPayTotal.toLocaleString()}`,
+        icon: Receipt, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', border: 'border-amber-500/20'
+      });
+    }
+
+    return base;
+  }, [stats, employeeDetails, travelPay, travelPayTotal]);
 
   const quickActions = useMemo(() => [
     { label: 'Start Tracking', icon: MapPin, color: 'bg-primary-600 hover:bg-primary-500 shadow-glow shadow-primary-600/30', to: '/tracking' },
@@ -46,13 +79,88 @@ export default function EmployeeDashboard() {
     { label: 'Add Expense', icon: Receipt, color: 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20', to: '/expenses' },
   ], []);
 
+  const submitDa = async (file) => {
+    const amountToAdd = Number(daAmount) || 0;
+
+    // Validation rules:
+    // - If user is uploading receipt (file provided), allow receipt upload flow.
+    // - If user is NOT uploading receipt (DA-only), require a valid DA amount.
+
+    if (!file) {
+      if (!amountToAdd || amountToAdd <= 0) {
+        toast.error('Enter a valid DA amount');
+        return;
+      }
+    }
+
+    // If no receipt file provided, just submit DA (receipt optional)
+    if (!file) {
+      try {
+        setUploadingReceipt(true);
+        const { data: resData } = await authAPI.updateProfile({ DA: amountToAdd });
+
+        const updatedUser = resData?.user;
+        if (updatedUser) {
+          setEmployeeDetails(updatedUser);
+          setDaReceiptUrl(updatedUser.daReceipt || '');
+        setDaAmount(0);
+        }
+
+        toast.success('DA saved successfully (receipt not provided)');
+      } catch (err) {
+        console.error('DA submit error:', err?.response?.data || err);
+        toast.error('DA submission failed');
+      } finally {
+        setUploadingReceipt(false);
+      }
+      return;
+    }
+
+    setUploadingReceipt(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      // 1) Upload receipt
+      const { data } = await uploadAPI.uploadImage(formData);
+
+      // 2) Save receipt + add DA total (server handles increment)
+      const payload = {
+        daReceipt: data.url,
+        DA: amountToAdd,
+      };
+
+      const { data: resData } = await authAPI.updateProfile(payload);
+
+      const updatedUser = resData?.user;
+      if (updatedUser) {
+        setEmployeeDetails(updatedUser);
+        setDaReceiptUrl(updatedUser.daReceipt || '');
+        setDaAmount(0);
+      } else {
+        // fallback (shouldn't happen if backend returns user)
+        setDaReceiptUrl(data.url);
+        setEmployeeDetails(prev => prev ? { ...prev, daReceipt: data.url, DA: (prev.DA || 0) + amountToAdd } : prev);
+        setDaAmount(0);
+      }
+
+      toast.success('DA receipt saved successfully');
+    } catch (err) {
+      console.error('DA submit error:', err?.response?.data || err);
+      toast.error('Receipt upload failed');
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
   const fetchData = useCallback(async () => {
     try {
-      const [meetRes, expRes, attRes, trackRes] = await Promise.allSettled([
+      const [meetRes, expRes, attRes, trackRes, empRes] = await Promise.allSettled([
         meetingAPI.getMy({ limit: 3 }),
         expenseAPI.getMy({ limit: 3 }),
         attendanceAPI.getToday(),
         trackingAPI.getToday(),
+        employeeAPI.getById(user._id),
       ]);
 
       if (meetRes.status === 'fulfilled') {
@@ -72,10 +180,27 @@ export default function EmployeeDashboard() {
         const dist = sessions.reduce((a, s) => a + (s.totalDistance || 0), 0);
         setStats(s => ({ ...s, distance: dist }));
       }
+      if (empRes.status === 'fulfilled') {
+        const employee = empRes.value.data.employee || null;
+        setEmployeeDetails(employee);
+        setDaReceiptUrl(employee?.daReceipt || '');
+        setDaAmount(0);
+      }
+
+      // Fetch aggregate report (total distance etc.)
+      try {
+        const { data: reportData } = await trackingAPI.getEmployeeReport(user._id);
+        if (reportData?.stats?.totalDistance !== undefined) {
+          setStats(s => ({ ...s, totalDistanceAll: reportData.stats.totalDistance }));
+        }
+      } catch (err) {
+        // ignore report errors
+        console.error('Failed to fetch employee report', err);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user._id]);
 
   useEffect(() => {
     fetchData();
@@ -139,10 +264,10 @@ export default function EmployeeDashboard() {
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((card, i) => (
+          {statCardsFinal.map((card, i) => (
             <div key={i} className={`glass-card p-5 bg-gradient-to-br ${card.color} ${card.border} group relative overflow-hidden`}>
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <card.icon className="w-12 h-12" />
+                {/* <card.icon className="w-12 h-12" /> */}
               </div>
               <div className="relative">
                 <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-wider mb-2">{card.label}</p>
@@ -150,6 +275,83 @@ export default function EmployeeDashboard() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Travel summary and DA upload */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="glass-card p-6 border-[var(--border-color)] bg-[var(--bg-card)]">
+            <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-[0.2em] mb-4">Today’s distance</p>
+            <p className="text-[var(--text-main)] text-5xl font-black tracking-tight">{stats.distance.toFixed(2)} km</p>
+            <p className="text-[var(--text-muted)] text-sm mt-2">≈ {Math.round(stats.distance * 1000)} meters</p>
+            <p className="text-[var(--text-muted)] text-[10px] mt-4 uppercase tracking-[0.25em]">Travel allowance</p>
+            <p className="text-[var(--text-main)] text-lg font-black">₹{travelPay.toLocaleString()}</p>
+          </div>
+
+          <div className="glass-card p-6 border-[var(--border-color)] bg-[var(--bg-card)]">
+            <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-[0.2em] mb-4">Allowance details</p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[var(--text-main)] text-sm font-black">Travel rate</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">₹{(employeeDetails?.TA || 2.5).toFixed(2)} / km</p>
+              </div>
+              <div>
+                <p className="text-[var(--text-main)] text-sm font-black">Daily allowance</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">₹{(employeeDetails?.DA || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[var(--text-main)] text-sm font-black">Total salary</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">₹{((employeeDetails?.salary || 0) + travelPayTotal + (employeeDetails?.DA || 0)).toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card p-6 border-[var(--border-color)] bg-[var(--bg-card)]">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-[0.2em]">Daily Allowance Claim</p>
+                <p className="text-[var(--text-main)] text-sm font-black mt-2">Submit DA (Receipt optional)</p>
+              </div>
+              <Upload className="w-5 h-5 text-primary-400" />
+            </div>
+            
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">DA Amount (₹)</label>
+            <input
+              type="number"
+              value={daAmount}
+              onChange={e => setDaAmount(parseInt(e.target.value) || 0)}
+              placeholder="Enter DA amount"
+              className="w-full px-4 py-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] text-sm focus:outline-none focus:border-primary-500 mb-4"
+            />
+            
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Receipt image</label>
+            <input
+              id="da-receipt-input"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                setDaFile(f || null);
+              }}
+              className="block w-full text-sm text-[var(--text-main)] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-600 file:text-white hover:file:bg-primary-500"
+            />
+            <button
+              type="button"
+              disabled={uploadingReceipt}
+              onClick={() => submitDa(daFile && daFile.size > 0 ? daFile : null)}
+              className="btn-primary mt-3 w-full flex items-center justify-center gap-2 py-2.5 px-5"
+            >
+              {uploadingReceipt ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Submit DA'}
+            </button>
+            {uploadingReceipt && <p className="text-[var(--text-muted)] text-xs mt-2">Uploading receipt…</p>}
+            {daReceiptUrl ? (
+              <div className="mt-4 p-4 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] text-xs">
+                <p className="font-bold text-primary-400 mb-1">✓ Submitted: ₹{daAmount.toLocaleString()}</p>
+                Receipt uploaded. <a href={daReceiptUrl} target="_blank" rel="noreferrer" className="text-primary-400 underline">View</a>
+              </div>
+            ) : (
+              <p className="text-[var(--text-muted)] text-xs mt-3">Enter DA amount and upload receipt image to claim.</p>
+            )}
+          </div>
         </div>
 
         {/* Quick Actions (Mobile-Friendly Horizontal Scroll) */}
