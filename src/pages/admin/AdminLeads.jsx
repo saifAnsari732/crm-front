@@ -77,7 +77,7 @@ export default function AdminLeads() {
               <div key={lead._id} className="glass-card p-6 flex flex-col group hover:border-primary-500/40 transition-all border-[var(--border-color)]">
                  <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 rounded-2xl bg-primary-500/10 flex items-center justify-center text-primary-500 font-black text-lg shadow-inner">
-                       {lead.name[0].toUpperCase()}
+                       {lead.name ? lead.name[0].toUpperCase() : '?'}
                     </div>
                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
                       lead.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
@@ -86,13 +86,13 @@ export default function AdminLeads() {
                     </span>
                  </div>
                  
-                 <h3 className="text-[var(--text-main)] font-black text-lg tracking-tight mb-1">{lead.name}</h3>
+                 <h3 className="text-[var(--text-main)] font-black text-lg tracking-tight mb-1">{lead.name || 'Unnamed Lead'}</h3>
                  <div className="space-y-2 mb-6 flex-1">
                     <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs">
-                       <Phone className="w-3.5 h-3.5" /> {lead.contactNo}
+                       <Phone className="w-3.5 h-3.5" /> {lead.contactNo || 'N/A'}
                     </div>
                     <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs">
-                       <MapPin className="w-3.5 h-3.5" /> {lead.address}
+                       <MapPin className="w-3.5 h-3.5" /> {lead.address || 'No Address'}
                     </div>
                     <div className="pt-2 border-t border-[var(--border-color)] mt-4">
                        <div className="flex items-center gap-2">
