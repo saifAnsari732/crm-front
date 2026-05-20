@@ -1,25 +1,30 @@
-// AdminMeetings.jsx
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { meetingAPI } from '../../services/api.service';
+import { meetingAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Search, Users } from 'lucide-react';
+import { Search, Users, X } from 'lucide-react';
 
 const statusColor = { completed: 'badge-green', pending: 'badge-yellow', scheduled: 'badge-blue', 'follow-up': 'badge-yellow', cancelled: 'badge-red' };
 
 export function AdminMeetings() {
   const [meetings, setMeetings] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
+  const [empFilter, setEmpFilter] = useState('');
+  const [search, setSearch] = useState('');
 
-  useEffect(() => { fetchMeetings(); }, [page, statusFilter]);
+  useEffect(() => {
+    adminAPI.getEmployees({ limit: 200 }).then(({ data }) => setEmployees(data.employees || []));
+  }, []);
+  useEffect(() => { fetchMeetings(); }, [page, statusFilter, empFilter]);
 
   const fetchMeetings = async () => {
     setLoading(true);
     try {
-      const { data } = await meetingAPI.getAll({ page, limit: 15, status: statusFilter || undefined });
+      const { data } = await meetingAPI.getAll({ page, limit: 15, status: statusFilter || undefined, employeeId: empFilter || undefined });
       setMeetings(data.meetings || []);
       setTotal(data.total || 0);
     } catch { toast.error('Failed'); }
@@ -39,20 +44,26 @@ export function AdminMeetings() {
             <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-2">{total} Total Meetings Logged</p>
           </div>
           
-          <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1.5 rounded-[1.25rem] border border-[var(--border-color)] shadow-xl overflow-x-auto custom-scrollbar">
-            {['', 'scheduled', 'completed', 'follow-up', 'cancelled'].map(s => (
-              <button 
-                key={s} 
-                onClick={() => { setStatusFilter(s); setPage(1); }}
-                className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                  statusFilter === s 
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/5'
-                }`}
-              >
-                {s || 'All Activity'}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1.5 rounded-[1.25rem] border border-[var(--border-color)] shadow-xl overflow-x-auto custom-scrollbar">
+              {['', 'scheduled', 'completed', 'follow-up', 'cancelled'].map(s => (
+                <button 
+                  key={s} 
+                  onClick={() => { setStatusFilter(s); setPage(1); }}
+                  className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                    statusFilter === s 
+                      ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/5'
+                  }`}
+                >
+                  {s || 'All'}
+                </button>
+              ))}
+            </div>
+            <select className="input-field py-2 w-44 text-sm" value={empFilter} onChange={e => { setEmpFilter(e.target.value); setPage(1); }}>
+              <option value="">All Employees</option>
+              {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.designation || 'Staff'})</option>)}
+            </select>
           </div>
         </div>
 

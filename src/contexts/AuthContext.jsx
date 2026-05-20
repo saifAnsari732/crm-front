@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
       const { data } = await authAPI.login({ email, password });
 
-      if (!data.user.isApproved) {
+      if (!data.user.isApproved && data.user.role === 'employee') {
         setAuthError('Account pending admin approval');
         toast.error('❌ Account pending admin approval');
         return { success: false };

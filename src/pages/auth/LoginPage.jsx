@@ -16,7 +16,9 @@ export default function LoginPage() {
     try {
       const res = await login(form.email, form.password);
       if (res?.success) {
-        navigate(res.role === 'employee' ? '/dashboard' : '/admin');
+        if (res.role === 'employee') navigate('/dashboard');
+        else if (res.role === 'manager') navigate('/manager');
+        else navigate('/admin');
       }
     } finally {
       setLoading(false);

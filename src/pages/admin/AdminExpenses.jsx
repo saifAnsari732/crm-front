@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { expenseAPI } from '../../services/api.service';
+import { expenseAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { Search, CheckCircle, XCircle, Filter, Receipt, Image as ImageIcon, X } from 'lucide-react';
 
@@ -8,20 +8,25 @@ const CATEGORY_EMOJI = { fuel: '⛽', food: '🍽️', hotel: '🏨', travel: '�
 
 export default function AdminExpenses() {
   const [expenses, setExpenses] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [empFilter, setEmpFilter] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [actionLoading, setActionLoading] = useState({});
   const [totalAmount, setTotalAmount] = useState(0);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-  useEffect(() => { fetchExpenses(); }, [page, statusFilter]);
+  useEffect(() => {
+    adminAPI.getEmployees({ limit: 200 }).then(({ data }) => setEmployees(data.employees || []));
+  }, []);
+  useEffect(() => { fetchExpenses(); }, [page, statusFilter, empFilter]);
 
   const fetchExpenses = async () => {
     setLoading(true);
     try {
-      const { data } = await expenseAPI.getAll({ page, limit: 15, status: statusFilter || undefined });
+      const { data } = await expenseAPI.getAll({ page, limit: 15, status: statusFilter || undefined, employeeId: empFilter || undefined });
       setExpenses(data.expenses || []);
       setTotal(data.total || 0);
       setTotalAmount((data.expenses || []).reduce((a, e) => a + e.amount, 0));
@@ -60,20 +65,26 @@ export default function AdminExpenses() {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1.5 rounded-[1.25rem] border border-[var(--border-color)] shadow-xl">
-            {['', 'pending', 'approved', 'rejected'].map(s => (
-              <button 
-                key={s} 
-                onClick={() => { setStatusFilter(s); setPage(1); }}
-                className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  statusFilter === s 
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/5'
-                }`}
-              >
-                {s || 'All Items'}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1.5 rounded-[1.25rem] border border-[var(--border-color)] shadow-xl">
+              {['', 'pending', 'approved', 'rejected'].map(s => (
+                <button 
+                  key={s} 
+                  onClick={() => { setStatusFilter(s); setPage(1); }}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    statusFilter === s 
+                      ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20' 
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/5'
+                  }`}
+                >
+                  {s || 'All'}
+                </button>
+              ))}
+            </div>
+            <select className="input-field py-2 w-44 text-sm" value={empFilter} onChange={e => { setEmpFilter(e.target.value); setPage(1); }}>
+              <option value="">All Employees</option>
+              {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.designation || 'Staff'})</option>)}
+            </select>
           </div>
         </div>
 

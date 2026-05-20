@@ -35,11 +35,21 @@ const AdminTasks = lazy(() => import('./pages/admin/AdminTasks'));
 const AdminLeads = lazy(() => import('./pages/admin/AdminLeads'));
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 
+const ManagerDashboard = lazy(() => import('./pages/manager/ManagerDashboard'));
+const ManagerTeam = lazy(() => import('./pages/manager/ManagerTeam'));
+const ManagerExpenses = lazy(() => import('./pages/manager/ManagerExpenses'));
+const ManagerAttendance = lazy(() => import('./pages/manager/ManagerAttendance'));
+const ManagerTravelReport = lazy(() => import('./pages/manager/ManagerTravelReport'));
+
 const PrivateRoute = ({ children, roles }) => {
   const { user, loading, isAuthenticated } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user?.role)) return <Navigate to="/dashboard" replace />;
+  if (roles && !roles.includes(user?.role)) {
+    if (user?.role === 'manager') return <Navigate to="/manager" replace />;
+    if (user?.role === 'admin') return <Navigate to="/admin" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 };
 
@@ -47,6 +57,7 @@ const PublicRoute = ({ children }) => {
   const { isAuthenticated, user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (isAuthenticated) {
+    if (user?.role === 'manager') return <Navigate to="/manager" replace />;
     return <Navigate to={user?.role === 'employee' ? '/dashboard' : '/admin'} replace />;
   }
   return children;
@@ -66,7 +77,14 @@ const AppRoutes = () => (
     <Route path="/leaves" element={<PrivateRoute roles={['employee']}><LeavePage /></PrivateRoute>} />
     <Route path="/tasks" element={<PrivateRoute roles={['employee']}><TasksPage /></PrivateRoute>} />
     <Route path="/leads" element={<PrivateRoute roles={['employee']}><EmployeeLeads /></PrivateRoute>} />
-    <Route path="/profile" element={<PrivateRoute roles={['employee', 'admin', 'hr']}><ProfilePage /></PrivateRoute>} />
+    <Route path="/profile" element={<PrivateRoute roles={['employee', 'admin', 'hr', 'manager']}><ProfilePage /></PrivateRoute>} />
+
+    {/* Manager */}
+    <Route path="/manager" element={<PrivateRoute roles={['manager']}><ManagerDashboard /></PrivateRoute>} />
+    <Route path="/manager/team" element={<PrivateRoute roles={['manager']}><ManagerTeam /></PrivateRoute>} />
+    <Route path="/manager/travel" element={<PrivateRoute roles={['manager']}><ManagerTravelReport /></PrivateRoute>} />
+    <Route path="/manager/expenses" element={<PrivateRoute roles={['manager']}><ManagerExpenses /></PrivateRoute>} />
+    <Route path="/manager/attendance" element={<PrivateRoute roles={['manager']}><ManagerAttendance /></PrivateRoute>} />
 
     {/* Admin */}
     <Route path="/admin" element={<PrivateRoute roles={['admin', 'hr']}><AdminDashboard /></PrivateRoute>} />

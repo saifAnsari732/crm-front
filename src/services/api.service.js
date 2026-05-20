@@ -109,12 +109,24 @@ export const expenseAPI = {
 export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
   getEmployees: (params) => API.get('/admin/employees', { params }),
+  getManagers: () => API.get('/admin/managers'),
   approveEmployee: (id) => API.put(`/admin/employees/${id}/approve`),
   toggleBlock: (id) => API.put(`/admin/employees/${id}/block`),
   updateEmployee: (id, data) => API.put(`/admin/employees/${id}`, data),
   getAttendance: (params) => API.get('/admin/attendance', { params }),
   getHistory: (params) => API.get('/admin/tracking-history', { params }),
   getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
+  getManagers: () => API.get('/admin/managers'),
+};
+
+// ─── Manager ──────────────────────────────────────────────────────────────
+export const managerAPI = {
+  getDashboard: () => API.get('/manager/dashboard-stats'),
+  getTeam: (params) => API.get('/manager/team', { params }),
+  getMeetings: (params) => API.get('/manager/meetings', { params }),
+  getExpenses: (params) => API.get('/manager/expenses', { params }),
+  getAttendance: (params) => API.get('/manager/attendance', { params }),
+  getHistory: (params) => API.get('/manager/tracking-history', { params }),
 };
 
 // ─── Employees ────────────────────────────────────────────────────────────
