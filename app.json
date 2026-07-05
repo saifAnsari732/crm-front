@@ -88,7 +88,9 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-intent-launcher"
+
     ],
     "extra": {
       "router": {},

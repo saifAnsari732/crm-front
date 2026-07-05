@@ -9,6 +9,9 @@ import AnimatedSplash from '../components/AnimatedSplash';
 
 // CRITICAL: Import background location task at root level so it is registered upon app boot
 import '../services/locationTask';
+// CRITICAL: Import offline sync so the background-fetch task is registered upon app boot
+import '../services/offlineSync';
+import { registerOfflineSyncTask, startNetworkListener, flushOfflineQueue } from '../services/offlineSync';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +22,13 @@ function InitialLayout() {
   const segments = useSegments();
   const router = useRouter();
   const [showSplash, setShowSplash] = useState(true);
+
+  // ── Bootstrap offline resilience on app start ────────────────────────────
+  useEffect(() => {
+    registerOfflineSyncTask();   // Register OS-level background-fetch
+    startNetworkListener();      // Auto-flush when internet returns
+    flushOfflineQueue();         // Immediately flush any leftovers from last session
+  }, []);
 
   useEffect(() => {
     if (isLoading || showSplash) return;

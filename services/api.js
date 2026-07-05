@@ -7,8 +7,8 @@ export const setUnauthorizedCallback = (callback) => {
   unauthorizedCallback = callback;
 };
 
-export const BASE_URL = 'https://kisanteamapp.online/api'; // Production URL
-
+// export const BASE_URL = 'https://kisanteamapp.online/api'; // Production URL
+export const BASE_URL = 'http://192.168.0.116:5000/api'; // Local URL
 export const getAvatarUrl = (avatar) => {
   if (!avatar || typeof avatar !== 'string') return null;
   const clean = avatar.trim();

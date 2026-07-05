@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@expo/metro-config": "^0.20.18",
+    "@react-native-community/netinfo": "^12.0.1",
     "@tanstack/react-query": "^4.44.0",
     "axios": "^1.6.0",
     "babel-preset-expo": "~13.0.0",
@@ -22,6 +23,7 @@
     "expo-file-system": "~18.1.11",
     "expo-font": "~13.3.2",
     "expo-image-picker": "~16.1.4",
+    "expo-intent-launcher": "^57.0.0",
     "expo-linear-gradient": "~14.1.5",
     "expo-linking": "~7.1.7",
     "expo-location": "~18.1.6",

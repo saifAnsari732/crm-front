@@ -5,6 +5,7 @@ import { storage } from '../services/storage';
 import { trackingApi } from '../services/api';
 import socketService from '../services/socket';
 import { BACKGROUND_TRACKING_TASK } from '../services/locationTask';
+import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
 
 /* =========================================================================
    NOTE FOR APK / PRODUCTION BUILD:
@@ -29,6 +30,9 @@ export default function useLocationTracker() {
   // Sync active tracking state from secure storage upon hook initialization
   useEffect(() => {
     checkActiveSession();
+    
+    // Show battery optimization dialog once (first-ever app launch)
+    showBatteryOptimizationDialog();
     
     // Listen for global tracking state changes (syncs across multiple hook instances)
     const subscription = DeviceEventEmitter.addListener('TrackingStateChanged', (newState) => {
@@ -166,6 +170,10 @@ export default function useLocationTracker() {
         return { success: false, error: 'Permission not granted.' };
       }
 
+      // Show battery optimization reminder nudge before starting shift
+      // (only shows if user never set it — non-blocking)
+      remindBatteryOptimizationIfNeeded().catch(() => {});
+
       let latitude = 37.7749;
       let longitude = -122.4194;
 
@@ -245,22 +253,47 @@ export default function useLocationTracker() {
       if (Platform.OS !== 'web') {
         try {
           console.log('📍 useLocationTracker: Initializing native background TaskManager...');
+
+          // Stop any stale task first to avoid duplicate registration
+          const alreadyRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
+          if (alreadyRunning) {
+            await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
+          }
+
           await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 10000, // Check every 10 seconds
-            distanceInterval: 15, // Check every 15 meters
-            deferredUpdatesInterval: 10000,
-            deferredUpdatesDistance: 15,
+            // Balanced = battery friendly, High = more accurate. Use Balanced to save battery
+            // but update frequently enough for realistic tracking.
+            accuracy: Location.Accuracy.Balanced,
+
+            // Android: poll every 15 seconds regardless of movement (keeps foreground service alive)
+            timeInterval: 15000,
+
+            // Only send update after moving at least 20 meters (pre-filter before locationTask.js gates)
+            distanceInterval: 20,
+
+            // ── CRITICAL: Android Foreground Service config ────────────────────
+            // This is what allows GPS to continue running after the USER swipes the app away.
+            // Android requires a visible persistent notification for this — Uber, Ola, Rapido all do this.
             foregroundService: {
-              notificationTitle: 'Shift Tracker Active 🟢',
-              notificationBody: 'Your live location is being securely logged for shift telemetry.',
-              notificationColor: '#2563eb', // Brand premium blue color
+              notificationTitle: '🟢 Shift Active — Tracking ON',
+              notificationBody: 'Tap to open app. Tracking continues in background.',
+              notificationColor: '#0a3d3c',
+              // Show km in notification (React Native does NOT allow dynamic body update here,
+              // but we keep it clear so user knows tracking is active)
+              killServiceOnDestroy: false, // ← KEY: keeps the service alive even after app swipe
             },
-            // Show top system bar indicator on iOS (blue header/status pill like Uber/Rapido)
+
+            // iOS: show blue bar at top (like Google Maps / Uber)
             showsBackgroundLocationIndicator: true,
-            // Keep CPU awake in background on Android
+
+            // Don't let Android battery optimizer pause updates
             pausesUpdatesAutomatically: false,
+
+            // Deferred updates: batch coordinates every 30s or 50m to save battery
+            deferredUpdatesInterval: 30000,
+            deferredUpdatesDistance: 50,
           });
+          console.log('📍 useLocationTracker: Background GPS task started ✅ (survives app kill)');
         } catch (taskErr) {
           console.log('⚠️ useLocationTracker: Background TaskManager registration failed:', taskErr.message);
         }
