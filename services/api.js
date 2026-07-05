@@ -8,7 +8,7 @@ export const setUnauthorizedCallback = (callback) => {
 };
 
 // export const BASE_URL = 'https://kisanteamweb.it.com/api'; // MilesWeb Production
-export const BASE_URL = 'http://192.168.0.115:5000/api';  // 
+export const BASE_URL = 'https://kisanteamapp.online/api'; // Production URL
 
 export const getAvatarUrl = (avatar) => {
   if (!avatar || typeof avatar !== 'string') return null;
