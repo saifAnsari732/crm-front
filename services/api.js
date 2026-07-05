@@ -7,7 +7,6 @@ export const setUnauthorizedCallback = (callback) => {
   unauthorizedCallback = callback;
 };
 
-// export const BASE_URL = 'https://kisanteamweb.it.com/api'; // MilesWeb Production
 export const BASE_URL = 'https://kisanteamapp.online/api'; // Production URL
 
 export const getAvatarUrl = (avatar) => {
