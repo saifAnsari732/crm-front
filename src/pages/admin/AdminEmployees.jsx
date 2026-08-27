@@ -4,7 +4,7 @@ import { adminAPI, employeeAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import {
   Search, Users, UserCheck, UserX, Shield, ShieldOff, CheckCircle, Clock,
-  AlertTriangle, Activity, Edit2, X, MapPin, IndianRupee, Briefcase, User, Trash2
+  AlertTriangle, Activity, Edit2, X, MapPin, IndianRupee, Briefcase, User, Trash2, Phone
 } from 'lucide-react';
 
 const DESIGNATIONS = ['ASM', 'SO', 'Sr SO', 'Jr SO', 'TSI', 'DSE'];
