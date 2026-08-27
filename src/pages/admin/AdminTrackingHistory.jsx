@@ -420,23 +420,23 @@ export default function AdminTrackingHistory() {
                   onClick={() => handleSelectSession(session)}
                   className={`group relative rounded-[1.75rem] p-5 cursor-pointer transition-all duration-500 border-2 ${
                     selectedSession?._id === session._id
-                      ? 'bg-primary-600/10 border-primary-500/50 shadow-2xl shadow-primary-500/10'
-                      : 'bg-[var(--bg-card)] border-transparent hover:border-primary-500/20 hover:bg-[var(--bg-card-hover)]'
+                      ? 'bg-rose-500/10 border-rose-500/50 shadow-2xl shadow-rose-500/10'
+                      : 'bg-[var(--bg-card)] border-transparent hover:border-rose-500/20 hover:bg-[var(--bg-card-hover)]'
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm uppercase transition-all duration-500 ${
-                      selectedSession?._id === session._id ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 ${
+                      selectedSession?._id === session._id ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
                     }`}>
                       {session.employee?.name?.[0]}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={`text-[var(--text-main)] font-black text-sm tracking-tight group-hover:text-primary-400 transition-colors truncate ${selectedSession?._id === session._id ? 'text-primary-400' : ''}`}>
+                      <p className={`text-[var(--text-main)] font-black text-base tracking-tight group-hover:text-rose-500 transition-colors truncate ${selectedSession?._id === session._id ? 'text-rose-500' : ''}`}>
                         {session.employee?.name}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                          <span className={`w-2.5 h-2.5 rounded-full ring-2 ring-[var(--bg-main)] ${session.isActive ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-[var(--text-muted)]'}`} />
-                         <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-[0.1em]">
+                         <p className="text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest">
                            {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — {session.isActive ? 'LIVE' : new Date(session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                          </p>
                       </div>
@@ -484,9 +484,6 @@ export default function AdminTrackingHistory() {
                   </div>
                   
                   <div className="flex items-center gap-3">
-                     <button onClick={exportToCSV} className="bg-[var(--bg-main)] hover:bg-[var(--bg-card-hover)] text-[var(--text-muted)] hover:text-primary-400 border border-[var(--border-color)] py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
-                       <Download className="w-4 h-4" /> Export CSV
-                     </button>
                      <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
                        <FileImage className="w-4 h-4" /> JPEG Summary
                      </button>
@@ -494,19 +491,19 @@ export default function AdminTrackingHistory() {
                 </div>
 
                 {/* PUNCH IN / OUT SUMMARY */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10 pt-4 border-t border-[var(--border-color)]">
-                   <div className="flex flex-col gap-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
+                   <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] shadow-sm">
                       <p className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Punch In</p>
-                      <p className="text-[13px] font-bold text-[var(--text-main)]">{new Date(selectedSession.startTime).toLocaleTimeString()}</p>
+                      <p className="text-[14px] font-bold text-[var(--text-main)]">{new Date(selectedSession.startTime).toLocaleTimeString()}</p>
                       <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.startAddress || 'Location unknown'}</p>
                    </div>
-                   <div className="flex flex-col gap-1">
+                   <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] shadow-sm">
                       <p className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Punch Out</p>
                       {selectedSession.isActive ? (
-                         <p className="text-[11px] font-bold text-amber-500 animate-pulse mt-1">Currently Tracking (Live)</p>
+                         <p className="text-[12px] font-bold text-amber-500 animate-pulse mt-1">Currently Tracking (Live)</p>
                       ) : (
                          <>
-                           <p className="text-[13px] font-bold text-[var(--text-main)]">{selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Unknown Time'}</p>
+                           <p className="text-[14px] font-bold text-[var(--text-main)]">{selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Unknown Time'}</p>
                            <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.endAddress || (selectedSession.coordinates?.length ? selectedSession.coordinates[selectedSession.coordinates.length - 1].address : 'Location unknown')}</p>
                          </>
                       )}
