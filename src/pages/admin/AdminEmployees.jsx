@@ -647,15 +647,15 @@ export default function AdminEmployees() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div className="p-3 rounded-xl bg-[var(--bg-main)]">
                     <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Base Salary</p>
-                    <p className="text-lg font-black text-[var(--text-main)]">?{viewEmp.salary || 0}</p>
+                    <p className="text-lg font-black text-[var(--text-main)]">₹{viewEmp.salary || 0}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-[var(--bg-main)]">
                     <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Daily TA</p>
-                    <p className="text-lg font-black text-[var(--text-main)]">?{viewEmp.TA || 0}</p>
+                    <p className="text-lg font-black text-[var(--text-main)]">₹{viewEmp.TA || 0}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-[var(--bg-main)]">
                     <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Daily DA</p>
-                    <p className="text-lg font-black text-[var(--text-main)]">?{viewEmp.DA || 0}</p>
+                    <p className="text-lg font-black text-[var(--text-main)]">₹{viewEmp.DA || 0}</p>
                   </div>
                 </div>
                 
