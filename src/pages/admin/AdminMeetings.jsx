@@ -71,42 +71,52 @@ export function AdminMeetings() {
         <div className="glass-card overflow-hidden border-[var(--border-color)] shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-widest text-[10px] border-b border-[var(--border-color)]">
-                <tr>
-                  <th className="px-6 py-4">Field Agent</th>
-                  <th className="px-6 py-4">Client / Company</th>
-                  <th className="px-6 py-4 text-right">Deal Value</th>
-                  <th className="px-6 py-4">Interaction Date</th>
-                  <th className="px-6 py-4">Engagement Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
-                {loading ? (
-                  [...Array(6)].map((_, i) => (
-                    <tr key={i}><td colSpan={5} className="px-6 py-4"><div className="h-12 rounded-xl bg-white/5 animate-pulse" /></td></tr>
-                  ))
-                ) : meetings.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-20 text-[var(--text-muted)] font-black uppercase tracking-widest italic opacity-40">No interaction records found</td></tr>
-                ) : meetings.map(m => (
-                  <tr key={m._id} className="hover:bg-[var(--bg-card-hover)] transition-all group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-400 font-black text-sm shadow-inner group-hover:scale-105 transition-transform uppercase">
-                          {m.employee?.name?.[0]}
+                <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-widest text-[10px] border-b border-[var(--border-color)]">
+                  <tr>
+                    <th className="px-6 py-4">Field Agent</th>
+                    <th className="px-6 py-4">Client / Company</th>
+                    <th className="px-6 py-4">Selfie</th>
+                    <th className="px-6 py-4 text-right">Deal Value</th>
+                    <th className="px-6 py-4">Interaction Date</th>
+                    <th className="px-6 py-4">Engagement Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
+                  {loading ? (
+                    [...Array(5)].map((_, i) => (
+                      <tr key={i}><td colSpan={6} className="px-6 py-4"><div className="h-12 rounded-xl bg-white/5 animate-pulse" /></td></tr>
+                    ))
+                  ) : meetings.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-20 text-[var(--text-muted)] font-black uppercase tracking-widest italic opacity-40">No interaction records found</td></tr>
+                  ) : meetings.map(m => (
+                    <tr key={m._id} className="hover:bg-[var(--bg-card-hover)] transition-all group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-400 font-black text-sm shadow-inner group-hover:scale-105 transition-transform uppercase">
+                            {m.employee?.name?.[0]}
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-main)] font-black text-sm tracking-tight group-hover:text-primary-400 transition-colors truncate">{m.employee?.name}</p>
+                            <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">{m.employee?.department || 'Field Staff'}</p>
+                          </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
                         <div>
-                          <p className="text-[var(--text-main)] font-black text-sm tracking-tight group-hover:text-primary-400 transition-colors truncate">{m.employee?.name}</p>
-                          <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">{m.employee?.department || 'Field Staff'}</p>
+                           <p className="text-[var(--text-main)] text-sm font-bold group-hover:text-primary-400 transition-colors">{m.clientName}</p>
+                           <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest">{m.companyName || 'Private Entity'}</p>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                         <p className="text-[var(--text-main)] text-sm font-bold group-hover:text-primary-400 transition-colors">{m.clientName}</p>
-                         <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest">{m.companyName || 'Private Entity'}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
+                      </td>
+                      <td className="px-6 py-4">
+                        {m.images && m.images.length > 0 ? (
+                           <a href={m.images[0]} target="_blank" rel="noreferrer" className="block w-10 h-10 rounded-lg overflow-hidden border border-[var(--border-color)] hover:scale-110 transition-transform">
+                             <img src={m.images[0]} alt="Selfie" className="w-full h-full object-cover" />
+                           </a>
+                        ) : (
+                           <span className="text-[var(--text-muted)] text-[9px] uppercase font-bold tracking-widest opacity-50">N/A</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
                        <p className={`font-black text-lg tracking-tight ${m.dealAmount > 0 ? 'text-emerald-500' : 'text-[var(--text-muted)] opacity-30'}`}>
                           {m.dealAmount > 0 ? `₹${m.dealAmount.toLocaleString()}` : '—'}
                        </p>

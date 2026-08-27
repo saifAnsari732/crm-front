@@ -255,11 +255,15 @@ export default function AdminEmployees() {
                   <tr key={emp._id} className="hover:bg-[var(--bg-card-hover)] transition-all group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner group-hover:scale-105 transition-transform uppercase ${
-                          activeTab === 'managers' ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400' : 'bg-primary-600/10 border border-primary-500/20 text-primary-400'
-                        }`}>
-                          {emp.name?.[0]}
-                        </div>
+                        {emp.avatar ? (
+                          <img src={emp.avatar} alt={emp.name} className="w-11 h-11 rounded-2xl object-cover shadow-inner group-hover:scale-105 transition-transform" />
+                        ) : (
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner group-hover:scale-105 transition-transform uppercase ${
+                            activeTab === 'managers' ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400' : 'bg-primary-600/10 border border-primary-500/20 text-primary-400'
+                          }`}>
+                            {emp.name?.[0]}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="text-[var(--text-main)] font-black text-sm tracking-tight group-hover:text-primary-400 transition-colors truncate">{emp.name}</p>
                           <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest truncate">{emp.employeeId || 'No ID'}</p>

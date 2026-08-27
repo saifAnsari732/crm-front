@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, Map, Users, Receipt, Calendar,
-  LogOut, Bell, Menu, Zap, Clock,Briefcase, Settings, Target, BarChart3
+  LogOut, Bell, Menu, Zap, Clock,Briefcase, Settings, Target, BarChart3, ClipboardList
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/employees', icon: Users, label: 'Employees' },
   { to: '/admin/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/admin/meetings', icon: Briefcase, label: 'Meetings' },
+  { to: '/admin/tasks', icon: ClipboardList, label: 'Tasks' },
   { to: '/admin/attendance', icon: Calendar, label: 'Attendance' },
   { to: '/admin/leads', icon: Target, label: 'Leads' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },

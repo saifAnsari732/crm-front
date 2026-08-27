@@ -96,6 +96,7 @@ export default function AdminExpenses() {
                 <tr>
                   <th className="px-6 py-4">Field Agent</th>
                   <th className="px-6 py-4">Classification</th>
+                  <th className="px-6 py-4">Receipt</th>
                   <th className="px-6 py-4 text-right">Amount</th>
                   <th className="px-6 py-4">Submission Date</th>
                   <th className="px-6 py-4">Status</th>
@@ -105,10 +106,10 @@ export default function AdminExpenses() {
               <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
                 {loading ? (
                   [...Array(6)].map((_, i) => (
-                    <tr key={i}><td colSpan={6} className="px-6 py-4"><div className="h-12 rounded-xl bg-white/5 animate-pulse" /></td></tr>
+                    <tr key={i}><td colSpan={7} className="px-6 py-4"><div className="h-12 rounded-xl bg-white/5 animate-pulse" /></td></tr>
                   ))
                 ) : expenses.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-20">
+                  <tr><td colSpan={7} className="text-center py-20">
                     <div className="flex flex-col items-center">
                        <div className="w-16 h-16 rounded-2xl bg-[var(--bg-main)] flex items-center justify-center mb-4">
                           <Receipt className="w-8 h-8 text-[var(--text-muted)] opacity-20" />
@@ -144,14 +145,18 @@ export default function AdminExpenses() {
                           )}
                           <div className="flex items-center gap-2 mt-1">
                             {exp.description && <p className="text-[var(--text-muted)] text-[10px] font-medium truncate max-w-[150px] italic">"{exp.description}"</p>}
-                            {exp.receipts?.length > 0 && (
-                              <button onClick={() => setSelectedReceipt(exp.receipts[0])} className="p-1 rounded-lg bg-primary-500/10 text-primary-500 hover:bg-primary-500 hover:text-white transition-all">
-                                <ImageIcon className="w-3 h-3" />
-                              </button>
-                            )}
                           </div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                       {(exp.receipts && exp.receipts.length > 0) || exp.ticketPhoto ? (
+                          <button onClick={() => setSelectedReceipt(exp.receipts?.[0] || exp.ticketPhoto)} className="block w-10 h-10 rounded-lg overflow-hidden border border-[var(--border-color)] hover:scale-110 transition-transform">
+                             <img src={exp.receipts?.[0] || exp.ticketPhoto} alt="Receipt" className="w-full h-full object-cover" />
+                          </button>
+                       ) : (
+                          <span className="text-[var(--text-muted)] text-[9px] uppercase font-bold tracking-widest opacity-50">N/A</span>
+                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <p className="text-[var(--text-main)] font-black text-lg tracking-tight">₹{exp.amount.toLocaleString()}</p>
