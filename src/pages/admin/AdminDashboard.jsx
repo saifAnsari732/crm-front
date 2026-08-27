@@ -64,8 +64,14 @@ export default function AdminDashboard() {
         { name: 'Completed', value: stats.totalMeetings, color: '#10b981' },
         { name: 'Pending', value: 2, color: '#e2e8f0' }
     ]},
-    { label: 'Tasks', value: stats.totalTasks || 0, icon: ClipboardList, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { label: 'Leads', value: stats.totalLeads || 0, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Tasks', value: stats.totalTasks || 0, icon: ClipboardList, color: 'text-rose-500', bg: 'bg-rose-500/10', total: (stats.totalTasks || 0) + 3, chartData: [
+          { name: 'Completed', value: stats.totalTasks || 0, color: '#f43f5e' },
+          { name: 'Pending', value: 3, color: '#e2e8f0' }
+      ] },
+    { label: 'Leads', value: stats.totalLeads || 0, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10', total: (stats.totalLeads || 0) + 1, chartData: [
+          { name: 'Converted', value: stats.totalLeads || 0, color: '#f59e0b' },
+          { name: 'Cold', value: 1, color: '#e2e8f0' }
+      ] },
   ] : [];
 
   const monitorStats = stats ? [
@@ -83,7 +89,7 @@ export default function AdminDashboard() {
       <div className="p-4 lg:p-6 space-y-8 max-w-[1600px] mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-[var(--text-main)] text-3xl font-black tracking-tighter uppercase italic">Operational Intel</h1>
+            <h1 className="text-[var(--text-main)] text-3xl font-black tracking-tighter uppercase italic">Operational <span className='bg-gray-400 text-rose-700 rounded-sm'>Pannel</span></h1>
             <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -121,7 +127,7 @@ export default function AdminDashboard() {
                        </div>
                        <span className="text-[var(--text-main)] font-black text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em]">{c.label}</span>
                     </div>
-                    <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} {c.total ? `/ ${c.total}` : ''}</span>
+                    {/* <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} {c.total ? `/ ${c.total}` : ''}</span> */}
                  </div>
                  
                  {c.chartData ? (
