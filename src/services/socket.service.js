@@ -89,8 +89,8 @@ export const initSocket = (token) => {
   if (socket?.connected) return socket;
 
   socket = io(
-    // 'http://localhost:5000',
-    'https://crm-b-y8rv.onrender.com',
+    'http://localhost:5000',
+    // 'https://crm-b-y8rv.onrender.com',
     {
       auth: { token },
       reconnection: true,
