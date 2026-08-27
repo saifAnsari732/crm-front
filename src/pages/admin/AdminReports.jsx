@@ -4,6 +4,7 @@ import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { FileText, Download, Calendar, User, Search, MapPin, Receipt, Briefcase, CheckCircle, Target } from 'lucide-react';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import 'jspdf-autotable';
 
 export default function AdminReports() {
@@ -340,32 +341,71 @@ export default function AdminReports() {
       const filename = `Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate || 'start'}.pdf`;
       doc.save(filename);
       toast.success('PDF exported');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to generate PDF');
-    }
+    } catch (err) { console.error(err); toast.error('Export failed'); }
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedEmp) return toast.error('Select an employee');
+    setLoading(true);
+    try {
+      const { data } = await adminAPI.getConsolidatedReport({ 
+        employeeId: selectedEmp, 
+        startDate, 
+        endDate 
+      });
+      setReportData(data.data);
+      toast.success('Report generated');
+    } catch { toast.error('Failed to generate report'); }
+    finally { setLoading(false); }
+  };
+
+  const handleExportJSON = () => {
+    if (!reportData) return;
+    const jsonData = {
+      exportDate: new Date().toISOString(),
+      period: { startDate, endDate },
+      employee: reportData.employee,
+      summary: reportData.summary,
+      meetings: reportData.meetings,
+      expenses: reportData.expenses,
+      tasks: reportData.tasks,
+      leads: reportData.leads,
+      locations: reportData.locations,
+    };
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `DataExport_${reportData.employee.name.replace(/\s+/g,'_')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[var(--text-main)] text-2xl font-black tracking-tight uppercase flex items-center gap-3">
-              <FileText className="w-6 h-6 text-primary-500" /> Unified Activity Report
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
+          <div className="absolute -top-20 -left-20 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10">
+            <h1 className="text-[var(--text-main)] text-2xl font-black tracking-tighter uppercase italic flex items-center gap-3">
+               <FileText className="w-7 h-7 text-primary-500" />
+               Unified Activity Report
             </h1>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-1">Consolidated data audit for field operations</p>
+            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-2">Consolidated Data Audit for Field Operations</p>
           </div>
-          {reportData && (
-            <div className="flex gap-3">
-              <button onClick={handleExport} className="btn-secondary flex items-center gap-2 py-2.5 px-6 rounded-2xl">
-                <Download className="w-4 h-4" /> <span className="text-[10px] font-black uppercase tracking-widest">Export PDF</span>
-              </button>
-              <button onClick={handleExportJSON} className="btn-secondary flex items-center gap-2 py-2.5 px-6 rounded-2xl">
-                <FileText className="w-4 h-4" /> <span className="text-[10px] font-black uppercase tracking-widest">Export JSON</span>
-              </button>
-            </div>
-          )}
+          
+          <div className="flex items-center gap-3 relative z-10">
+            <button onClick={handleExport} disabled={!reportData} className="btn-ghost py-2.5 px-5 rounded-xl flex items-center gap-2">
+              <Download className="w-4 h-4" /> <span className="text-xs uppercase font-black tracking-widest">Export PDF</span>
+            </button>
+            <button onClick={handleExportJPEG} disabled={!reportData} className="btn-ghost py-2.5 px-5 rounded-xl flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> <span className="text-xs uppercase font-black tracking-widest">Export JPEG</span>
+            </button>
+            <button onClick={handleExportJSON} disabled={!reportData} className="btn-ghost py-2.5 px-5 rounded-xl flex items-center gap-2">
+              <FileText className="w-4 h-4" /> <span className="text-xs uppercase font-black tracking-widest">Export JSON</span>
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -403,7 +443,7 @@ export default function AdminReports() {
         </div>
 
         {reportData && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div ref={reportRef} className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[var(--bg-main)] p-4 rounded-2xl">
             {console.log('reportData.employee.daHistory:', reportData.employee.daHistory)}
             {/* Employee Details Card */}
             <div className="glass-card p-6 border-[var(--border-color)] shadow-xl">
@@ -434,16 +474,16 @@ export default function AdminReports() {
                   <p className="text-[var(--text-main)] font-bold text-sm mt-1">{reportData.employee.allocatedArea || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Salary (₹/Month)</p>
-                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.salary || 12000}</p>
+                  <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Salary (Rs/Month)</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">Rs{reportData.employee.salary || 12000}</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Travel Rate (TA)</p>
-                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.TA || 2.5}/km</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">Rs{reportData.employee.TA || 2.5}/km</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-wider">Daily Allowance (DA)</p>
-                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">₹{reportData.employee.DA || 0}</p>
+                  <p className="text-[var(--text-main)] font-bold text-sm mt-1">Rs{reportData.employee.DA || 0}</p>
                 </div>
               </div>
             </div>
@@ -453,20 +493,46 @@ export default function AdminReports() {
                {[
                  { label: 'Travel', value: `${reportData.summary.totalKm.toFixed(1)} km`, icon: MapPin, color: 'text-blue-400' },
                  { label: 'Meetings', value: reportData.summary.totalMeetings, icon: Briefcase, color: 'text-violet-400' },
-                 { label: 'Expenses', value: `₹${reportData.summary.totalExpenses}`, icon: Receipt, color: 'text-emerald-400' },
+                 { label: 'Expenses', value: `Rs${reportData.summary.totalExpenses}`, icon: Receipt, color: 'text-emerald-400' },
                  { label: 'Tasks', value: reportData.summary.totalTasks, icon: CheckCircle, color: 'text-amber-400' },
                  { label: 'Leads', value: reportData.summary.totalLeads, icon: Target, color: 'text-primary-400' }
                ].map((s, i) => (
                  <div key={i} className="glass-card p-5 border-[var(--border-color)] text-center">
-                    <s.icon className={`w-5 h-5 ${s.color} mx-auto mb-3`} />
-                    <p className="text-[var(--text-main)] font-black text-xl tracking-tight">{s.value}</p>
-                    <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest mt-1">{s.label}</p>
+                    <s.icon className={`w-6 h-6 mx-auto mb-3 ${s.color}`} />
+                    <p className="text-[var(--text-main)] font-black text-xl tracking-tight leading-none">{s.value}</p>
+                    <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest mt-2">{s.label}</p>
                  </div>
                ))}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-               {/* Detail Sections */}
+               {/* Detail Sections Conditionally Rendered */}
+
+               {(reportType === 'All' || reportType === 'Distance') && (
+               <div className="glass-card overflow-hidden lg:col-span-3">
+                  <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
+                     <h3 className="text-xs font-black uppercase tracking-widest text-teal-500">Distance Details</h3>
+                  </div>
+                  <div className="divide-y divide-[var(--border-color)] max-h-[400px] overflow-auto">
+                     {reportData.locations && reportData.locations.length > 0 ? (
+                       reportData.locations.map(loc => (
+                        <div key={loc._id} className="p-4 hover:bg-white/5 transition-colors flex justify-between items-center">
+                           <div>
+                              <p className="text-[var(--text-main)] font-bold text-sm">{new Date(loc.date).toLocaleDateString()}</p>
+                           </div>
+                           <div className="text-right">
+                              <p className="text-[var(--text-main)] font-black text-teal-500">{loc.totalDistance ? loc.totalDistance.toFixed(2) : 0} km</p>
+                           </div>
+                        </div>
+                       ))
+                     ) : (
+                       <p className="p-8 text-center text-[var(--text-muted)] text-sm">No distance recorded</p>
+                     )}
+                  </div>
+               </div>
+               )}
+
+               {(reportType === 'All' || reportType === 'Meetings') && (
                <div className="glass-card overflow-hidden">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
                      <h3 className="text-xs font-black uppercase tracking-widest text-primary-500">Meetings Log</h3>
@@ -484,7 +550,9 @@ export default function AdminReports() {
                       ))}
                   </div>
                </div>
+               )}
 
+               {(reportType === 'All' || reportType === 'Expenses') && (
                <div className="glass-card overflow-hidden">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
                      <h3 className="text-xs font-black uppercase tracking-widest text-emerald-500">Expense Claims</h3>
@@ -498,14 +566,16 @@ export default function AdminReports() {
                               <p className="text-[var(--text-muted)] text-[10px]">{new Date(e.date).toLocaleDateString()}</p>
                            </div>
                            <div className="text-right">
-                              <p className="text-[var(--text-main)] font-black">₹{e.amount}</p>
+                              <p className="text-[var(--text-main)] font-black">Rs{e.amount}</p>
                               <span className="text-[9px] font-black uppercase text-primary-500">{e.status}</span>
                            </div>
                         </div>
                       ))}
                   </div>
                </div>
+               )}
 
+               {(reportType === 'All' || reportType === 'DA') && (
                <div className="glass-card overflow-hidden">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
                      <h3 className="text-xs font-black uppercase tracking-widest text-blue-500">DA History</h3>
@@ -525,7 +595,7 @@ export default function AdminReports() {
                               <p className="text-[var(--text-muted)] text-[10px]">{new Date(da.date).toLocaleDateString()}</p>
                            </div>
                            <div className="text-right">
-                              <p className="text-[var(--text-main)] font-black">₹{da.amount}</p>
+                              <p className="text-[var(--text-main)] font-black">Rs{da.amount}</p>
                               {da.receipt ? (
                                 <a href={da.receipt} target="_blank" rel="noreferrer" className="text-[9px] font-black uppercase text-blue-500 underline">View Receipt</a>
                               ) : (
@@ -536,14 +606,17 @@ export default function AdminReports() {
                       ))}
                   </div>
                </div>
+               )}
 
+               {(reportType === 'All' || reportType === 'Tasks' || reportType === 'Leads') && (
                <div className="glass-card overflow-hidden lg:col-span-3">
                   <div className="p-4 bg-[var(--bg-main)] border-b border-[var(--border-color)]">
                      <h3 className="text-xs font-black uppercase tracking-widest text-amber-500">Daily Action Items & Leads</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2">
+                    {(reportType === 'All' || reportType === 'Tasks') && (
                     <div className="border-r border-[var(--border-color)] max-h-[400px] overflow-auto">
-                      {reportData.tasks.map(t => (
+                      {reportData.tasks.length === 0 ? <p className="p-8 text-center text-[var(--text-muted)] text-sm">No tasks recorded</p> : reportData.tasks.map(t => (
                         <div key={t._id} className="p-4 border-b border-[var(--border-color)] last:border-0">
                            <p className="text-[var(--text-main)] font-bold text-sm">{t.title}</p>
                            <p className="text-[var(--text-muted)] text-[10px] mt-1 line-clamp-1">{t.description}</p>
@@ -554,20 +627,24 @@ export default function AdminReports() {
                         </div>
                       ))}
                     </div>
+                    )}
+                    {(reportType === 'All' || reportType === 'Leads') && (
                     <div className="max-h-[400px] overflow-auto">
-                      {reportData.leads.map(l => (
+                      {reportData.leads.length === 0 ? <p className="p-8 text-center text-[var(--text-muted)] text-sm">No leads recorded</p> : reportData.leads.map(l => (
                         <div key={l._id} className="p-4 border-b border-[var(--border-color)] last:border-0">
                            <p className="text-[var(--text-main)] font-bold text-sm">{l.name}</p>
                            <p className="text-[var(--text-muted)] text-[10px]">{l.address}</p>
-                           <div className="mt-2 bg-black/20 p-2 rounded-lg">
-                              <p className="text-[9px] font-black text-primary-400 uppercase">Agent Feedback</p>
-                              <p className="text-[var(--text-muted)] text-[10px] italic">"{l.feedback || 'No feedback yet'}"</p>
+                           <div className="mt-2 text-[10px] font-bold">
+                              <span className="text-primary-500 uppercase tracking-widest">{l.status}</span>
+                              {l.feedback && <p className="text-[var(--text-muted)] font-medium mt-1 italic">"{l.feedback}"</p>}
                            </div>
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                </div>
+               )}
             </div>
           </div>
         )}
