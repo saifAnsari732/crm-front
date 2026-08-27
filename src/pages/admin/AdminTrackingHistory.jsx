@@ -375,14 +375,7 @@ export default function AdminTrackingHistory() {
             <button onClick={fetchHistory} className="bg-primary-600 hover:bg-primary-500 text-white font-black text-[10px] uppercase tracking-[0.2em] px-6 py-2.5 rounded-xl transition-all active:scale-95 shadow-lg shadow-primary-600/20">
                Execute Audit
             </button>
-            {filters.employeeId && (
-              <button 
-                onClick={handleDeleteHistory} 
-                className="bg-red-500  text-white border border-red-500/20 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-              >
-                Delete
-              </button>
-            )}
+            
           </div>
         </div>
 
