@@ -120,7 +120,9 @@ export default function AdminEmployees() {
     e.preventDefault();
     setUpdating(true);
     try {
-      await adminAPI.updateEmployee(selectedEmp._id, editForm);
+      const payload = { ...editForm };
+      if (!payload.manager) payload.manager = null;
+      await adminAPI.updateEmployee(selectedEmp._id, payload);
 
       // If editing a manager, also update all employee-manager assignments
       if (selectedEmp.role === 'manager' || editForm.role === 'manager') {
@@ -152,7 +154,7 @@ export default function AdminEmployees() {
       toast.success('✅ Profile updated successfully');
       setShowEditModal(false);
       fetchAll();
-    } catch { toast.error('Update failed'); }
+    } catch (err) { toast.error(err.response?.data?.message || err.message || 'Update failed'); }
     finally { setUpdating(false); }
   };
 
