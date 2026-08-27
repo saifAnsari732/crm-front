@@ -204,43 +204,43 @@ export default function AdminTasks() {
             </div>
           ) : (
             tasks.map((task) => (
-              <div key={task._id} className="group glass-card p-7 border-2 border-transparent hover:border-primary-500/40 transition-all duration-500 shadow-xl hover:shadow-primary-500/5 relative overflow-hidden">
+              <div key={task._id} className="group glass-card p-4 sm:p-6 border-2 border-transparent hover:border-primary-500/40 transition-all duration-500 shadow-xl hover:shadow-primary-500/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500">
                    <ClipboardList className="w-32 h-32 rotate-12" />
                 </div>
                 
-                <div className="flex items-start justify-between mb-6 relative z-10">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                        task.priority === 'high' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                        task.priority === 'medium' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                        'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                      }`}>
-                         <span className={`w-1 h-1 rounded-full ${
-                           task.priority === 'high' ? 'bg-red-500' :
-                           task.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
-                         }`} />
-                        {task.priority} Priority
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                        task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                        task.status === 'overdue' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                        'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
-                        {task.status}
-                      </span>
-                      <button onClick={() => handleDelete(task._id)} className="ml-auto text-red-500 hover:text-red-600 transition-colors bg-red-500/10 p-1.5 rounded-lg" title="Delete Task">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <div className="flex items-start justify-between mb-4 relative z-10">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-3 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                          task.priority === 'high' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                          task.priority === 'medium' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                          'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                        }`}>
+                           <span className={`hidden sm:inline-block w-1 h-1 rounded-full ${
+                             task.priority === 'high' ? 'bg-red-500' :
+                             task.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                           }`} />
+                          {task.priority} Priority
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-3 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                          task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                          task.status === 'overdue' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                          'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          {task.status}
+                        </span>
+                      </div>
+                      <h3 className="text-[var(--text-main)] font-black text-base sm:text-lg leading-tight group-hover:text-primary-400 transition-colors">{task.title}</h3>
                     </div>
-                    <h3 className="text-[var(--text-main)] font-black text-lg leading-tight group-hover:text-primary-400 transition-colors">{task.title}</h3>
+                    <button onClick={() => handleDelete(task._id)} className="flex-shrink-0 text-red-500 hover:text-red-600 transition-colors bg-red-500/10 p-2 rounded-xl" title="Delete Task">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                </div>
                 
-                <p className="text-[var(--text-muted)] text-[11px] font-medium mb-6 line-clamp-3 leading-relaxed relative z-10">{task.description}</p>
+                <p className="text-[var(--text-muted)] text-[11px] font-medium mb-4 sm:mb-6 line-clamp-3 leading-relaxed relative z-10 text-justify">{task.description}</p>
                 
-                <div className="space-y-4 pt-6 border-t border-[var(--border-color)] relative z-10">
+                <div className="space-y-3 pt-4 border-t border-[var(--border-color)] relative z-10">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-[11px] font-black text-primary-500 uppercase shadow-inner overflow-hidden">
