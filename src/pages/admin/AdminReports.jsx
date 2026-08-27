@@ -344,21 +344,6 @@ export default function AdminReports() {
     } catch (err) { console.error(err); toast.error('Export failed'); }
   };
 
-  const handleGenerate = async () => {
-    if (!selectedEmp) return toast.error('Select an employee');
-    setLoading(true);
-    try {
-      const { data } = await adminAPI.getConsolidatedReport({ 
-        employeeId: selectedEmp, 
-        startDate, 
-        endDate 
-      });
-      setReportData(data.data);
-      toast.success('Report generated');
-    } catch { toast.error('Failed to generate report'); }
-    finally { setLoading(false); }
-  };
-
   const handleExportJSON = () => {
     if (!reportData) return;
     const jsonData = {
