@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { FileText, Download, Calendar, User, Search, MapPin, Receipt, Briefcase, CheckCircle, Target } from 'lucide-react';
+import { FileText, Download, Calendar, User, Search, MapPin, Receipt, Briefcase, CheckCircle, Target, Image as ImageIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import 'jspdf-autotable';
@@ -15,6 +15,19 @@ export default function AdminReports() {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('All');
+  const reportRef = useRef(null);
+  const handleExportJPEG = async () => {
+    if (!reportRef.current) return;
+    try {
+      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/jpeg', 0.9);
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = "Report__.jpg";
+      link.click();
+      toast.success('JPEG exported');
+    } catch (err) { console.error(err); toast.error('Failed to export JPEG'); }
+  };
 
 
   useEffect(() => {
