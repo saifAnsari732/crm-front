@@ -430,44 +430,66 @@ export default function AdminTrackingHistory() {
           <div className="flex-1 flex flex-col gap-4 min-w-0">
             {/* Quick Summary Bar */}
             {selectedSession && (
-              <div className="glass-card p-5 flex items-center justify-between border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
+              <div className="glass-card p-5 flex flex-col gap-4 border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
                    <Navigation className="w-32 h-32 rotate-12" />
                 </div>
                 
-                <div className="flex items-center gap-8 relative z-10">
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-2xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-500 shadow-inner">
-                      <Navigation className="w-5 h-5" />
+                <div className="flex flex-wrap items-center justify-between gap-4 relative z-10">
+                  <div className="flex flex-wrap items-center gap-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-2xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-500 shadow-inner">
+                        <Navigation className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Total Displacement</p>
+                        <p className="text-[var(--text-main)] font-black text-xl italic tracking-tight">{(selectedSession.totalDistance || 0).toFixed(2)} <span className="text-xs font-bold not-italic text-primary-500">KM</span></p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Total Displacement</p>
-                      <p className="text-[var(--text-main)] font-black text-xl italic tracking-tight">{(selectedSession.totalDistance || 0).toFixed(2)} <span className="text-xs font-bold not-italic text-primary-500">KM</span></p>
+                    <div className="w-px h-10 bg-[var(--border-color)] opacity-50 hidden sm:block" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500 shadow-inner">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Operational Duration</p>
+                        <p className="text-[var(--text-main)] font-black text-lg tracking-tight">
+                          {selectedSession.endTime 
+                            ? `${Math.round((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60 * 60))}h ${Math.round(((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60)) % 60)}m`
+                            : <span className="text-emerald-500 uppercase text-sm tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Personnel Live</span>}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <div className="w-px h-10 bg-[var(--border-color)] opacity-50" />
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500 shadow-inner">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Operational Duration</p>
-                      <p className="text-[var(--text-main)] font-black text-lg tracking-tight">
-                        {selectedSession.endTime 
-                          ? `${Math.round((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60 * 60))}h ${Math.round(((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60)) % 60)}m`
-                          : <span className="text-emerald-500 uppercase text-sm tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Personnel Live</span>}
-                      </p>
-                    </div>
+                  
+                  <div className="flex items-center gap-3">
+                     <button onClick={exportToCSV} className="bg-[var(--bg-main)] hover:bg-[var(--bg-card-hover)] text-[var(--text-muted)] hover:text-primary-400 border border-[var(--border-color)] py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
+                       <Download className="w-4 h-4" /> Export CSV
+                     </button>
+                     <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
+                       <FileImage className="w-4 h-4" /> JPEG Summary
+                     </button>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-3 relative z-10">
-                   <button onClick={exportToCSV} className="bg-[var(--bg-main)] hover:bg-[var(--bg-card-hover)] text-[var(--text-muted)] hover:text-primary-400 border border-[var(--border-color)] py-2.5 px-5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
-                     <Download className="w-4 h-4" /> Export CSV
-                   </button>
-                   <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
-                     <FileImage className="w-4 h-4" /> JPEG Summary
-                   </button>
+
+                {/* PUNCH IN / OUT SUMMARY */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10 pt-4 border-t border-[var(--border-color)]">
+                   <div className="flex flex-col gap-1">
+                      <p className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Punch In</p>
+                      <p className="text-[13px] font-bold text-[var(--text-main)]">{new Date(selectedSession.startTime).toLocaleTimeString()}</p>
+                      <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.startAddress || 'Location unknown'}</p>
+                   </div>
+                   <div className="flex flex-col gap-1">
+                      <p className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Punch Out</p>
+                      {selectedSession.isActive ? (
+                         <p className="text-[11px] font-bold text-amber-500 animate-pulse mt-1">Currently Tracking (Live)</p>
+                      ) : (
+                         <>
+                           <p className="text-[13px] font-bold text-[var(--text-main)]">{selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Unknown Time'}</p>
+                           <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.endAddress || (selectedSession.coordinates?.length ? selectedSession.coordinates[selectedSession.coordinates.length - 1].address : 'Location unknown')}</p>
+                         </>
+                      )}
+                   </div>
                 </div>
               </div>
             )}
