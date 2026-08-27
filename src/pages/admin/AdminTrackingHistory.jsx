@@ -400,10 +400,10 @@ export default function AdminTrackingHistory() {
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-180px)] min-h-[600px]">
+        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)] lg:min-h-[600px]">
           {/* 1. Left Sidebar: Sessions */}
-          <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4 overflow-hidden">
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3">
+          <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4 overflow-hidden min-h-[18rem] lg:min-h-0 shrink-0">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-4">
               {loading ? (
                 [1, 2, 3, 4].map(i => <div key={i} className="h-28 rounded-3xl bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
               ) : history.length === 0 ? (
@@ -424,13 +424,13 @@ export default function AdminTrackingHistory() {
                       : 'bg-[var(--bg-card)] border-transparent hover:border-rose-500/20 hover:bg-[var(--bg-card-hover)]'
                   }`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-10">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 ${
                       selectedSession?._id === session._id ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
                     }`}>
                       {session.employee?.name?.[0]}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w- flex-1">
                       <p className={`text-[var(--text-main)] font-black text-base tracking-tight group-hover:text-rose-500 transition-colors truncate ${selectedSession?._id === session._id ? 'text-rose-500' : ''}`}>
                         {session.employee?.name}
                       </p>
@@ -448,7 +448,7 @@ export default function AdminTrackingHistory() {
           </div>
 
           {/* 2. Center Panel: Map & Summary */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0">
+          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] lg:min-h-0 shrink-0">
             {/* Quick Summary Bar */}
             {selectedSession && (
               <div className="glass-card p-5 flex flex-col gap-4 border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
@@ -468,19 +468,7 @@ export default function AdminTrackingHistory() {
                       </div>
                     </div>
                     <div className="w-px h-10 bg-[var(--border-color)] opacity-50 hidden sm:block" />
-                    <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500 shadow-inner">
-                        <Clock className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Operational Duration</p>
-                        <p className="text-[var(--text-main)] font-black text-lg tracking-tight">
-                          {selectedSession.endTime 
-                            ? `${Math.round((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60 * 60))}h ${Math.round(((new Date(selectedSession.endTime) - new Date(selectedSession.startTime)) / (1000 * 60)) % 60)}m`
-                            : <span className="text-emerald-500 uppercase text-sm tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Personnel Live</span>}
-                        </p>
-                      </div>
-                    </div>
+                   
                   </div>
                   
                   <div className="flex items-center gap-3">
@@ -490,25 +478,7 @@ export default function AdminTrackingHistory() {
                   </div>
                 </div>
 
-                {/* PUNCH IN / OUT SUMMARY */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
-                   <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] shadow-sm">
-                      <p className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Punch In</p>
-                      <p className="text-[14px] font-bold text-[var(--text-main)]">{new Date(selectedSession.startTime).toLocaleTimeString()}</p>
-                      <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.startAddress || 'Location unknown'}</p>
-                   </div>
-                   <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-color)] shadow-sm">
-                      <p className="text-[10px] font-black uppercase text-red-500 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Punch Out</p>
-                      {selectedSession.isActive ? (
-                         <p className="text-[12px] font-bold text-amber-500 animate-pulse mt-1">Currently Tracking (Live)</p>
-                      ) : (
-                         <>
-                           <p className="text-[14px] font-bold text-[var(--text-main)]">{selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Unknown Time'}</p>
-                           <p className="text-[11px] text-[var(--text-muted)] leading-tight">{selectedSession.endAddress || (selectedSession.coordinates?.length ? selectedSession.coordinates[selectedSession.coordinates.length - 1].address : 'Location unknown')}</p>
-                         </>
-                      )}
-                   </div>
-                </div>
+              
               </div>
             )}
 
@@ -620,7 +590,7 @@ export default function AdminTrackingHistory() {
           </div>
 
           {/* 3. Right Sidebar: Activity Timeline */}
-          <div className="w-full lg:w-80 xl:w-96 flex flex-col glass-card border-[var(--border-color)] overflow-hidden">
+          <div className="w-full lg:w-80 xl:w-96 flex flex-col glass-card border-[var(--border-color)] overflow-hidden min-h-[400px] lg:min-h-0 shrink-0">
             <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)]">
               <h3 className="text-[var(--text-main)] font-black text-sm uppercase tracking-widest flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary-500" /> Timeline
