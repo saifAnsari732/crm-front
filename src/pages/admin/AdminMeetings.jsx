@@ -79,7 +79,7 @@ export function AdminMeetings() {
         {/* Table */}
         <div className="glass-card overflow-hidden border-[var(--border-color)] shadow-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full min-w-[800px] text-left">
                 <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-widest text-[10px] border-b border-[var(--border-color)]">
                   <tr>
                     <th className="px-6 py-4">Field Agent</th>

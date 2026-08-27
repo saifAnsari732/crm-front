@@ -351,14 +351,14 @@ export default function AdminTrackingHistory() {
             </h1>
             <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-1">Reviewing Field Personnel Movement Logs</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 bg-[var(--bg-card)] p-2 rounded-2xl border border-[var(--border-color)] shadow-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-row items-center gap-3 bg-[var(--bg-card)] p-2 rounded-2xl border border-[var(--border-color)] shadow-xl w-full lg:w-auto">
             <div className="relative group">
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500 group-hover:scale-110 transition-transform" />
               <input
                 type="date"
                 value={filters.date}
                 onChange={(e) => setFilters(f => ({ ...f, date: e.target.value }))}
-                className="input-field pl-10 py-2.5 text-[10px] font-black uppercase w-44 tracking-widest"
+                className="input-field pl-10 py-2.5 text-[10px] font-black uppercase w-full lg:w-44 tracking-widest"
               />
             </div>
             <div className="relative group">

@@ -280,7 +280,7 @@ export default function AdminLiveMap() {
              </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-x-auto items-center gap-2 pb-2 hide-scrollbar custom-scrollbar">
           {[
             { id: 'All', label: 'All', color: 'bg-primary-500' },
             { id: 'Active', label: 'Active', color: 'bg-emerald-500' },
@@ -291,7 +291,7 @@ export default function AdminLiveMap() {
             <button
               key={f.id}
               onClick={() => setActiveFilter(f.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap flex-shrink-0 ${
                 activeFilter === f.id 
                   ? `${f.color} text-white border-transparent shadow-lg` 
                   : 'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border-color)] hover:border-primary-500/50'
