@@ -71,10 +71,10 @@
     color: var(--primary);
   }
   .nav-item.active {
-    background-color: var(--primary-muted);
-    color: var(--primary);
-    border-right: 4px solid var(--primary);
-    @apply font-bold shadow-sm;
+    background: linear-gradient(90deg, rgba(244,63,94,0.1) 0%, transparent 100%);
+    color: #e11d48; /* rose-600 */
+    border-left: 4px solid #e11d48;
+    @apply font-bold;
   }
 }
 

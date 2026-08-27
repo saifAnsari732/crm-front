@@ -60,12 +60,19 @@ export default function AdminDashboard() {
         { name: 'Present', value: stats.todayAttendance, color: '#3b82f6' },
         { name: 'Absent', value: stats.totalEmployees - stats.todayAttendance, color: '#e2e8f0' }
     ]},
-    { label: 'Visits', value: stats.totalMeetings, icon: MapPin, color: 'text-emerald-500', bg: 'bg-emerald-500/10', total: 10, chartData: [
+    { label: 'Visits', value: stats.totalMeetings, icon: MapPin, color: 'text-emerald-500', bg: 'bg-emerald-500/10', total: stats.totalMeetings + 2, chartData: [
         { name: 'Completed', value: stats.totalMeetings, color: '#10b981' },
         { name: 'Pending', value: 2, color: '#e2e8f0' }
     ]},
-    { label: 'Tasks', value: stats.totalTasks || 0, icon: ClipboardList, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+    { label: 'Tasks', value: stats.totalTasks || 0, icon: ClipboardList, color: 'text-rose-500', bg: 'bg-rose-500/10' },
     { label: 'Leads', value: stats.totalLeads || 0, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  ] : [];
+
+  const monitorStats = stats ? [
+    { label: 'Total Distance Today', value: `${stats.totalKm.toFixed(1)} km`, icon: Navigation, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+    { label: 'Active Field Agents', value: stats.trackingNow || 0, icon: Users, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { label: 'Pending Expenses', value: stats.pendingExpenses || 0, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Online Personnel', value: stats.activeEmployees || 0, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
   ] : [];
 
   const recentVisits = stats?.recentMeetings || [];
@@ -114,7 +121,7 @@ export default function AdminDashboard() {
                        </div>
                        <span className="text-[var(--text-main)] font-black text-[10px] uppercase tracking-[0.2em]">{c.label}</span>
                     </div>
-                    <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} / {c.total || '∞'}</span>
+                    <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} {c.total ? `/ ${c.total}` : ''}</span>
                  </div>
                  
                  {c.chartData ? (
@@ -139,6 +146,23 @@ export default function AdminDashboard() {
                       <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-[0.2em] mt-3 opacity-40">System Neutral</p>
                    </div>
                  )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Monitoring Section */}
+        {!loading && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {monitorStats.map((s, i) => (
+              <div key={i} className={`p-4 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-card)] flex items-center gap-4 hover:border-${s.color.split('-')[1]}-400/50 transition-colors`}>
+                <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center shadow-inner`}>
+                  <s.icon className={`w-5 h-5 ${s.color}`} />
+                </div>
+                <div>
+                  <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">{s.label}</p>
+                  <p className="text-[var(--text-main)] font-bold text-lg mt-0.5">{s.value}</p>
+                </div>
               </div>
             ))}
           </div>
