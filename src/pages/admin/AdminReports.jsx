@@ -344,28 +344,6 @@ export default function AdminReports() {
     } catch (err) { console.error(err); toast.error('Export failed'); }
   };
 
-  const handleExportJSON = () => {
-    if (!reportData) return;
-    const jsonData = {
-      exportDate: new Date().toISOString(),
-      period: { startDate, endDate },
-      employee: reportData.employee,
-      summary: reportData.summary,
-      meetings: reportData.meetings,
-      expenses: reportData.expenses,
-      tasks: reportData.tasks,
-      leads: reportData.leads,
-      locations: reportData.locations,
-    };
-    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `DataExport_${reportData.employee.name.replace(/\s+/g,'_')}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <AdminLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
