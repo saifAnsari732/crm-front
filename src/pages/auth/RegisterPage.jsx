@@ -38,13 +38,13 @@ export default function RegisterPage() {
             <div className="w-12 h-12 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
               <Zap className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-[var(--text-main)]">FieldCRM</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">Kisanteam CRM</span>
           </div>
           <p className="text-[var(--text-muted)] text-sm">Create your employee account</p>
         </div>
 
         <div className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-[var(--text-main)] mb-1">Join FieldCRM</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-main)] mb-1">Join Kisanteam CRM</h2>
           <p className="text-[var(--text-muted)] text-sm mb-6 opacity-70">Fill in your details to request access</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -89,8 +89,8 @@ export const initSocket = (token) => {
   if (socket?.connected) return socket;
 
   socket = io(
-    'http://localhost:5000',
-    // 'https://crm-b-y8rv.onrender.com',
+    // 'https://field-moniter-back.onrender.com',
+    'http://localhost:5000/api',
     {
       auth: { token },
       reconnection: true,

@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: '/api',
-  // baseURL: 'http://localhost:5000/api',
+  // baseURL: 'https://field-moniter-back.onrender.com/api',
+  baseURL: 'http://localhost:5000/api',
   withCredentials: true,
 });
 

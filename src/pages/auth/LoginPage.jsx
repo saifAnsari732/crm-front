@@ -38,7 +38,7 @@ export default function LoginPage() {
             <div className="w-12 h-12 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
               <Zap className="w-6 h-6 text-[var(--text-inverse)]" />
             </div>
-            <span className="text-2xl font-bold text-[var(--text-main)]">FieldCRM</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">Kisanteam CRM</span>
           </div>
           <p className="text-[var(--text-muted)] text-sm">Enterprise Employee Tracking System</p>
         </div>

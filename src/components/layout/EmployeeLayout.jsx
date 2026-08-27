@@ -92,7 +92,7 @@ export default function EmployeeLayout({ children }) {
             </div>
             <div>
               <p className="font-bold text-[var(--text-main)] text-sm">
-                FieldCRM
+                Kisanteam CRM
               </p>
               <p className="text-[var(--accent-safe)] text-xs">
                 Employee Portal

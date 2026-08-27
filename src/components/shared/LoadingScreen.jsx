@@ -17,7 +17,7 @@ export default function LoadingScreen() {
             <div key={i} className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
           ))}
         </div>
-        <p className="text-white/40 text-sm font-medium tracking-widest uppercase">FieldCRM</p>
+        <p className="text-white/40 text-sm font-medium tracking-widest uppercase">Kisanteam CRM</p>
       </div>
     </div>
   );

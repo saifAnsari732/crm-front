@@ -144,6 +144,108 @@ export default function AdminReports() {
         return;
       }
 
+      if (reportType === 'Meetings') {
+        doc.setFontSize(16);
+        doc.text('Meetings Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        if (reportData.meetings && reportData.meetings.length > 0) {
+          const mBody = reportData.meetings.map(m => [
+            new Date(m.date).toLocaleString(),
+            m.clientName,
+            m.companyName || '-',
+            m.mobileNumber || '-',
+            (m.purpose || m.meetingNotes || '').slice(0, 80)
+          ]);
+          // @ts-ignore
+          doc.autoTable({ startY: 96, head: [['Date', 'Client', 'Company', 'Phone', 'Purpose']], body: mBody, styles: { fontSize: 8 } });
+          doc.setFontSize(12);
+          doc.text(`Total Meetings: ${reportData.summary.totalMeetings}`, 40, doc.previousAutoTable.finalY + 30);
+        } else {
+           doc.text('No meeting data found for this period.', 40, 100);
+        }
+        doc.save(`Meetings_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('Meetings PDF exported');
+        return;
+      }
+
+      if (reportType === 'Tasks') {
+        doc.setFontSize(16);
+        doc.text('Tasks Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        if (reportData.tasks && reportData.tasks.length > 0) {
+          const tBody = reportData.tasks.map(t => [
+            t.title,
+            t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '-',
+            t.status,
+            (t.description || '').slice(0, 80)
+          ]);
+          // @ts-ignore
+          doc.autoTable({ startY: 96, head: [['Title', 'Due Date', 'Status', 'Description']], body: tBody, styles: { fontSize: 8 } });
+        } else {
+           doc.text('No task data found for this period.', 40, 100);
+        }
+        doc.save(`Tasks_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('Tasks PDF exported');
+        return;
+      }
+
+      if (reportType === 'Leads') {
+        doc.setFontSize(16);
+        doc.text('Leads Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        if (reportData.leads && reportData.leads.length > 0) {
+          const lBody = reportData.leads.map(l => [
+            l.name,
+            l.contactNo || '-',
+            l.address || '-',
+            l.status,
+            (l.feedback || '').slice(0, 80)
+          ]);
+          // @ts-ignore
+          doc.autoTable({ startY: 96, head: [['Lead Name', 'Phone', 'Address', 'Status', 'Feedback']], body: lBody, styles: { fontSize: 8 } });
+        } else {
+           doc.text('No leads found for this period.', 40, 100);
+        }
+        doc.save(`Leads_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('Leads PDF exported');
+        return;
+      }
+
+      if (reportType === 'DA') {
+        doc.setFontSize(16);
+        doc.text('DA History Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        
+        const daList = reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || [];
+        const filteredDa = daList.filter(da => {
+           const daDate = new Date(da.date).toISOString().slice(0, 10);
+           return daDate >= startDate && daDate <= endDate;
+        });
+        
+        if (filteredDa.length > 0) {
+          const daBody = filteredDa.map(da => [
+            new Date(da.date).toLocaleString(),
+            `Rs ${da.amount}`,
+            da.receipt ? 'Yes' : 'No'
+          ]);
+          // @ts-ignore
+          doc.autoTable({ startY: 96, head: [['Date', 'Amount', 'Receipt Uploaded']], body: daBody, styles: { fontSize: 8 } });
+        } else {
+           doc.text('No DA data found for this period.', 40, 100);
+        }
+        doc.save(`DA_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('DA PDF exported');
+        return;
+      }
+
       // Default (All)
       doc.setFontSize(16);
       doc.text('Unified Activity Report', 40, 40);
@@ -274,6 +376,10 @@ export default function AdminReports() {
                <option value="All">Unified (All Data)</option>
                <option value="Distance">Distance Details</option>
                <option value="Expenses">Expense Details</option>
+               <option value="Meetings">Meetings Log</option>
+               <option value="Tasks">Tasks</option>
+               <option value="Leads">Leads</option>
+               <option value="DA">DA History</option>
             </select>
           </div>
           <div>

@@ -41,7 +41,7 @@ export default function AdminLayout({ children }) {
               <Zap className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-bold text-[var(--text-main)] text-sm">FieldCRM</p>
+              <p className="font-bold text-[var(--text-main)] text-sm">Kisanteam CRM</p>
               <p className="text-[var(--accent-safe)] text-xs font-medium">Admin Panel</p>
             </div>
           </div>
