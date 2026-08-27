@@ -453,7 +453,7 @@ export default function AdminEmployees() {
                   </div>
 
                   {/* === IF MANAGER: Show Employee Assignment === */}
-                  {(editForm.role === 'manager' || selectedEmp?.role === 'manager') ? (
+                  {(editForm.role === 'manager') ? (
                     <div className="border border-blue-500/20 rounded-2xl overflow-hidden bg-blue-500/5">
                       <div className="flex items-center justify-between px-4 py-3 bg-blue-500/10 border-b border-blue-500/20">
                         <div className="flex items-center gap-2">
