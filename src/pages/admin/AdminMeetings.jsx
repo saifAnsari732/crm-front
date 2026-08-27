@@ -17,7 +17,7 @@ export function AdminMeetings() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    adminAPI.getEmployees({ limit: 200 }).then(({ data }) => setEmployees(data.employees || []));
+    adminAPI.getEmployees({ limit: 200, role: 'all' }).then(({ data }) => setEmployees(data.employees || []));
   }, []);
   useEffect(() => { fetchMeetings(); }, [page, statusFilter, empFilter]);
 

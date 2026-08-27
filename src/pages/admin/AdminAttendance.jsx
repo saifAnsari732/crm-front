@@ -34,7 +34,7 @@ export default function AdminAttendance() {
 
   const fetchEmployees = async () => {
     try {
-      const { data } = await adminAPI.getEmployees({ limit: 500 });
+      const { data } = await adminAPI.getEmployees({ limit: 200, role: 'all' });
       setEmployees(data.employees || []);
     } catch {}
   };

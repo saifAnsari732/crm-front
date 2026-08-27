@@ -38,7 +38,7 @@ export default function AdminEmployees() {
 
   // Fetch all employees for manager assignment checkboxes
   useEffect(() => {
-    adminAPI.getEmployees({ limit: 500 }).then(({ data }) => setAllEmployees(data.employees || []));
+    adminAPI.getEmployees({ limit: 500, role: 'all' }).then(({ data }) => setAllEmployees(data.employees || []));
   }, []);
 
   const fetchAll = async () => {
@@ -146,7 +146,7 @@ export default function AdminEmployees() {
           toast.success(`✅ ${toAssign.length} assigned, ${toUnassign.length} unassigned`);
         }
         // Refresh allEmployees cache
-        const { data } = await adminAPI.getEmployees({ limit: 500 });
+        const { data } = await adminAPI.getEmployees({ limit: 500, role: 'all' });
         setAllEmployees(data.employees || []);
       }
 

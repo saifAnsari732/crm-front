@@ -226,7 +226,7 @@ export default function AdminTrackingHistory() {
 
   const fetchEmployees = async () => {
     try {
-      const { data } = await adminAPI.getEmployees({ limit: 100 });
+      const { data } = await adminAPI.getEmployees({ limit: 200, role: 'all' });
       setEmployees(data.employees || []);
     } catch { toast.error('Failed to load employees'); }
   };
