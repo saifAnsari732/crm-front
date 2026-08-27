@@ -25,13 +25,13 @@ export default function ManagerDashboard() {
 
   const StatCard = ({ icon: Icon, title, value, color, delay }) => (
     <div className={`glass-card p-6 border-l-4 border-${color}-500 animate-fade-in`} style={{ animationDelay: `${delay}ms` }}>
-      <div className="flex items-center justify-between mb-4">
-        <div className={`w-12 h-12 rounded-xl bg-${color}-500/10 flex items-center justify-center`}>
-          <Icon className={`w-6 h-6 text-${color}-500`} />
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-${color}-500/10 flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 sm:w-6 sm:h-6 text-${color}-500`} />
         </div>
       </div>
-      <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">{title}</p>
-      <p className="text-[var(--text-main)] text-3xl font-black mt-1">{loading ? '...' : value}</p>
+      <p className="text-[var(--text-muted)] text-[8px] sm:text-[10px] font-black uppercase tracking-widest leading-tight">{title}</p>
+      <p className="text-[var(--text-main)] text-xl sm:text-3xl font-black mt-1">{loading ? '...' : value}</p>
     </div>
   );
 
@@ -45,7 +45,7 @@ export default function ManagerDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Users} title="Total Team Members" value={stats?.totalEmployees || 0} color="blue" delay={0} />
           <StatCard icon={Activity} title="Active Now" value={stats?.activeEmployees || 0} color="emerald" delay={100} />
           <StatCard icon={CheckCircle} title="Present Today" value={stats?.todayAttendance || 0} color="primary" delay={200} />
