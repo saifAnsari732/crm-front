@@ -90,18 +90,8 @@ export default function AdminLayout({ children }) {
             <p className="text-[var(--text-muted)] text-xs">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <button 
-              onClick={toggleTheme}
-              className="p-2 rounded-xl hover:bg-[var(--bg-card)] transition-colors"
-              title="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
-            </button>
-            <button className="relative p-2 rounded-xl hover:bg-[var(--bg-card)] transition-colors">
-              <Bell className="w-5 h-5 text-[var(--text-main)]/70" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
+           
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center text-white font-bold text-xs">
               {user?.name?.[0]?.toUpperCase()}
             </div>
           </div>
