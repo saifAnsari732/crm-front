@@ -174,14 +174,35 @@ const processTimeline = (session) => {
 
   // 2. Punch Out / Last Known
   const finalCoord = coords[coords.length - 1];
-  events.push({
-    type: session.isActive ? 'Last Known Location' : 'Punch Out',
-    time: session.isActive ? finalCoord.timestamp : (session.endTime || finalCoord.timestamp),
-    address: session.isActive ? finalCoord.address : (session.endAddress || finalCoord.address),
-    lat: finalCoord.lat,
-    lng: finalCoord.lng,
-    icon: session.isActive ? 'activity' : 'power'
-  });
+  
+  if (session.isActive) {
+    events.push({
+      type: 'Last Known Location',
+      time: finalCoord.timestamp,
+      address: finalCoord.address,
+      lat: finalCoord.lat,
+      lng: finalCoord.lng,
+      icon: 'activity'
+    });
+    events.push({
+      type: 'Punch Out',
+      time: null,
+      address: 'Currently Tracking (Pending)',
+      lat: finalCoord.lat,
+      lng: finalCoord.lng,
+      icon: 'power',
+      isPending: true
+    });
+  } else {
+    events.push({
+      type: 'Punch Out',
+      time: session.endTime || finalCoord.timestamp,
+      address: session.endAddress || finalCoord.address,
+      lat: finalCoord.lat,
+      lng: finalCoord.lng,
+      icon: 'power'
+    });
+  }
 
   return events;
 };
@@ -622,11 +643,11 @@ export default function AdminTrackingHistory() {
                   {processTimeline(selectedSession).map((event, idx) => (
                     <div key={idx} className="relative group">
                       {/* Timeline Dot/Icon */}
-                      <div className={`absolute -left-[29px] top-1 w-6 h-6 rounded-full border-4 border-[var(--bg-sidebar)] z-10 flex items-center justify-center transition-transform group-hover:scale-110 ${
-                        event.type.includes('Punch In') ? 'bg-emerald-500' :
-                        event.type.includes('Punch Out') ? 'bg-red-500' :
-                        event.type === 'Stop' ? 'bg-amber-500' : 'bg-primary-500'
-                      }`}>
+                        <div className={`absolute -left-[29px] top-1 w-6 h-6 rounded-full border-4 border-[var(--bg-sidebar)] z-10 flex items-center justify-center transition-transform group-hover:scale-110 ${
+                          event.type.includes('Punch In') ? 'bg-emerald-500' :
+                          event.type.includes('Punch Out') ? (event.isPending ? 'bg-[var(--text-muted)]' : 'bg-red-500') :
+                          event.type === 'Stop' ? 'bg-amber-500' : 'bg-primary-500'
+                        }`}>
                          {event.icon === 'target' && <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />}
                          {event.icon === 'power' && <div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm" />}
                          {event.icon === 'map-pin' && <div className="w-2 h-2 rounded-full bg-white shadow-sm" />}
@@ -637,7 +658,7 @@ export default function AdminTrackingHistory() {
                         <div className="flex items-center justify-between mb-1">
                           <p className={`font-black text-xs uppercase tracking-wider ${
                             event.type.includes('Punch In') ? 'text-emerald-500' :
-                            event.type.includes('Punch Out') ? 'text-red-500' :
+                            event.type.includes('Punch Out') ? (event.isPending ? 'text-[var(--text-muted)]' : 'text-red-500') :
                             event.type === 'Stop' ? 'text-amber-500' : 'text-primary-500'
                           }`}>
                             {event.type}
