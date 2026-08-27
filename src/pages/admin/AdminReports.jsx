@@ -13,6 +13,7 @@ export default function AdminReports() {
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [reportType, setReportType] = useState('All');
 
 
   useEffect(() => {
@@ -73,6 +74,77 @@ export default function AdminReports() {
 
     try {
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      
+      if (reportType === 'Distance') {
+        doc.setFontSize(16);
+        doc.text('Distance Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        
+        if (reportData.locations && reportData.locations.length > 0) {
+          const distanceBody = reportData.locations.map(loc => [
+            loc.date || new Date(loc.startTime).toISOString().slice(0, 10),
+            new Date(loc.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            loc.endTime ? new Date(loc.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active',
+            loc.startAddress ? loc.startAddress.substring(0, 40) : '-',
+            loc.endAddress ? loc.endAddress.substring(0, 40) : '-',
+            `${(loc.totalDistance || 0).toFixed(2)} km`
+          ]);
+          
+          // @ts-ignore
+          doc.autoTable({ 
+            startY: 96, 
+            head: [['Date', 'Start Time', 'End Time', 'Start Location', 'End Location', 'Distance']], 
+            body: distanceBody, 
+            styles: { fontSize: 8 }, 
+            margin: { left: 40, right: 40 } 
+          });
+          
+          let y = doc.previousAutoTable.finalY + 30;
+          doc.setFontSize(12);
+          doc.text(`Total Distance: ${reportData.summary.totalKm.toFixed(2)} km`, 40, y);
+          doc.text(`Total Travel Pay (TA): Rs ${(reportData.summary.totalKm * (reportData.employee.TA || 2.5)).toFixed(2)}`, 40, y + 20);
+        } else {
+           doc.text('No distance tracking data found for this period.', 40, 100);
+        }
+        
+        doc.save(`Distance_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('Distance PDF exported');
+        return;
+      }
+
+      if (reportType === 'Expenses') {
+        doc.setFontSize(16);
+        doc.text('Expense Details Report', 40, 40);
+        doc.setFontSize(10);
+        doc.text(`Employee: ${reportData.employee.name} (${reportData.employee.employeeId || ''})`, 40, 60);
+        doc.text(`Period: ${startDate} to ${endDate}`, 40, 76);
+        
+        if (reportData.expenses && reportData.expenses.length > 0) {
+          const expenseBody = reportData.expenses.map(e => [
+            new Date(e.date).toLocaleDateString(),
+            e.category,
+            e.description || '-',
+            `Rs ${e.amount}`,
+            e.status
+          ]);
+          // @ts-ignore
+          doc.autoTable({ startY: 96, head: [['Date', 'Category', 'Description', 'Amount', 'Status']], body: expenseBody, styles: { fontSize: 8 } });
+          
+          let y = doc.previousAutoTable.finalY + 30;
+          doc.setFontSize(12);
+          doc.text(`Total Expenses: Rs ${reportData.summary.totalExpenses}`, 40, y);
+        } else {
+           doc.text('No expense data found for this period.', 40, 100);
+        }
+        
+        doc.save(`Expense_Report_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.pdf`);
+        toast.success('Expense PDF exported');
+        return;
+      }
+
+      // Default (All)
       doc.setFontSize(16);
       doc.text('Unified Activity Report', 40, 40);
       doc.setFontSize(10);
@@ -195,7 +267,15 @@ export default function AdminReports() {
         </div>
 
         {/* Filters */}
-        <div className="glass-card p-6 border-[var(--border-color)] shadow-xl grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div className="glass-card p-6 border-[var(--border-color)] shadow-xl grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+          <div>
+            <label className="block text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-2">Report Type</label>
+            <select className="input-field" value={reportType} onChange={e => setReportType(e.target.value)}>
+               <option value="All">Unified (All Data)</option>
+               <option value="Distance">Distance Details</option>
+               <option value="Expenses">Expense Details</option>
+            </select>
+          </div>
           <div>
             <label className="block text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-2">Select Employee</label>
             <select className="input-field" value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)}>
