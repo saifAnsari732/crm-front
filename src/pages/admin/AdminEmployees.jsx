@@ -12,6 +12,7 @@ const DESIGNATIONS = ['ASM', 'SO', 'Sr SO', 'Jr SO', 'TSI', 'DSE'];
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState([]);
   const [managers, setManagers] = useState([]);
+  const [managersDropdown, setManagersDropdown] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]); // for manager assignment
   const [assignedEmpIds, setAssignedEmpIds] = useState([]); // checkboxes
   const [empSearch, setEmpSearch] = useState('');
@@ -43,25 +44,23 @@ export default function AdminEmployees() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'managers') {
-        const { data } = await adminAPI.getManagers();
-        setManagers(data.managers || []);
-        setTotal(data.managers?.length || 0);
-        setLoading(false);
-        return;
-      }
-      const { data } = await adminAPI.getEmployees({ page, limit: 15, search });
+      const { data } = await adminAPI.getEmployees({ page, limit: 15, search, role: activeTab === 'managers' ? 'manager' : 'employee' });
       let filtered = data.employees || [];
       if (filterDesignation) filtered = filtered.filter(e => e.designation === filterDesignation);
       if (filterStatus === 'active') filtered = filtered.filter(e => e.isActive && !e.isBlocked);
       if (filterStatus === 'blocked') filtered = filtered.filter(e => e.isBlocked);
       if (filterStatus === 'pending') filtered = filtered.filter(e => !e.isApproved);
-      setEmployees(filtered);
+      
+      if (activeTab === 'managers') {
+        setManagers(filtered);
+      } else {
+        setEmployees(filtered);
+      }
       setTotal(data.total || 0);
 
       // Always fetch managers list for dropdown
       const mgrRes = await adminAPI.getManagers();
-      setManagers(mgrRes.data.managers || []);
+      setManagersDropdown(mgrRes.data.managers || []);
     } catch { toast.error('Failed to load data'); }
     finally { setLoading(false); }
   };
@@ -189,7 +188,7 @@ export default function AdminEmployees() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap justify-end">
-            {pendingCount > 0 && activeTab === 'employees' && (
+            {pendingCount > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/20">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                 <span className="text-amber-500 text-xs font-black uppercase tracking-widest">{pendingCount} Pending</span>
@@ -204,7 +203,6 @@ export default function AdminEmployees() {
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
             </div>
-            {activeTab === 'employees' && (
               <>
                 <select className="input-field py-2.5 w-32 text-sm" value={filterDesignation} onChange={e => setFilterDesignation(e.target.value)}>
                   <option value="">All Roles</option>
@@ -217,7 +215,6 @@ export default function AdminEmployees() {
                   <option value="pending">Pending</option>
                 </select>
               </>
-            )}
           </div>
         </div>
 
@@ -250,10 +247,10 @@ export default function AdminEmployees() {
                 <tr>
                   <th className="px-6 py-4">Employee</th>
                   <th className="px-6 py-4">Dept / Designation</th>
-                  {activeTab === 'employees' && <th className="px-6 py-4">Manager</th>}
+                  <th className="px-6 py-4">Manager</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Online</th>
-                  {activeTab === 'employees' && <th className="px-6 py-4">Verified</th>}
+                  <th className="px-6 py-4">Verified</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -297,22 +294,20 @@ export default function AdminEmployees() {
                         )}
                       </div>
                     </td>
-                    {activeTab === 'employees' && (
-                      <td className="px-6 py-4">
-                        {emp.manager ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-[10px] font-black uppercase">
-                              {typeof emp.manager === 'object' ? emp.manager.name?.[0] : '?'}
-                            </div>
-                            <span className="text-[var(--text-muted)] text-[10px] font-bold">
-                              {typeof emp.manager === 'object' ? emp.manager.name : 'Assigned'}
-                            </span>
+                    <td className="px-6 py-4">
+                      {emp.manager ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-[10px] font-black uppercase">
+                            {typeof emp.manager === 'object' ? emp.manager.name?.[0] : '?'}
                           </div>
-                        ) : (
-                          <span className="text-[var(--text-muted)] text-[10px] opacity-50">—</span>
-                        )}
-                      </td>
-                    )}
+                          <span className="text-[var(--text-muted)] text-[10px] font-bold">
+                            {typeof emp.manager === 'object' ? emp.manager.name : 'Assigned'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[var(--text-muted)] text-[10px] opacity-50">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       {emp.isBlocked ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest border border-red-500/20">
@@ -344,22 +339,20 @@ export default function AdminEmployees() {
                         )}
                       </div>
                     </td>
-                    {activeTab === 'employees' && (
-                      <td className="px-6 py-4">
-                        {emp.isApproved ? (
-                          <div className="flex items-center gap-1.5 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
-                            <CheckCircle className="w-3.5 h-3.5" /> Approved
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-amber-500 text-[10px] font-black uppercase tracking-widest">
-                            <Clock className="w-3.5 h-3.5" /> Pending
-                          </div>
-                        )}
-                      </td>
-                    )}
+                    <td className="px-6 py-4">
+                      {emp.isApproved ? (
+                        <div className="flex items-center gap-1.5 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
+                          <CheckCircle className="w-3.5 h-3.5" /> Approved
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-amber-500 text-[10px] font-black uppercase tracking-widest">
+                          <Clock className="w-3.5 h-3.5" /> Pending
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {activeTab === 'employees' && !emp.isApproved && (
+                        {!emp.isApproved && (
                           <button onClick={() => handleApprove(emp._id, emp.name)} disabled={actionLoading[emp._id + '_approve']}
                             className="w-9 h-9 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white transition-all duration-300 flex items-center justify-center border border-emerald-500/20 disabled:opacity-50" title="Approve">
                             {actionLoading[emp._id + '_approve'] ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <UserCheck className="w-4 h-4" />}
@@ -388,7 +381,7 @@ export default function AdminEmployees() {
         </div>
 
         {/* Pagination */}
-        {activeTab === 'employees' && total > 15 && (
+        {total > 15 && (
           <div className="flex items-center justify-center gap-6 py-4">
             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary px-6 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-40">Prev</button>
             <div className="flex items-center gap-2">
@@ -525,7 +518,7 @@ export default function AdminEmployees() {
                       </label>
                       <select className="input-field" value={editForm.manager} onChange={e => setEditForm(p => ({ ...p, manager: e.target.value }))}>
                         <option value="">— No Manager —</option>
-                        {managers.map(m => (
+                        {managersDropdown.map(m => (
                           <option key={m._id} value={m._id}>{m.name} ({m.designation || 'Manager'})</option>
                         ))}
                       </select>
