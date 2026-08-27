@@ -92,11 +92,11 @@ export default function AdminDashboard() {
               Real-time Field Analytics & Vector Intelligence
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <a href="/admin/tasks" className="bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] text-[var(--text-main)] border border-[var(--border-color)] py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+              <a href="/admin/tasks" className="w-full sm:w-auto justify-center bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] text-[var(--text-main)] border border-[var(--border-color)] py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95">
               <ClipboardList className="w-4 h-4 text-violet-500" /> Dispatch Tasks
             </a>
-            <a href="/admin/leaves" className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary-600/20">
+            <a href="/admin/leaves" className="w-full sm:w-auto justify-center bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary-600/20">
               <Calendar className="w-4 h-4" /> Workforce Leave
             </a>
           </div>
@@ -104,31 +104,31 @@ export default function AdminDashboard() {
 
         {/* Stats row with Charts */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {[...Array(4)].map((_, i) => <div key={i} className="h-48 rounded-3xl bg-[var(--bg-card)] animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {statCards.map((c, i) => (
-              <div key={i} className="glass-card p-6 border-[var(--border-color)] flex flex-col gap-6 group hover:border-primary-500/30 transition-all duration-500 overflow-hidden relative">
+              <div key={i} className="glass-card p-4 sm:p-6 border-[var(--border-color)] flex flex-col gap-4 sm:gap-6 group hover:border-primary-500/30 transition-all duration-500 overflow-hidden relative">
                  <div className="absolute top-0 right-0 p-4 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
                     <c.icon className="w-24 h-24 rotate-12" />
                  </div>
                  <div className="flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-3">
-                       <div className={`w-11 h-11 rounded-2xl ${c.bg} border border-[var(--border-color)] flex items-center justify-center shadow-inner`}>
-                          <c.icon className={`w-5 h-5 ${c.color}`} />
+                       <div className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl ${c.bg} border border-[var(--border-color)] flex items-center justify-center shadow-inner`}>
+                          <c.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${c.color}`} />
                        </div>
-                       <span className="text-[var(--text-main)] font-black text-[10px] uppercase tracking-[0.2em]">{c.label}</span>
+                       <span className="text-[var(--text-main)] font-black text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em]">{c.label}</span>
                     </div>
                     <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} {c.total ? `/ ${c.total}` : ''}</span>
                  </div>
                  
                  {c.chartData ? (
-                   <div className="h-36 relative z-10">
+                   <div className="h-24 sm:h-36 relative z-10">
                       <ResponsiveContainer width="100%" height="100%">
                          <PieChart>
-                            <Pie data={c.chartData} innerRadius={42} outerRadius={55} paddingAngle={4} dataKey="value" stroke="none">
+                            <Pie data={c.chartData} innerRadius="65%" outerRadius="90%" paddingAngle={4} dataKey="value" stroke="none">
                                {c.chartData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
                             </Pie>
                          </PieChart>

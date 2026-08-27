@@ -257,7 +257,7 @@ export default function AdminLiveMap() {
 
   return (
     <AdminLayout>
-      <div className="p-4 lg:p-6 space-y-6 max-w-[1800px] mx-auto h-[calc(100vh-80px)] flex flex-col">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6 max-w-[1800px] mx-auto h-[calc(100vh-140px)] lg:h-[calc(100vh-80px)] flex flex-col">
         {/* Header & Search */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
