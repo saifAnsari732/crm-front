@@ -37,9 +37,7 @@ export default function AdminLayout({ children }) {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
         <div className="p-6 border-b border-[var(--border-color)]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center shadow-glow">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white p-1"><img src="/images/kisanLogo.jpg" alt="Logo" className="w-full h-full object-contain" /></div>
             <div>
               <p className="font-bold text-[var(--text-main)] text-sm">Kisanteam CRM</p>
               <p className="text-[var(--accent-safe)] text-xs font-medium">Admin Panel</p>

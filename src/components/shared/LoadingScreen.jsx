@@ -6,11 +6,7 @@ export default function LoadingScreen() {
       <div className="flex flex-col items-center gap-6">
         <div className="relative w-16 h-16">
           <div className="absolute inset-0 rounded-2xl bg-primary-600/30 animate-ping" />
-          <div className="relative w-16 h-16 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-            </svg>
-          </div>
+          <div className="relative w-16 h-16 rounded-2xl bg-white overflow-hidden shadow-glow p-2"><img src="/images/kisanLogo.jpg" alt="Logo" className="w-full h-full object-contain" /></div>
         </div>
         <div className="flex gap-1.5">
           {[0,1,2].map(i => (

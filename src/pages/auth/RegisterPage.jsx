@@ -35,9 +35,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-2xl bg-primary-600 flex items-center justify-center shadow-glow">
-              <Zap className="w-6 h-6 text-white" />
-            </div>
+            <div className="w-16 h-16 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white p-1 mx-auto"><img src="/images/kisanLogo.jpg" alt="Logo" className="w-full h-full object-contain" /></div>
             <span className="text-2xl font-bold text-[var(--text-main)]">Kisanteam CRM</span>
           </div>
           <p className="text-[var(--text-muted)] text-sm">Create your employee account</p>
