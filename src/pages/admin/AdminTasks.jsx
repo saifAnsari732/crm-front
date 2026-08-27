@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { taskAPI, adminAPI } from '../../services/api.service';
-import { ClipboardList, Plus, Search, Calendar, User, Clock, AlertCircle, CheckCircle, Navigation, MapPin } from 'lucide-react';
+import { ClipboardList, Plus, Search, Calendar, User, Clock, AlertCircle, CheckCircle, Navigation, MapPin, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdminTasks() {
@@ -51,6 +51,17 @@ export default function AdminTasks() {
       fetchTasks();
     } catch (err) {
       toast.error('Failed to assign task');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    try {
+      await taskAPI.delete(id);
+      toast.success('Task deleted successfully');
+      fetchTasks();
+    } catch {
+      toast.error('Failed to delete task');
     }
   };
 
@@ -219,6 +230,9 @@ export default function AdminTasks() {
                       }`}>
                         {task.status}
                       </span>
+                      <button onClick={() => handleDelete(task._id)} className="ml-auto text-red-500 hover:text-red-600 transition-colors bg-red-500/10 p-1.5 rounded-lg" title="Delete Task">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                     <h3 className="text-[var(--text-main)] font-black text-lg leading-tight group-hover:text-primary-400 transition-colors">{task.title}</h3>
                   </div>

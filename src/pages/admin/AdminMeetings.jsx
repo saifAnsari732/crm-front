@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { meetingAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Search, Users, X } from 'lucide-react';
+import { Search, Users, X, Trash2 } from 'lucide-react';
 
 const statusColor = { completed: 'badge-green', pending: 'badge-yellow', scheduled: 'badge-blue', 'follow-up': 'badge-yellow', cancelled: 'badge-red' };
 
@@ -29,6 +29,15 @@ export function AdminMeetings() {
       setTotal(data.total || 0);
     } catch { toast.error('Failed'); }
     finally { setLoading(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this meeting?")) return;
+    try {
+      await meetingAPI.delete(id);
+      toast.success("Meeting deleted successfully");
+      fetchMeetings();
+    } catch { toast.error("Failed to delete meeting"); }
   };
 
   return (

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { expenseAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Search, CheckCircle, XCircle, Filter, Receipt, Image as ImageIcon, X } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Filter, Receipt, Image as ImageIcon, X, Trash2 } from 'lucide-react';
 
 const CATEGORY_EMOJI = { fuel: '⛽', food: '🍽️', hotel: '🏨', travel: '🚗', misc: '📦' };
 
@@ -45,6 +45,15 @@ export default function AdminExpenses() {
   };
 
   const statusColor = { pending: 'badge-yellow', approved: 'badge-green', rejected: 'badge-red' };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this expense?")) return;
+    try {
+      await expenseAPI.delete(id);
+      toast.success("Expense deleted successfully");
+      fetchExpenses();
+    } catch { toast.error("Failed to delete expense"); }
+  };
 
   return (
     <AdminLayout>

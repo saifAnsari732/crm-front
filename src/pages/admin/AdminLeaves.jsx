@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { leaveAPI } from '../../services/api.service';
-import { Calendar, CheckCircle, XCircle, Clock, User, FileText, ChevronRight, Search } from 'lucide-react';
+import { Calendar, CheckCircle, XCircle, Clock, User, FileText, ChevronRight, Search, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdminLeaves() {
@@ -41,6 +41,17 @@ export default function AdminLeaves() {
     } catch {
       toast.error('Failed to update leave status');
     }
+  };
+
+  const handleDelete = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this leave request?")) return;
+    try {
+      await leaveAPI.delete(id);
+      toast.success("Leave deleted successfully");
+      if(selectedLeave?._id === id) setSelectedLeave(null);
+      fetchLeaves();
+    } catch { toast.error("Failed to delete leave"); }
   };
 
   return (

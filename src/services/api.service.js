@@ -95,6 +95,7 @@ export const meetingAPI = {
   getMy: (params) => API.get('/meetings/my', { params }),
   update: (id, data) => API.put(`/meetings/${id}`, data),
   getAll: (params) => API.get('/meetings/all', { params }),
+  delete: (id) => API.delete(`/meetings/${id}`),
 };
 
 // ─── Expenses ─────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ export const expenseAPI = {
   getMy: (params) => API.get('/expenses/my', { params }),
   getAll: (params) => API.get('/expenses/all', { params }),
   approve: (id, data) => API.put(`/expenses/${id}/approve`, data),
+  delete: (id) => API.delete(`/expenses/${id}`),
 };
 
 // ─── Admin ────────────────────────────────────────────────────────────────
@@ -161,6 +163,7 @@ export const leaveAPI = {
   getMy: () => API.get('/leaves/my'),
   getAll: (params) => API.get('/leaves/all', { params }),
   updateStatus: (id, data) => API.patch(`/leaves/${id}/status`, data),
+  delete: (id) => API.delete(`/leaves/${id}`),
 };
 
 // ─── Tasks ────────────────────────────────────────────────────────────────
@@ -169,6 +172,7 @@ export const taskAPI = {
   getAll: (params) => API.get('/tasks/all', { params }),
   getMy: (params) => API.get('/tasks/my', { params }),
   updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
+  delete: (id) => API.delete(`/tasks/${id}`),
 };
 
 // ─── Leads ────────────────────────────────────────────────────────────────

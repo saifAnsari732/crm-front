@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { adminAPI } from '../../services/api.service';
+import { adminAPI, employeeAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import {
   Search, Users, UserCheck, UserX, Shield, ShieldOff, CheckCircle, Clock,
-  AlertTriangle, Activity, Edit2, X, MapPin, IndianRupee, Briefcase, User
+  AlertTriangle, Activity, Edit2, X, MapPin, IndianRupee, Briefcase, User, Trash2
 } from 'lucide-react';
 
 const DESIGNATIONS = ['ASM', 'SO', 'Sr SO', 'Jr SO', 'TSI', 'DSE'];
@@ -159,6 +159,16 @@ export default function AdminEmployees() {
 
   // Rows to display based on active tab
   const rows = activeTab === 'managers' ? managers : employees;
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await employeeAPI.delete(id);
+      toast.success("User deleted successfully");
+      fetchEmployees();
+      fetchManagers();
+    } catch { toast.error("Failed to delete user"); }
+  };
 
   return (
     <AdminLayout>
@@ -362,6 +372,9 @@ export default function AdminEmployees() {
                           title={emp.isBlocked ? 'Unblock' : 'Block'}>
                           {actionLoading[emp._id + '_block'] ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : emp.isBlocked ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
                         </button>
+                          <button onClick={() => handleDelete(emp._id)} className="w-9 h-9 rounded-xl bg-red-900/40 hover:bg-red-500 text-red-500 hover:text-white transition-all duration-300 flex items-center justify-center border border-red-500/20" title="Delete User">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                       </div>
                     </td>
                   </tr>

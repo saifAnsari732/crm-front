@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { leadAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Plus, Search, MapPin, Phone, X, MessageCircle, Filter, Users } from 'lucide-react';
+import { Plus, Search, MapPin, Phone, X, MessageCircle, Filter, Users, Trash2 } from 'lucide-react';
 
 export default function AdminLeads() {
   const [leads, setLeads] = useState([]);
@@ -63,6 +63,15 @@ export default function AdminLeads() {
     pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
     completed: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
     'follow-up': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    try {
+      await leadAPI.delete(id);
+      toast.success("Lead deleted successfully");
+      fetchLeads();
+    } catch { toast.error("Failed to delete lead"); }
   };
 
   return (
