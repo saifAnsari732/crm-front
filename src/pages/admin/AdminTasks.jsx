@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 
 export default function AdminTasks() {
   const [tasks, setTasks] = useState([]);
+  const [empFilter, setEmpFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -203,7 +205,14 @@ export default function AdminTasks() {
               <p className="text-[var(--text-muted)] text-sm mt-2 max-w-sm">No active directives found in the operational queue. Start by assigning a task to your field team.</p>
             </div>
           ) : (
-            tasks.map((task) => (
+            tasks.filter(t => {
+              if (empFilter && t.employee?._id !== empFilter) return false;
+              if (dateFilter) {
+                const taskDate = new Date(t.dueDate).toISOString().split("T")[0];
+                if (taskDate !== dateFilter) return false;
+              }
+              return true;
+            }).map((task) => (
               <div key={task._id} className="group glass-card p-4 sm:p-6 border-2 border-transparent hover:border-primary-500/40 transition-all duration-500 shadow-xl hover:shadow-primary-500/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500">
                    <ClipboardList className="w-32 h-32 rotate-12" />
