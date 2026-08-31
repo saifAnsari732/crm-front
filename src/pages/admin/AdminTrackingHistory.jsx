@@ -486,7 +486,7 @@ export default function AdminTrackingHistory() {
               </div>
             )}
 
-            <div className="flex-1 glass-card overflow-hidden relative border-[var(--border-color)]">
+            <div className="flex-1 min-h-[400px] glass-card overflow-hidden relative border-[var(--border-color)]">
               {sessionLoading && (
                 <div className="absolute inset-0 z-[1000] bg-[var(--bg-main)]/40 backdrop-blur-[2px] flex items-center justify-center">
                   <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
