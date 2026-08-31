@@ -402,7 +402,7 @@ export default function AdminTrackingHistory() {
 
         <div className="flex flex-col xl:flex-row gap-6 xl:h-[calc(100vh-180px)] xl:min-h-[600px]">
           {/* 1. Left Sidebar: Sessions */}
-          <div className="w-full xl:w-80 flex flex-col gap-4 overflow-hidden min-h-[18rem] xl:min-h-0 shrink-0">
+          <div className="w-full xl:w-80 flex flex-col gap-4 h-[300px] xl:h-full overflow-hidden shrink-0">
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-4">
               {loading ? (
                 [1, 2, 3, 4].map(i => <div key={i} className="h-28 rounded-3xl bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
@@ -486,14 +486,14 @@ export default function AdminTrackingHistory() {
               </div>
             )}
 
-            <div className="flex-1 min-h-[400px] glass-card overflow-hidden relative border-[var(--border-color)]">
+            <div className="flex-1 min-h-[400px] glass-card flex flex-col overflow-hidden relative border-[var(--border-color)]">
               {sessionLoading && (
                 <div className="absolute inset-0 z-[1000] bg-[var(--bg-main)]/40 backdrop-blur-[2px] flex items-center justify-center">
                   <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
                 </div>
               )}
               
-              <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }}>
+              <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', minHeight: '400px', width: '100%' }}>
                 <TileLayer
                   attribution='&copy; Google Maps'
                   url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
