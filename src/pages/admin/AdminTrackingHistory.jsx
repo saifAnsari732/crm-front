@@ -400,9 +400,9 @@ export default function AdminTrackingHistory() {
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)] lg:min-h-[600px]">
+        <div className="flex flex-col xl:flex-row gap-6 xl:h-[calc(100vh-180px)] xl:min-h-[600px]">
           {/* 1. Left Sidebar: Sessions */}
-          <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4 overflow-hidden min-h-[18rem] lg:min-h-0 shrink-0">
+          <div className="w-full xl:w-80 flex flex-col gap-4 overflow-hidden min-h-[18rem] xl:min-h-0 shrink-0">
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-4">
               {loading ? (
                 [1, 2, 3, 4].map(i => <div key={i} className="h-28 rounded-3xl bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
@@ -452,7 +452,7 @@ export default function AdminTrackingHistory() {
           </div>
 
           {/* 2. Center Panel: Map & Summary */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] lg:min-h-0 shrink-0">
+          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] xl:min-h-0 shrink-0">
             {/* Quick Summary Bar */}
             {selectedSession && (
               <div className="glass-card p-5 flex flex-col gap-4 border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
@@ -565,7 +565,7 @@ export default function AdminTrackingHistory() {
           </div>
 
           {/* 3. Right Sidebar: Activity Timeline */}
-          <div className="w-full lg:w-80 xl:w-96 flex flex-col glass-card border-[var(--border-color)] overflow-hidden min-h-[400px] lg:min-h-0 shrink-0">
+          <div className="w-full xl:w-96 flex flex-col glass-card border-[var(--border-color)] overflow-hidden min-h-[400px] xl:min-h-0 shrink-0">
             <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)]">
               <h3 className="text-[var(--text-main)] font-black text-sm uppercase tracking-widest flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary-500" /> Timeline
