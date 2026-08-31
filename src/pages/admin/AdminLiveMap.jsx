@@ -295,7 +295,7 @@ export default function AdminLiveMap() {
         <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0 overflow-hidden relative">
 
           {/* Map Panel */}
-          <div className="flex-1 relative flex flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] shadow-2xl" style={{ minHeight: "400px" }}>
+          <div className="flex-1 relative z-0 flex flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] shadow-2xl" style={{ minHeight: "400px" }}>
             <MapContainer center={flyCenter || defaultCenter} zoom={flyZoom || 5} style={{ height: "100%", minHeight: "400px", width: "100%" }} zoomControl={false}>
               <TileLayer attribution="&copy; Google Maps" url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains={["mt0", "mt1", "mt2", "mt3"]} />
               {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
