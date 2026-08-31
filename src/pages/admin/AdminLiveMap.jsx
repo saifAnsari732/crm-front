@@ -301,7 +301,7 @@ export default function AdminLiveMap() {
               {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
 
               {/* Markers */}
-              <MarkerClusterGroup showCoverageOnHover={false} maxClusterRadius={50}>
+
                 {Object.entries(locations).map(([empId, loc]) => {
                   const color = getEmpColor(empId);
                   const empData = employees.find(e => e._id === empId);
@@ -350,7 +350,7 @@ export default function AdminLiveMap() {
                     </Marker>
                   );
                 })}
-              </MarkerClusterGroup>
+
 
               {/* Selected path */}
               {selectedLoc && selectedLoc.path?.length > 1 && (

@@ -425,12 +425,16 @@ export default function AdminTrackingHistory() {
                   }`}
                 >
                   <div className="flex items-center gap-10">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 ${
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 overflow-hidden ${
                       selectedSession?._id === session._id ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
                     }`}>
-                      {session.employee?.name?.[0]}
+                      {session.employee?.avatar ? (
+                        <img src={session.employee.avatar} alt={session.employee.name} className="w-full h-full object-cover" />
+                      ) : (
+                        session.employee?.name?.[0]
+                      )}
                     </div>
-                    <div className="min-w- flex-1">
+                    <div className="min-w-0 flex-1">
                       <p className={`text-[var(--text-main)] font-black text-base tracking-tight group-hover:text-rose-500 transition-colors truncate ${selectedSession?._id === session._id ? 'text-rose-500' : ''}`}>
                         {session.employee?.name}
                       </p>
@@ -506,20 +510,13 @@ export default function AdminTrackingHistory() {
                     {/* Professional Path Styling */}
                     <Polyline
                       positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                      pathOptions={{ color: '#3b82f6', weight: 12, opacity: 0.15 }}
+                      pathOptions={{ color: '#2563eb', weight: 8, opacity: 0.2 }}
                     />
                     <Polyline
                       positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                      pathOptions={{ color: '#3b82f6', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', dashArray: selectedSession.isActive ? '1, 10' : null }}
+                      pathOptions={{ color: '#2563eb', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
                     />
-                    {!selectedSession.isActive && (
-                      <Polyline
-                        positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                        pathOptions={{ color: '#3b82f6', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
-                      />
-                    )}
 
-                    
                     {/* Start/End Markers */}
                     <Marker position={[selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]} icon={startIcon} />
                     {!selectedSession.isActive && (
@@ -540,28 +537,6 @@ export default function AdminTrackingHistory() {
                           </Popup>
                         </Marker>
                       ))}
-
-                    {/* Movement Dots - Filtered for performance and visibility */}
-                    {selectedSession.coordinates
-                      .filter((_, i) => i % Math.max(1, Math.floor(selectedSession.coordinates.length / 100)) === 0)
-                      .map((coord, i) => (
-                      <Marker 
-                        key={`dot-${i}`}
-                        position={[coord.lat, coord.lng]}
-                        icon={L.divIcon({
-                          className: 'path-dot',
-                          html: `<div style="width:8px;height:8px;border-radius:50%;background:#3b82f6;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
-                          iconSize: [8, 8], iconAnchor: [4, 4]
-                        })}
-                      >
-                        <Popup>
-                          <div className="p-1">
-                            <p className="text-[10px] font-black text-primary-500">{new Date(coord.timestamp).toLocaleTimeString()}</p>
-                            <p className="text-[10px] font-bold text-[var(--text-main)]">Speed: {Math.round((coord.speed || 0) * 3.6)} km/h</p>
-                          </div>
-                        </Popup>
-                      </Marker>
-                    ))}
 
                     {/* Live Pulse if active */}
                      {selectedSession.isActive && (
