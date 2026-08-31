@@ -44,21 +44,27 @@ export default function EmployeeLayout({ children }) {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const [tasksRes, leadsRes] = await Promise.all([
+      const [tasksRes, leadsRes, notifsRes] = await Promise.all([
         taskAPI.getMy({ limit: 10 }),
-        leadAPI.getAll({ limit: 10 })
+        leadAPI.getAll({ limit: 10 }),
+        import('../../services/api.service').then(m => m.notificationAPI.getAll())
       ]);
        
-      const pendingTasks = (tasksRes.data.tasks || []).filter(t => t.status !== 'completed').slice(0, 5);
-      const newLeads = (leadsRes.data.leads || []).slice(0, 5);
+      const pendingTasks = (tasksRes.data.tasks || []).filter(t => t.status !== 'completed').slice(0, 3);
+      const newLeads = (leadsRes.data.leads || []).slice(0, 2);
+      const dbNotifs = (notifsRes.data.notifications || []).slice(0, 5);
+
       const items = [
+        ...dbNotifs.map(n => ({ type: n.type || 'alert', title: n.title, date: n.createdAt, data: n, message: n.message })),
         ...pendingTasks.map(t => ({ type: 'task', title: t.title, date: t.dueDate, data: t })),
         ...newLeads.map(l => ({ type: 'lead', title: l.name, date: l.createdAt, data: l }))
       ];
       
+      // Sort by date newest first
+      items.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
       setNotifications(items);
-      setNotificationCount(items.length);
-      console.log("notificatios",leadsRes.data.leads);
+      setNotificationCount(notifsRes.data.unread || items.length);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
     }
@@ -274,20 +280,29 @@ export default function EmployeeLayout({ children }) {
                         <div className={`p-2 rounded-lg flex-shrink-0 ${
                           notif.type === 'task' 
                             ? 'bg-amber-500/20 text-amber-500' 
+                            : notif.type === 'alert' || notif.type === 'system'
+                            ? 'bg-red-500/20 text-red-500'
                             : 'bg-violet-500/20 text-violet-500'
                         }`}>
                           {notif.type === 'task' ? (
                             <ClipboardList className="w-4 h-4" />
+                          ) : notif.type === 'alert' || notif.type === 'system' ? (
+                            <AlertCircle className="w-4 h-4" />
                           ) : (
                             <Users className="w-4 h-4" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[var(--text-main)] text-sm truncate">
+                          <p className={`font-semibold text-sm truncate ${notif.type === 'alert' ? 'text-red-500' : 'text-[var(--text-main)]'}`}>
                             {notif.title}
                           </p>
+                          {notif.message && (
+                            <p className="text-[var(--text-muted)] text-xs mt-0.5 line-clamp-2">
+                              {notif.message}
+                            </p>
+                          )}
                           <p className="text-[var(--text-muted)] text-xs mt-1">
-                            {notif.type === 'task' ? 'Task' : 'Leads'} • {new Date(notif.date).toLocaleDateString()}
+                            {notif.type.toUpperCase()} • {new Date(notif.date).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-2" />
