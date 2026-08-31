@@ -89,7 +89,7 @@ export default function AdminAttendance() {
     
     const days = [];
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-20 sm:h-24 bg-[var(--bg-main)]/30 rounded-2xl border border-dashed border-[var(--border-color)]"></div>);
+      days.push(<div key={`empty-${i}`} className="h-16 sm:h-20 md:h-24 bg-[var(--bg-main)]/30 rounded-xl border border-dashed border-[var(--border-color)]"></div>);
     }
     
     for (let d = 1; d <= daysInMonth; d++) {
@@ -97,33 +97,65 @@ export default function AdminAttendance() {
       const record = empRecords.find(r => r.date === dateStr);
       
       let statusColor = 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)] hover:border-primary-500/30';
-      let icon = null;
+      let dotColor = 'bg-gray-400';
       
       if (record) {
         if (record.status === 'present') {
-          statusColor = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]';
-          icon = <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 opacity-80" />;
+          statusColor = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20';
+          dotColor = 'bg-emerald-500';
         } else if (record.status === 'absent') {
-          statusColor = 'bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20 shadow-[inset_0_0_20px_rgba(239,68,68,0.05)]';
-          icon = <XCircle className="w-4 h-4 sm:w-5 sm:h-5 opacity-80" />;
+          statusColor = 'bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20';
+          dotColor = 'bg-red-500';
         } else if (record.status === 'leave') {
-          statusColor = 'bg-blue-500/10 border-blue-500/30 text-blue-500 hover:bg-blue-500/20 shadow-[inset_0_0_20px_rgba(59,130,246,0.05)]';
-          icon = <Calendar className="w-4 h-4 sm:w-5 sm:h-5 opacity-80" />;
+          statusColor = 'bg-blue-500/10 border-blue-500/30 text-blue-500 hover:bg-blue-500/20';
+          dotColor = 'bg-blue-500';
         }
       } else if (new Date(year, month, d) > new Date()) {
-        statusColor = 'bg-[var(--bg-main)] border-[var(--border-color)] opacity-50';
+        statusColor = 'bg-[var(--bg-main)] border-[var(--border-color)] opacity-40';
       }
 
+      const inTime = record?.checkIn ? new Date(record.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
+      const outTime = record?.checkOut ? new Date(record.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
+
       days.push(
-        <div key={d} className={`h-20 sm:h-24 rounded-2xl border transition-all duration-300 flex flex-col p-2 sm:p-3 relative group overflow-hidden ${statusColor}`}>
-           <div className="absolute top-0 right-0 p-2 sm:p-3 opacity-10 group-hover:scale-125 transition-transform duration-500">{icon}</div>
-           <span className="text-sm sm:text-base font-black relative z-10">{d}</span>
-           {record && (
-             <div className="mt-auto relative z-10">
-               <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest block truncate">{record.status}</span>
-               {record.totalWorkHours > 0 && <span className="text-[7px] sm:text-[8px] font-bold opacity-80 mt-0.5 block">{record.totalWorkHours.toFixed(1)} hrs</span>}
-             </div>
-           )}
+        <div key={d} className={`h-16 sm:h-20 md:h-24 rounded-xl border transition-all duration-200 flex flex-col p-1.5 sm:p-2 relative overflow-hidden cursor-default ${statusColor}`}>
+          {/* Date number + status dot */}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs sm:text-sm font-black leading-none">{d}</span>
+            {record && <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${dotColor} flex-shrink-0`} />}
+          </div>
+          {/* Status label - visible on md+ */}
+          {record && (
+            <span className="hidden md:block text-[7px] font-black uppercase tracking-widest opacity-70 mb-0.5 truncate">{record.status}</span>
+          )}
+          {/* IN / OUT times */}
+          {record && (
+            <div className="mt-auto space-y-0.5">
+              {inTime && (
+                <div className="flex items-center gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0 hidden sm:block" />
+                  <span className="text-[8px] sm:text-[9px] font-black text-emerald-600 leading-none truncate">
+                    <span className="hidden sm:inline">IN </span>{inTime}
+                  </span>
+                </div>
+              )}
+              {outTime ? (
+                <div className="flex items-center gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0 hidden sm:block" />
+                  <span className="text-[8px] sm:text-[9px] font-black text-red-500 leading-none truncate">
+                    <span className="hidden sm:inline">OUT </span>{outTime}
+                  </span>
+                </div>
+              ) : record?.status === 'present' ? (
+                <div className="flex items-center gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0 hidden sm:block" />
+                  <span className="text-[8px] sm:text-[9px] font-black text-amber-500 leading-none">
+                    <span className="hidden sm:inline">LIVE</span><span className="sm:hidden">●</span>
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       );
     }
@@ -245,49 +277,52 @@ export default function AdminAttendance() {
           </div>
         </div>
       </div>
-
       {/* Calendar Modal */}
       {selectedEmp && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-card)] rounded-[2rem] w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl border border-[var(--border-color)] animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-[var(--bg-card)] rounded-t-[2rem] sm:rounded-[2rem] w-full sm:max-w-4xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl border border-[var(--border-color)]">
             {/* Modal Header */}
-            <div className="p-6 md:p-8 bg-gradient-to-br from-primary-600/10 to-violet-600/10 border-b border-[var(--border-color)] relative">
-              <button onClick={() => setSelectedEmp(null)} className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-xl transition-colors">
+            <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-primary-600/10 to-violet-600/10 border-b border-[var(--border-color)] relative flex items-center gap-3 sm:gap-6">
+              <button onClick={() => setSelectedEmp(null)} className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 hover:bg-white/10 rounded-xl transition-colors">
                 <X className="w-5 h-5 text-[var(--text-main)]" />
               </button>
               
-              <div className="flex items-center gap-6">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-[var(--bg-card)] uppercase">
-                  {selectedEmp.name?.[0]}
-                </div>
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-[var(--text-main)] mb-1 tracking-tight">{selectedEmp.name}</h2>
-                  <p className="text-[var(--text-muted)] text-sm font-bold uppercase tracking-widest">{selectedEmp.employeeId} ? {selectedEmp.department || 'Field Staff'}</p>
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl uppercase flex-shrink-0">
+                {selectedEmp.name?.[0]}
+              </div>
+              <div>
+                <h2 className="text-lg sm:text-2xl font-black text-[var(--text-main)] tracking-tight">{selectedEmp.name}</h2>
+                <p className="text-[var(--text-muted)] text-[10px] sm:text-sm font-bold uppercase tracking-widest">{selectedEmp.employeeId} • {selectedEmp.department || 'Field Staff'}</p>
+                {/* Legend */}
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="flex items-center gap-1 text-[9px] font-black text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>IN</span>
+                  <span className="flex items-center gap-1 text-[9px] font-black text-red-500"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"/>OUT</span>
+                  <span className="flex items-center gap-1 text-[9px] font-black text-amber-500"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>LIVE</span>
                 </div>
               </div>
             </div>
 
             {/* Calendar Content */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 custom-scrollbar">
                {/* Calendar Header / Navigation */}
-               <div className="flex items-center justify-between mb-8">
-                 <h3 className="text-xl sm:text-2xl font-black text-[var(--text-main)] uppercase tracking-widest flex items-center gap-3">
+               <div className="flex items-center justify-between mb-4 sm:mb-6">
+                 <h3 className="text-base sm:text-xl font-black text-[var(--text-main)] uppercase tracking-widest">
                    {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
                  </h3>
                  <div className="flex items-center gap-2">
-                   <button onClick={prevMonth} className="p-2 sm:p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] hover:bg-primary-500 hover:text-white hover:border-primary-500 transition-colors">
-                     <ChevronLeft className="w-5 h-5" />
+                   <button onClick={prevMonth} className="p-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] hover:bg-primary-500 hover:text-white hover:border-primary-500 transition-colors">
+                     <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                    </button>
-                   <button onClick={nextMonth} className="p-2 sm:p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] hover:bg-primary-500 hover:text-white hover:border-primary-500 transition-colors">
-                     <ChevronRight className="w-5 h-5" />
+                   <button onClick={nextMonth} className="p-2 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] hover:bg-primary-500 hover:text-white hover:border-primary-500 transition-colors">
+                     <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
                    </button>
                  </div>
                </div>
 
                {/* Weekdays */}
-               <div className="grid grid-cols-7 gap-2 sm:gap-4 mb-4">
-                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                   <div key={d} className="text-center text-[10px] sm:text-xs font-black text-[var(--text-muted)] uppercase tracking-widest py-2">
+               <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+                 {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                   <div key={d} className="text-center text-[9px] sm:text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest py-1 sm:py-2">
                      {d}
                    </div>
                  ))}
@@ -295,19 +330,19 @@ export default function AdminAttendance() {
 
                {/* Calendar Grid */}
                {calLoading ? (
-                 <div className="h-64 flex items-center justify-center">
-                    <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                 <div className="h-48 flex items-center justify-center">
+                    <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
                  </div>
                ) : (
-                 <div className="grid grid-cols-7 gap-2 sm:gap-4">
+                 <div className="grid grid-cols-7 gap-1 sm:gap-2">
                    {renderCalendar()}
                  </div>
                )}
             </div>
             
             {/* Modal Footer */}
-            <div className="p-6 border-t border-[var(--border-color)] flex justify-end">
-               <button onClick={() => setSelectedEmp(null)} className="btn-secondary py-3 px-8 text-xs font-black uppercase tracking-widest">Close</button>
+            <div className="p-4 sm:p-6 border-t border-[var(--border-color)] flex justify-end">
+               <button onClick={() => setSelectedEmp(null)} className="btn-secondary py-2.5 sm:py-3 px-6 sm:px-8 text-xs font-black uppercase tracking-widest">Close</button>
             </div>
           </div>
         </div>
