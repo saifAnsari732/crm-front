@@ -118,8 +118,9 @@ const processTimeline = (session) => {
     
     const timeDiff = (new Date(c.timestamp) - new Date(prev.timestamp)) / (1000 * 60); // minutes
     
-    // Stop detection: if time diff is large or speed is very low for a while
-    if (timeDiff > 5) {
+    // Stop detection: Only register a stop if the time gap is significant (15+ mins)
+    // This prevents GPS throttling/battery optimization from creating dozens of fake stops
+    if (timeDiff > 15) {
       // If we were traveling, close that segment
       if (currentSegment.length > 0) {
           const dist = currentSegment.reduce((acc, curr, idx) => {
@@ -525,7 +526,7 @@ export default function AdminTrackingHistory() {
 
                     {/* Stop Markers */}
                     {processTimeline(selectedSession)
-                      .filter(e => e.type === 'Stop')
+                      .filter(e => e.type === 'Stop' && e.duration >= 15) // Only show significant stops on map
                       .map((stop, i) => (
                         <Marker key={`stop-${i}`} position={[stop.lat, stop.lng]} icon={stopIcon}>
                           <Popup>
