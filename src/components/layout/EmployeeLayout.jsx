@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { taskAPI,leadAPI } from "../../services/api.service";
+import toast from 'react-hot-toast';
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -66,7 +67,33 @@ export default function EmployeeLayout({ children }) {
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    
+    // Listen for high-priority socket alerts (like no-movement)
+    const handleAppAlert = (e) => {
+      const data = e.detail;
+      toast(
+        (t) => (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-red-500">
+              <AlertCircle className="w-8 h-8 animate-pulse" />
+              <p className="font-black text-lg">{data.title || '⚠️ ALERT'}</p>
+            </div>
+            <p className="font-bold text-sm text-[var(--text-main)]">{data.message}</p>
+            <button onClick={() => toast.dismiss(t.id)} className="mt-2 bg-red-500 text-white rounded-lg px-4 py-2 font-bold uppercase text-xs w-full text-center hover:bg-red-600 transition-colors">
+              I Understand / Will Move
+            </button>
+          </div>
+        ),
+        { duration: 15000, style: { border: '2px solid red', padding: '16px', borderRadius: '16px', background: 'var(--bg-card)', boxShadow: '0 10px 40px -10px rgba(239,68,68,0.5)' } }
+      );
+    };
+    
+    window.addEventListener('app_alert', handleAppAlert);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('app_alert', handleAppAlert);
+    };
   }, [fetchNotifications]);
 
   return (

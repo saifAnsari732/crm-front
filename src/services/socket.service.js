@@ -82,6 +82,35 @@ const stopHeartbeat = () => {
   }
 };
 
+// Web Audio API based loud alert sound
+const playAlertSound = () => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    // Play 5 loud piercing beeps
+    for (let i = 0; i < 5; i++) {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(800, ctx.currentTime + i * 0.4); // 800Hz (loud and piercing)
+      
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime + i * 0.4); // Max volume
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.4 + 0.2);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start(ctx.currentTime + i * 0.4);
+      osc.stop(ctx.currentTime + i * 0.4 + 0.2);
+    }
+  } catch (err) {
+    console.error("Audio play failed:", err);
+  }
+};
+
 /**
  * Initialize Socket.IO with enhanced reliability
  */
@@ -124,13 +153,41 @@ export const initSocket = (token) => {
     console.error('⚠️ Socket server error:', err);
   });
 
-  // Handle heartbeat from server
-  socket.on('heartbeat_ack', (data) => {
-    // Heartbeat acknowledged, connection is healthy
+  // ─── ALERT: No-movement / Admin alert with LOUD sound ──────────────────────
+  socket.on('alert', (data) => {
+    // 1. Play loud beep sound using Web Audio API
+    playAlertSound();
+
+    // 2. Browser push notification (if permission granted)
+    if (Notification.permission === 'granted') {
+      const n = new Notification(data.title || '⚠️ Movement Alert', {
+        body: data.message || 'You have been stationary. Please move!',
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: 'movement-alert',
+        requireInteraction: true,  // stays on screen until dismissed
+        vibrate: [300, 100, 300, 100, 300],
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          new Notification(data.title || '⚠️ Movement Alert', {
+            body: data.message,
+            requireInteraction: true,
+          });
+        }
+      });
+    }
+
+    // 3. Show in-app toast-like banner (dispatch custom event for React to catch)
+    window.dispatchEvent(new CustomEvent('app_alert', { detail: data }));
+    console.log('🚨 Alert received:', data);
   });
- 
+
   return socket;
 };
+
 
 export const getSocket = () => socket;
 
