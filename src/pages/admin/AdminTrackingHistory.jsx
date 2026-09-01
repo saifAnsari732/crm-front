@@ -518,12 +518,9 @@ export default function AdminTrackingHistory() {
                       pathOptions={{ color: '#2563eb', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
                     />
 
-                    {/* Start/End Markers */}
+                    {/* Start Marker */}
                     <Marker position={[selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]} icon={startIcon} />
-                    {!selectedSession.isActive && (
-                      <Marker position={[selectedSession.coordinates[selectedSession.coordinates.length - 1].lat, selectedSession.coordinates[selectedSession.coordinates.length - 1].lng]} icon={endIcon} />
-                    )}
-
+                    
                     {/* Stop Markers */}
                     {processTimeline(selectedSession)
                       .filter(e => e.type === 'Stop' && e.duration >= 15) // Only show significant stops on map
@@ -539,25 +536,29 @@ export default function AdminTrackingHistory() {
                         </Marker>
                       ))}
 
-                    {/* Live Pulse if active */}
-                     {selectedSession.isActive && (
-                      <Marker 
-                        position={[selectedSession.coordinates[selectedSession.coordinates.length - 1].lat, selectedSession.coordinates[selectedSession.coordinates.length - 1].lng]}
-                        icon={L.divIcon({
-                          className: 'live-pulse-marker',
-                          html: `
-                            <div style="position:relative;width:34px;height:34px;">
-                              <div class="pulse-ring" style="top:-7px;left:-7px;width:48px;height:48px;"></div>
-                              <div style="position:relative;z-index:2;width:34px;height:34px;border-radius:50%;background:#3b82f6;border:3px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:14px;box-shadow:0 4px 12px rgba(59,130,246,0.5);">
-                                ${selectedSession.employee?.name?.[0].toUpperCase()}
-                                <div class="inner-pulse" style="position:absolute;width:8px;height:8px;border-radius:50%;background:#fff;top:-2px;right:-2px;border:2px solid #3b82f6;"></div>
-                              </div>
-                            </div>`,
-                          iconSize: [34, 34],
-                          iconAnchor: [17, 17]
-                        })}
-                      />
-                    )}
+                    {/* End / Avatar Marker (Shows profile picture) */}
+                    <Marker 
+                      position={[selectedSession.coordinates[selectedSession.coordinates.length - 1].lat, selectedSession.coordinates[selectedSession.coordinates.length - 1].lng]}
+                      icon={L.divIcon({
+                        className: 'custom-avatar-marker',
+                        html: `
+                          <div style="position:relative;width:40px;height:40px;">
+                            ${selectedSession.isActive ? '<div class="pulse-ring" style="position:absolute;top:-6px;left:-6px;width:52px;height:52px;border-radius:50%;background:#3b82f633;animation:trkPulse 2s infinite;"></div>' : ''}
+                            <div style="position:relative;z-index:2;width:40px;height:40px;border-radius:50%;background:${selectedSession.isActive ? '#3b82f6' : '#ef4444'};border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                              ${selectedSession.employee?.avatar 
+                                ? `<img src="${selectedSession.employee.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<div style=&quot;width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;&quot;>${selectedSession.employee?.name?.[0].toUpperCase()}</div>'" />`
+                                : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px;">${selectedSession.employee?.name?.[0].toUpperCase()}</div>`
+                              }
+                              ${selectedSession.isActive 
+                                ? `<div class="inner-pulse" style="position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:-2px;right:-2px;border:2.5px solid #3b82f6;"></div>` 
+                                : `<div style="position:absolute;bottom:-6px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;padding:2px 6px;border-radius:6px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);">OUT</div>`
+                              }
+                            </div>
+                          </div>`,
+                        iconSize: [40, 40],
+                        iconAnchor: [20, 20]
+                      })}
+                    />
 
                   </>
                 )}
