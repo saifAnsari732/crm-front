@@ -7,7 +7,7 @@ const AuthContext = createContext();
 
 const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000; // Refresh token every 5 minutes
 let tokenRefreshInterval = null;
-
+// SBDDBCKSVBBSV
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);

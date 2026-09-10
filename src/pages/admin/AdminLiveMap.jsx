@@ -295,7 +295,7 @@ export default function AdminLiveMap() {
         <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0 overflow-hidden relative">
 
           {/* Map Panel */}
-          <div className="flex-1 relative z-0 flex flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] shadow-2xl" style={{ minHeight: "400px" }}>
+          <div className="flex-1 relative z-0 flex flex-col overflow-hidden rounded-xl border border-[var(--border-color)] shadow-2xl" style={{ minHeight: "400px" }}>
             <MapContainer center={flyCenter || defaultCenter} zoom={flyZoom || 5} style={{ height: "100%", minHeight: "400px", width: "100%" }} zoomControl={false}>
               <TileLayer attribution="&copy; Google Maps" url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains={["mt0", "mt1", "mt2", "mt3"]} />
               {flyCenter && <FlyTo center={flyCenter} zoom={flyZoom} />}
@@ -431,7 +431,7 @@ export default function AdminLiveMap() {
             {/* Mobile: show team list button */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden absolute bottom-6 right-3 z-[500] flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-black uppercase tracking-widest transition-all"
+              className="lg:hidden absolute bottom-16 right-3 z-[500] flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white px-4 py-2.5 rounded-2xl shadow-xl text-xs font-black uppercase tracking-widest transition-all"
             >
               <Users className="w-4 h-4" />
               Team ({filteredEmployees.length})
@@ -452,10 +452,10 @@ export default function AdminLiveMap() {
             </div>
 
             {/* Header */}
-            <div className="p-3 sm:p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)] flex items-center justify-between flex-shrink-0">
+            <div className="p-3 sm:p-3 border-b border-[var(--border-color)] bg-[var(--bg-card)] flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-[var(--text-main)] font-black text-xs uppercase tracking-widest">Team Directory</h3>
-                <p className="text-[9px] text-[var(--text-muted)] mt-0.5">{filteredEmployees.length} shown</p>
+                <p className="text-[9px] text-[var(--text-muted)] ">{filteredEmployees.length} shown</p>
               </div>
               <div className="flex items-center gap-2">
                 {selected && (
@@ -467,13 +467,7 @@ export default function AdminLiveMap() {
               </div>
             </div>
 
-            {/* Mobile search */}
-            <div className="lg:hidden px-3 pt-2 flex-shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
-                <input type="text" placeholder="Search staff..." className="input-field pl-9 py-2 w-full text-xs" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-              </div>
-            </div>
+          
 
             {/* List */}
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-1">

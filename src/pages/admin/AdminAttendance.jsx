@@ -17,6 +17,28 @@ export default function AdminAttendance() {
   const [empRecords, setEmpRecords] = useState([]);
   const [calLoading, setCalLoading] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [previewImage, setPreviewImage] = useState('');
+
+  const getAttendanceImage = (record) => {
+    if (!record) return '';
+    const candidates = [
+      record.selfie,
+      record.selfieUrl,
+      record.image,
+      record.photo,
+      record.imageUrl,
+      record.selfieUrl,
+      record.checkInPhoto,
+      record.checkInImage,
+      record.avatar,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    }
+
+    return '';
+  };
 
   useEffect(() => { 
     fetchRecords(); 
@@ -227,6 +249,7 @@ export default function AdminAttendance() {
                 <tr>
                   <th className="px-6 py-4">Staff Name</th>
                   <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Selfie</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Punch In</th>
                   <th className="px-6 py-4">Punch Out</th>
@@ -253,6 +276,18 @@ export default function AdminAttendance() {
                     </td>
                     <td className="px-6 py-4 text-[var(--text-main)] text-xs font-bold">{new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                     <td className="px-6 py-4">
+                      {(() => {
+                        const img = getAttendanceImage(r);
+                        return img ? (
+                          <button type="button" onClick={() => setPreviewImage(img)} className="block w-10 h-10 rounded-lg overflow-hidden border border-[var(--border-color)] hover:scale-110 transition-transform">
+                            <img src={img} alt="Attendance selfie" className="w-full h-full object-cover" />
+                          </button>
+                        ) : (
+                          <span className="text-[var(--text-muted)] text-[9px] uppercase font-bold tracking-widest opacity-50">N/A</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4">
                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
                          r.status === 'present' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 
                          r.status === 'absent' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
@@ -278,6 +313,17 @@ export default function AdminAttendance() {
         </div>
       </div>
       {/* Calendar Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-4" onClick={() => setPreviewImage('')}>
+          <div className="relative max-w-3xl w-full rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setPreviewImage('')} className="absolute right-3 top-3 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70">
+              <X className="w-4 h-4" />
+            </button>
+            <img src={previewImage} alt="Attendance selfie preview" className="w-full max-h-[80vh] object-contain bg-black" />
+          </div>
+        </div>
+      )}
+
       {selectedEmp && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-[var(--bg-card)] rounded-t-[2rem] sm:rounded-[2rem] w-full sm:max-w-4xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl border border-[var(--border-color)]">

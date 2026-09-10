@@ -57,31 +57,7 @@ export default function AdminReports() {
     finally { setLoading(false); }
   };
 
-  const handleExportJSON = () => {
-    if (!reportData) return;
-    const jsonData = {
-      exportDate: new Date().toISOString(),
-      period: { startDate, endDate },
-      employee: reportData.employee,
-      summary: reportData.summary,
-      activities: {
-        meetings: reportData.meetings,
-        expenses: reportData.expenses,
-        tasks: reportData.tasks,
-        leads: reportData.leads,
-        daHistory: (reportData.employee.daHistory || employees.find(e => e._id === reportData.employee._id)?.daHistory || [])?.filter(da => {
-            const daDate = new Date(da.date).toISOString().slice(0, 10);
-            return daDate >= startDate && daDate <= endDate;
-        }) || []
-      }
-    };
-    const filename = `en_dreport_${reportData.employee.name.replace(/\s+/g,'_')}_${startDate}.json`;
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' }));
-    link.download = filename;
-    link.click();
-    toast.success('JSON exported');
-  };
+
 
   const handleExport = () => {
     if (!reportData) return;
@@ -378,9 +354,7 @@ export default function AdminReports() {
             <button onClick={handleExportJPEG} disabled={!reportData} className="btn-ghost py-2.5 px-5 rounded-xl flex items-center gap-2">
               <ImageIcon className="w-4 h-4" /> <span className="text-xs uppercase font-black tracking-widest">Export JPEG</span>
             </button>
-            <button onClick={handleExportJSON} disabled={!reportData} className="btn-ghost py-2.5 px-5 rounded-xl flex items-center gap-2">
-              <FileText className="w-4 h-4" /> <span className="text-xs uppercase font-black tracking-widest">Export JSON</span>
-            </button>
+           
           </div>
         </div>
 

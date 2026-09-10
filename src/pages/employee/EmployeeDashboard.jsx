@@ -16,6 +16,7 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [recentMeetings, setRecentMeetings] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
+  const [attendanceRecord, setAttendanceRecord] = useState(null);
   const [employeeDetails, setEmployeeDetails] = useState(null);
   const [daReceiptUrl, setDaReceiptUrl] = useState('');
   const [daAmount, setDaAmount] = useState(0);
@@ -173,7 +174,9 @@ export default function EmployeeDashboard() {
         setStats(s => ({ ...s, expenses: totalAmt }));
       }
       if (attRes.status === 'fulfilled') {
-        setStats(s => ({ ...s, attended: !!attRes.value.data.record }));
+        const record = attRes.value.data.record || null;
+        setAttendanceRecord(record);
+        setStats(s => ({ ...s, attended: !!record }));
       }
       if (trackRes.status === 'fulfilled') {
         const sessions = trackRes.value.data.sessions || [];
@@ -373,6 +376,64 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr,0.9fr] gap-4">
+          <div className="glass-card p-5 bg-gradient-to-br from-primary-600/10 via-white to-violet-500/5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em]">Attendance Snapshot</p>
+                <h3 className="text-[var(--text-main)] font-black text-lg mt-1">Punch In Status</h3>
+              </div>
+              <div className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${stats.attended ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                {stats.attended ? 'Present' : 'Absent'}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm">
+                {((attendanceRecord?.selfieUrl || attendanceRecord?.checkInPhoto || employeeDetails?.avatar || user?.avatar) ? (
+                  <img src={attendanceRecord?.selfieUrl || attendanceRecord?.checkInPhoto || employeeDetails?.avatar || user?.avatar} alt="Punch-in selfie" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-2xl">📷</div>
+                ))}
+              </div>
+              <div className="flex-1">
+                <p className="text-[var(--text-main)] text-xl font-black">{user?.name}</p>
+                <p className="text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">{user?.employeeId}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+                  <span className="rounded-full bg-[var(--bg-surface)] px-2 py-1">{attendanceRecord?.checkIn ? new Date(attendanceRecord.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'No check-in yet'}</span>
+                  <span className="rounded-full bg-[var(--bg-surface)] px-2 py-1">{attendanceRecord?.status || 'Not marked'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card p-5 bg-gradient-to-br from-violet-500/10 via-white to-cyan-500/5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em]">Quick Insight</p>
+                <h3 className="text-[var(--text-main)] font-black text-lg mt-1">Visit Summary</h3>
+              </div>
+              <button onClick={() => navigate('/meetings')} className="text-primary-500 text-xs font-bold flex items-center gap-1 hover:gap-2 transition-all">
+                View All <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-2xl bg-[var(--bg-surface)] px-3 py-2">
+                <span className="text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">Total Meetings</span>
+                <span className="text-[var(--text-main)] font-black text-lg">{stats.meetings}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-[var(--bg-surface)] px-3 py-2">
+                <span className="text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">Travel Distance</span>
+                <span className="text-[var(--text-main)] font-black text-lg">{stats.distance.toFixed(1)} km</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-[var(--bg-surface)] px-3 py-2">
+                <span className="text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">Expenses</span>
+                <span className="text-[var(--text-main)] font-black text-lg">₹{stats.expenses.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Recent Meetings */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -392,18 +453,21 @@ export default function EmployeeDashboard() {
             </div>
           ) : (
             <div className="space-y-2">
-              {recentMeetings.map(m => (
-                <div key={m._id} className="glass-card p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0">
-                    <Users className="w-5 h-5 text-violet-400" />
+              {recentMeetings.map(m => {
+                const image = Array.isArray(m.images) && m.images.length ? m.images[0] : '';
+                return (
+                  <div key={m._id} className="glass-card p-3 flex items-center gap-3 hover:translate-x-1 transition-transform cursor-pointer" onClick={() => navigate('/meetings')}>
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden flex-shrink-0 border border-[var(--border-color)] bg-[var(--bg-surface)]">
+                      {image ? <img src={image} alt="Meeting selfie" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-lg">🤝</div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[var(--text-main)] font-semibold text-sm truncate">{m.clientName}</p>
+                      <p className="text-[var(--text-muted)] text-xs truncate">{m.companyName} • {new Date(m.date).toLocaleDateString('en-IN')}</p>
+                    </div>
+                    <StatusBadge status={m.status} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[var(--text-main)] font-semibold text-sm truncate">{m.clientName}</p>
-                    <p className="text-[var(--text-muted)] text-xs truncate">{m.companyName} • {new Date(m.date).toLocaleDateString('en-IN')}</p>
-                  </div>
-                  <StatusBadge status={m.status} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

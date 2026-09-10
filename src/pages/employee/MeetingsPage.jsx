@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
-import { meetingAPI } from '../../services/api.service';
+import { meetingAPI, uploadAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { Plus, Users, X, ChevronDown, Search, Calendar, DollarSign, Phone, Building } from 'lucide-react';
+import { Plus, Users, X, ChevronDown, Search, Calendar, DollarSign, Phone, Building, Upload, Camera, Image as ImageIcon } from 'lucide-react';
 
 const STATUS_OPTIONS = ['scheduled', 'completed', 'cancelled', 'follow-up'];
 const INITIAL = { clientName: '', companyName: '', mobileNumber: '', meetingAddress: '', meetingNotes: '', status: 'scheduled', dealAmount: '', followUpDate: '' };
@@ -16,6 +16,8 @@ export default function MeetingsPage() {
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [meetingImages, setMeetingImages] = useState([]);
 
   useEffect(() => { fetchMeetings(); }, [page]);
 
@@ -31,15 +33,38 @@ export default function MeetingsPage() {
 
   const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { data } = await uploadAPI.uploadImage(formData);
+      setMeetingImages(prev => [...prev, data.url]);
+      toast.success('Visit selfie uploaded');
+    } catch (err) {
+      toast.error('Failed to upload selfie');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.clientName) return toast.error('Client name is required');
     setSaving(true);
     try {
-      await meetingAPI.create({ ...form, dealAmount: Number(form.dealAmount) || 0 });
+      await meetingAPI.create({
+        ...form,
+        dealAmount: Number(form.dealAmount) || 0,
+        images: meetingImages,
+      });
       toast.success('✅ Meeting added!');
       setShowForm(false);
       setForm(INITIAL);
+      setMeetingImages([]);
       fetchMeetings();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setSaving(false); }
@@ -124,6 +149,30 @@ export default function MeetingsPage() {
                 </div>
                 <Field label="Follow-up Date" icon={Calendar} type="date" value={form.followUpDate} onChange={set('followUpDate')} />
               </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-2">Visit Selfie</label>
+                <div className="rounded-2xl border border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] p-3">
+                  {meetingImages.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {meetingImages.map((img, idx) => (
+                        <div key={img + idx} className="relative h-20 overflow-hidden rounded-xl border border-[var(--border-color)]">
+                          <img src={img} alt="Visit selfie" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => setMeetingImages(prev => prev.filter((_, i) => i !== idx))} className="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] p-3 text-sm font-semibold text-[var(--text-main)] hover:border-primary-500 hover:bg-primary-500/5">
+                    {uploadingImage ? <div className="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" /> : <Camera className="w-4 h-4" />}
+                    {uploadingImage ? 'Uploading...' : 'Add selfie'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+                  </label>
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="btn-ghost flex-1">Cancel</button>
                 <button type="submit" disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
@@ -140,9 +189,17 @@ export default function MeetingsPage() {
 
 function MeetingCard({ meeting: m }) {
   const statusColors = { completed: 'badge-green', pending: 'badge-yellow', scheduled: 'badge-blue', 'follow-up': 'badge-yellow', cancelled: 'badge-red' };
+  const firstImage = Array.isArray(m.images) && m.images.length ? m.images[0] : '';
+
   return (
     <div className="glass-card p-4 flex items-start gap-4 hover:border-white/20 transition-all">
-      <div className="w-11 h-11 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0 text-lg">🤝</div>
+      <div className="w-14 h-14 rounded-2xl overflow-hidden flex-shrink-0 border border-[var(--border-color)] bg-[var(--bg-surface)]">
+        {firstImage ? (
+          <img src={firstImage} alt="Meeting selfie" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-lg">🤝</div>
+        )}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>

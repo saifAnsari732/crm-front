@@ -142,7 +142,7 @@ export default function AdminDashboard() {
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                          <div className="text-center">
                             <p className="text-[var(--text-main)] font-black text-2xl tracking-tighter leading-none">{c.value}</p>
-                            <p className="text-[var(--text-muted)] text-[8px] font-black uppercase tracking-widest mt-1">Status OK</p>
+
                          </div>
                       </div>
                    </div>

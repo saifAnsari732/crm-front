@@ -6,6 +6,28 @@ import { Search, Users, X, Trash2 } from 'lucide-react';
 
 const statusColor = { completed: 'badge-green', pending: 'badge-yellow', scheduled: 'badge-blue', 'follow-up': 'badge-yellow', cancelled: 'badge-red' };
 
+const getMeetingImage = (m) => {
+  if (!m) return '';
+  const candidates = [
+    m.images,
+    m.selfie,
+    m.selfieUrl,
+    m.image,
+    m.photo,
+    m.imageUrl,
+    m.checkInPhoto,
+    m.checkInImage,
+    m.media,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length) return candidate[0];
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+  }
+
+  return '';
+};
+
 export function AdminMeetings() {
   const [meetings, setMeetings] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -15,6 +37,7 @@ export function AdminMeetings() {
   const [statusFilter, setStatusFilter] = useState('');
   const [empFilter, setEmpFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [previewImage, setPreviewImage] = useState('');
 
   useEffect(() => {
     adminAPI.getEmployees({ limit: 200, role: 'all' }).then(({ data }) => setEmployees(data.employees || []));
@@ -117,13 +140,16 @@ export function AdminMeetings() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        {m.images && m.images.length > 0 ? (
-                           <a href={m.images[0]} target="_blank" rel="noreferrer" className="block w-10 h-10 rounded-lg overflow-hidden border border-[var(--border-color)] hover:scale-110 transition-transform">
-                             <img src={m.images[0]} alt="Selfie" className="w-full h-full object-cover" />
-                           </a>
-                        ) : (
-                           <span className="text-[var(--text-muted)] text-[9px] uppercase font-bold tracking-widest opacity-50">N/A</span>
-                        )}
+                        {(() => {
+                          const img = getMeetingImage(m);
+                          return img ? (
+                            <button type="button" onClick={() => setPreviewImage(img)} className="block w-10 h-10 rounded-lg overflow-hidden border border-[var(--border-color)] hover:scale-110 transition-transform">
+                              <img src={img} alt="Selfie" className="w-full h-full object-cover" />
+                            </button>
+                          ) : (
+                            <span className="text-[var(--text-muted)] text-[9px] uppercase font-bold tracking-widest opacity-50">N/A</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-right">
                        <p className={`font-black text-lg tracking-tight ${m.dealAmount > 0 ? 'text-emerald-500' : 'text-[var(--text-muted)] opacity-30'}`}>
@@ -170,6 +196,17 @@ export function AdminMeetings() {
           </div>
         )}
       </div>
+
+      {previewImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setPreviewImage('')}>
+          <div className="relative max-w-3xl w-full rounded-2xl overflow-hidden border border-[var(--border-color)] bg-[var(--bg-card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setPreviewImage('')} className="absolute right-3 top-3 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70">
+              <X className="w-4 h-4" />
+            </button>
+            <img src={previewImage} alt="Meeting selfie preview" className="w-full max-h-[80vh] object-contain bg-black" />
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

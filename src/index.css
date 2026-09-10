@@ -4,20 +4,20 @@
 @tailwind utilities;
 
 :root {
-  --bg-main: #f8fafc;
+  --bg-main: #edf6ff;
   --bg-sidebar: #ffffff;
   --bg-header: rgba(255, 255, 255, 0.95);
-  --bg-card: #ffffff;
-  --bg-card-hover: #f1f5f9;
-  --border-color: #e2e8f0;
+  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-card-hover: #eef5ff;
+  --border-color: rgba(148, 163, 184, 0.25);
   --text-main: #0f172a;
   --text-muted: #475569;
   --text-inverse: #ffffff;
-  --primary: #0d9488;
-  --primary-muted: rgba(13, 148, 136, 0.1);
-  --shadow-color: rgba(0, 0, 0, 0.1);
+  --primary: #2563eb;
+  --primary-muted: rgba(37, 99, 235, 0.12);
+  --shadow-color: rgba(37, 99, 235, 0.12);
   --accent-safe: #10b981;
-  --bg-surface: rgba(0, 0, 0, 0.03);
+  --bg-surface: rgba(148, 163, 184, 0.08);
 }
 
 @layer base {
@@ -35,17 +35,17 @@
 
 @layer components {
   .glass-card {
-    background-color: var(--bg-card);
+    background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(239,246,255,0.72));
     border: 1px solid var(--border-color);
     @apply backdrop-blur-xl rounded-2xl transition-all duration-300 shadow-sm;
   }
   .glass-card:hover {
-    background-color: var(--bg-card-hover);
+    background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(226,232,240,0.8));
     @apply shadow-md;
   }
   .btn-primary {
-    @apply bg-teal-600 hover:bg-teal-500 text-white font-semibold px-6 py-3 rounded-xl
-           transition-all duration-200 active:scale-95 shadow-lg;
+    @apply bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-6 py-3 rounded-xl
+           transition-all duration-200 active:scale-95 shadow-lg shadow-blue-600/20;
   }
   .input-field {
     background-color: var(--bg-card);
@@ -71,10 +71,10 @@
     color: var(--primary);
   }
   .nav-item.active {
-    background: linear-gradient(90deg, rgba(244,63,94,0.1) 0%, transparent 100%);
-    color: #e11d48; /* rose-600 */
-    border-left: 4px solid #e11d48;
-    @apply font-bold;
+    background: linear-gradient(90deg, rgba(37,99,235,0.12) 0%, rgba(99,102,241,0.08) 100%);
+    color: #1d4ed8;
+    border-left: 4px solid #2563eb;
+    @apply font-bold shadow-sm;
   }
 }
 
