@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'https://field-moniter-back.onrender.com/api',
+  baseURL: 'https://field-backend-monitor-web.onrender.com/api',
   // baseURL: 'http://localhost:5000/api',
   withCredentials: true,
 });
@@ -117,6 +117,7 @@ export const adminAPI = {
   updateEmployee: (id, data) => API.put(`/admin/employees/${id}`, data),
   getAttendance: (params) => API.get('/admin/attendance', { params }),
   getHistory: (params) => API.get('/admin/tracking-history', { params }),
+  adjustDistance: (data) => API.put('/admin/tracking/adjust-distance', data),
   getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
   getManagers: () => API.get('/admin/managers'),
 };

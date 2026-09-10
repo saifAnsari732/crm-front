@@ -331,6 +331,29 @@ export default function AdminTrackingHistory() {
     document.body.removeChild(link);
   };
 
+  const handleAdjustDistance = async () => {
+    if (!selectedSession) return;
+    const input = window.prompt("Enter KM to add to this session (e.g., 5.5):");
+    if (!input) return;
+    const distanceToAdd = parseFloat(input);
+    if (isNaN(distanceToAdd) || distanceToAdd <= 0) {
+      toast.error("Please enter a valid number greater than 0");
+      return;
+    }
+
+    try {
+      toast.loading("Adjusting distance...", { id: 'adjust-distance' });
+      const { data } = await adminAPI.adjustDistance({ sessionId: selectedSession._id, distanceToAdd });
+      if (data.success) {
+        toast.success(`Successfully added ${distanceToAdd} km`, { id: 'adjust-distance' });
+        fetchHistory();
+        setSelectedSession(data.session);
+      }
+    } catch (err) {
+      toast.error("Failed to adjust distance", { id: 'adjust-distance' });
+    }
+  };
+
   const exportToImage = async () => {
     if (!selectedSession) return;
     
@@ -390,12 +413,12 @@ export default function AdminTrackingHistory() {
                  onChange={(e) => setFilters(f => ({ ...f, employeeId: e.target.value }))}
                  className="input-field pl-10 py-2.5 text-[10px] font-black uppercase w-52 tracking-widest appearance-none"
                >
-                 <option value="" className="bg-[var(--bg-sidebar)]">Operational Personnel</option>
+                 <option value="" className="bg-[var(--bg-sidebar)]">Search Employees</option>
                  {employees.map(e => <option className='bg-[var(--bg-sidebar)]' key={e._id} value={e._id}>{e.name}</option>)}
                </select>
             </div>
             <button onClick={fetchHistory} className="bg-primary-600 hover:bg-primary-500 text-white font-black text-[10px] uppercase tracking-[0.2em] px-6 py-2.5 rounded-xl transition-all active:scale-95 shadow-lg shadow-primary-600/20">
-               Execute Audit
+               Execute Search
             </button>
             
           </div>
@@ -403,12 +426,12 @@ export default function AdminTrackingHistory() {
 
         <div className="flex flex-col xl:flex-row gap-6 xl:h-[calc(100vh-180px)] xl:min-h-[600px]">
           {/* 1. Left Sidebar: Sessions */}
-          <div className="w-full xl:w-80 flex flex-col gap-4 h-[300px] xl:h-full overflow-hidden shrink-0">
-            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-4">
+          <div className="w-full xl:w-80 flex flex-col gap-4 h-[250px] overflow-hidden shrink-0">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
               {loading ? (
                 [1, 2, 3, 4].map(i => <div key={i} className="h-28 rounded-3xl bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
               ) : history.length === 0 ? (
-                <div className="glass-card p-12 text-center flex flex-col items-center">
+                <div className="glass-card p-6 text-center flex flex-col items-center">
                   <div className="w-16 h-16 rounded-2xl bg-[var(--bg-main)] flex items-center justify-center mb-4">
                      <Clock className="w-8 h-8 text-[var(--text-muted)] opacity-20" />
                   </div>
@@ -425,8 +448,8 @@ export default function AdminTrackingHistory() {
                       : 'bg-[var(--bg-card)] border-transparent hover:border-rose-500/20 hover:bg-[var(--bg-card-hover)]'
                   }`}
                 >
-                  <div className="flex items-center gap-10">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 overflow-hidden ${
+                  <div className="flex items-center gap-2">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 overflow-hidden ${
                       selectedSession?._id === session._id ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
                     }`}>
                       {session.employee?.avatar ? (
@@ -453,7 +476,7 @@ export default function AdminTrackingHistory() {
           </div>
 
           {/* 2. Center Panel: Map & Summary */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] xl:min-h-0 shrink-0">
+          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] xl:min-h-10 shrink-0">
             {/* Quick Summary Bar */}
             {selectedSession && (
               <div className="glass-card p-5 flex flex-col gap-4 border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
@@ -477,10 +500,13 @@ export default function AdminTrackingHistory() {
                   </div>
                   
                   <div className="flex items-center gap-3">
-                     <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
-                       <FileImage className="w-4 h-4" /> JPEG Summary
-                     </button>
-                  </div>
+                       <button onClick={handleAdjustDistance} className="bg-amber-500 hover:bg-amber-400 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-amber-500/20 flex items-center gap-2">
+                         Adjust KM
+                       </button>
+                       <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
+                         <FileImage className="w-4 h-4" /> JPEG Summary
+                       </button>
+                    </div>
                 </div>
 
               
@@ -689,6 +715,11 @@ export default function AdminTrackingHistory() {
                     <div>
                       <p className="text-[10px] text-primary-200 uppercase font-bold">Total Distance</p>
                       <p className="text-4xl font-black italic">{(selectedSession?.totalDistance || 0).toFixed(2)} <span className="text-lg">KM</span></p>
+                      {selectedSession?.manualDistanceAdded > 0 && (
+                        <p className="text-[9px] text-amber-300 font-bold tracking-wider mt-1 uppercase">
+                          (+{selectedSession.manualDistanceAdded.toFixed(2)} KM added by Admin)
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-primary-200 uppercase font-bold">Date</p>
