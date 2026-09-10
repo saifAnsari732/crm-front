@@ -13,19 +13,15 @@ import useLocationTracker from '../../hooks/useLocationTracker';
 import { storage } from '../../services/storage';
 import { trackingApi } from '../../services/api';
 import * as Location from 'expo-location';
+import MapViewComponent from '../../components/MapViewComponent';
+import { cleanTrackingRoute } from '../../utils/trackingRoute';
 
 const { width } = Dimensions.get('window');
-
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Radius of the earth in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-  return R * c; // Distance in km
+const DEFAULT_MAP_REGION = {
+  latitude: 26.797531,
+  longitude: 88.901868,
+  latitudeDelta: 0.04,
+  longitudeDelta: 0.04,
 };
 
 export default function ActiveShiftMapScreen() {
@@ -42,6 +38,7 @@ export default function ActiveShiftMapScreen() {
   const [speed, setSpeed] = useState('0');
   const [distance, setDistance] = useState('0.00');
   const [transportMode, setTransportMode] = useState('PUBLIC TRANSPORT'); // PUBLIC TRANSPORT, WALKING, DRIVING
+  const [routeCoords, setRouteCoords] = useState([]);
   
   const timerRef = useRef(null);
   const locationIntervalRef = useRef(null);
@@ -96,6 +93,13 @@ export default function ActiveShiftMapScreen() {
 
     const loadLocalCachedDistance = async () => {
       try {
+        const sessionId = await storage.getItem('currentTrackingSessionId');
+        const cachedSessionId = await storage.getItem('tracking_accumulated_session_id');
+        if (!sessionId || cachedSessionId !== sessionId) {
+          totalDistanceRef.current = 0;
+          setDistance('0.00');
+          return;
+        }
         const cachedDist = await storage.getItem('tracking_accumulated_distance');
         if (cachedDist) {
           const parsed = parseFloat(cachedDist) || 0.0;
@@ -118,9 +122,14 @@ export default function ActiveShiftMapScreen() {
           const activeSession = response.data.sessions.find(s => s.sessionId === sessionId);
           if (activeSession) {
             const backendDistance = parseFloat(activeSession.totalDistance) || 0.0;
-            console.log('📍 Tracking Screen: Synchronized distance with backend:', backendDistance);
-            totalDistanceRef.current = backendDistance;
-            const distStr = backendDistance.toFixed(2);
+            const cachedDistance = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0.0;
+            const cachedSessionId = await storage.getItem('tracking_accumulated_session_id');
+            const synchronizedDistance = cachedSessionId === sessionId
+              ? Math.max(backendDistance, cachedDistance)
+              : backendDistance;
+            console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
+            totalDistanceRef.current = synchronizedDistance;
+            const distStr = synchronizedDistance.toFixed(2);
             setDistance(distStr);
             await storage.setItem('tracking_accumulated_distance', distStr);
           }
@@ -179,34 +188,15 @@ export default function ActiveShiftMapScreen() {
               displaySpeed = Math.round(mps * 3.6).toString();
             }
 
-            // Calculate actual GPS distance traveled (not mocked by timer!)
-            if (lastCoordRef.current) {
-              const d = calculateDistance(
-                lastCoordRef.current.lat, 
-                lastCoordRef.current.lng, 
-                lat, 
-                lng
-              );
-              
-              // Relaxed GPS Drift Filter:
-              // 15 meters (0.015 km) is industry standard to filter out minor stationary desk drift
-              // while accurately capturing walking and driving updates.
-              const requiredDistance = 0.015; // 15 meters
-              
-              if (d >= requiredDistance) {
-                totalDistanceRef.current += d;
-                const newDistStr = totalDistanceRef.current.toFixed(2);
-                setDistance(newDistStr);
-                storage.setItem('tracking_accumulated_distance', newDistStr).catch(() => {});
-                lastCoordRef.current = { lat, lng };
-                setSpeed(displaySpeed);
-              } else {
-                setSpeed('0');
-              }
-            } else {
-              lastCoordRef.current = { lat, lng };
-              setSpeed('0');
-            }
+            // Distance is calculated by the background task/backend once only.
+            // This screen only displays the authoritative cached/server total.
+            lastCoordRef.current = { lat, lng };
+            setSpeed(displaySpeed);
+            setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+              latitude: lat,
+              longitude: lng,
+              timestamp: position.timestamp,
+            }]).slice(-600));
 
             // Reverse geocode to get structural address (Skip on Web to avoid 429 Rate Limits / SDK 49 warnings)
             try {
@@ -255,6 +245,7 @@ export default function ActiveShiftMapScreen() {
       setAddress('No Addresss Allow. Press START to begin shift.');
       totalDistanceRef.current = 0.0;
       lastCoordRef.current = null;
+      setRouteCoords([]);
     }
 
     return () => {
@@ -446,6 +437,11 @@ export default function ActiveShiftMapScreen() {
           </View>
           <Text style={styles.addressBody}>{address}</Text>
         </LinearGradient>
+      </Surface>
+
+      <Surface style={styles.mapCard} elevation={1}>
+        <View style={styles.mapHeader}><View><Text style={styles.mapTitle}>Live route</Text><Text style={styles.mapSubtitle}>Your accepted GPS trail</Text></View><MapPin size={18} color="#0f766e" /></View>
+        <View style={styles.employeeMap}><MapViewComponent initialRegion={DEFAULT_MAP_REGION} directoryStaff={latitude && longitude ? [{ _id: 'self', name: 'You', lat: latitude, lng: longitude, isTracking }] : []} routeCoords={routeCoords} onSelectEmployee={() => {}} /></View>
       </Surface>
 
       {/* 5. Telemetry Flashing Connection Module */}
@@ -723,6 +719,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 1,
   },
+  mapCard: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#dbe7ef', padding: 12, marginBottom: 20 },
+  mapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  mapTitle: { color: '#0f172a', fontSize: 13, fontWeight: 'bold' },
+  mapSubtitle: { color: '#64748b', fontSize: 10, marginTop: 3 },
+  employeeMap: { height: 230, overflow: 'hidden', borderRadius: 14 },
   syncRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

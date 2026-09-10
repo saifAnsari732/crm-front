@@ -7,7 +7,7 @@ import { Text, TextInput, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   User, Briefcase, Mail, ChevronDown, Check, ArrowRight, 
-  ShieldCheck, Lock, EyeOff 
+  ShieldCheck, Lock, EyeOff, Eye, Phone
 } from 'lucide-react-native';
 import { authApi } from '../../services/api';
 import { useRouter } from 'expo-router';
@@ -18,14 +18,16 @@ export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('Field Operations');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [secureText, setSecureText] = useState(true);
   const [consentChecked, setConsentChecked] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleRegister = async () => {
-    if (!fullName || !employeeId || !email) {
+    if (!fullName || !email || !password || !phone) {
       setErrorMsg('Please complete all credential fields before continuing.');
       return;
     }
@@ -41,9 +43,9 @@ export default function RegisterScreen() {
       const payload = {
         name: fullName,
         email: email.toLowerCase().trim(),
-        employeeId: employeeId.trim(),
+        phone: phone.trim(),
         department,
-        password: 'defaultPassword123' // default initial registration password
+        password: password 
       };
 
       const res = await authApi.register(payload);
@@ -55,12 +57,8 @@ export default function RegisterScreen() {
         );
       }
     } catch (err) {
-      // Offline fallback alert for high-fidelity sandbox
-      Alert.alert(
-        'Onboarding Step 1 Completed',
-        'Profile details successfully registered. Proceed to default sign in.',
-        [{ text: 'Proceed', onPress: () => router.push('/login') }]
-      );
+      const serverMessage = err.response?.data?.message || 'Network error. Please try again.';
+      setErrorMsg(serverMessage);
     } finally {
       setLoading(false);
     }
@@ -114,21 +112,22 @@ export default function RegisterScreen() {
               />
             </Surface>
 
-            {/* Field 2: Employee ID */}
+            {/* Field 2: Phone Number */}
             <Surface style={styles.inputCard} elevation={1}>
-              <Text style={styles.inputLabel}>EMPLOYEE ID</Text>
+              <Text style={styles.inputLabel}>PHONE NUMBER</Text>
               <View style={styles.inputInnerRow}>
-                <Briefcase size={16} color="#64748b" style={{ marginRight: 8 }} />
+                <Phone size={16} color="#64748b" style={{ marginRight: 8 }} />
                 <TextInput
-                  placeholder="FT-0000"
+                  placeholder="+91 9876543210"
                   placeholderTextColor="#94a3b8"
-                  value={employeeId}
-                  onChangeText={setEmployeeId}
+                  value={phone}
+                  onChangeText={setPhone}
                   mode="flat"
                   style={styles.inputFieldCompact}
                   activeUnderlineColor="transparent"
                   underlineColor="transparent"
                   textColor="#334155"
+                  keyboardType="phone-pad"
                   theme={{ colors: { background: 'transparent' } }}
                 />
               </View>
@@ -162,7 +161,7 @@ export default function RegisterScreen() {
               <View style={styles.inputInnerRow}>
                 <Mail size={16} color="#64748b" style={{ marginRight: 8 }} />
                 <TextInput
-                  placeholder="j.doe@fieldtrackpro.com"
+                  placeholder="j.doe@company.com"
                   placeholderTextColor="#94a3b8"
                   value={email}
                   onChangeText={setEmail}
@@ -175,6 +174,31 @@ export default function RegisterScreen() {
                   autoCapitalize="none"
                   theme={{ colors: { background: 'transparent' } }}
                 />
+              </View>
+            </Surface>
+
+            {/* Field 5: Password */}
+            <Surface style={styles.inputCard} elevation={1}>
+              <Text style={styles.inputLabel}>PASSWORD</Text>
+              <View style={styles.inputInnerRow}>
+                <Lock size={16} color="#64748b" style={{ marginRight: 8 }} />
+                <TextInput
+                  placeholder="Create a strong password"
+                  placeholderTextColor="#94a3b8"
+                  value={password}
+                  onChangeText={setPassword}
+                  mode="flat"
+                  secureTextEntry={secureText}
+                  style={styles.inputFieldCompact}
+                  activeUnderlineColor="transparent"
+                  underlineColor="transparent"
+                  textColor="#334155"
+                  autoCapitalize="none"
+                  theme={{ colors: { background: 'transparent' } }}
+                />
+                <TouchableOpacity onPress={() => setSecureText(!secureText)}>
+                  {secureText ? <Eye size={18} color="#64748b" /> : <EyeOff size={18} color="#64748b" />}
+                </TouchableOpacity>
               </View>
             </Surface>
           </View>

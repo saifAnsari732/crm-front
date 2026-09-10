@@ -14,8 +14,8 @@ class SocketService {
     this.HEARTBEAT_INTERVAL = 30000; // 30 seconds
     this.heartbeatInterval = null;
 
-    // Dynamically derive socket URL from base REST URL
-    this.serverUrl = BASE_URL.replace('/api', '');
+    // Dynamically derive socket URL from the same resolved backend base URL.
+    this.serverUrl = BASE_URL.replace(/\/api$/, '');
   }
 
   /**

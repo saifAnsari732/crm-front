@@ -12,6 +12,7 @@
 import { Alert, Linking, Platform } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { storage } from './storage';
+import { showCustomAlert } from '../components/GlobalAlert';
 
 const BATTERY_OPT_SHOWN_KEY = 'battery_opt_dialog_shown';
 
@@ -65,21 +66,21 @@ export async function showBatteryOptimizationDialog({ force = false, packageName
   }
 
   return new Promise((resolve) => {
-    Alert.alert(
-      '🔋 Battery Setting Required',
-      'Kuch phones (Xiaomi, Samsung, Realme, Oppo) automatically GPS tracking band kar dete hain jab app minimize hoti hai.\n\n' +
+    showCustomAlert(
+      'Battery Setting Required',
+      'Kuch phones automatically GPS tracking band kar dete hain jab app minimize hoti hai.\n\n' +
       'Distance loss rokne ke liye:\n\n' +
       '✅ Step 1: "Allow" button dabao\n' +
-      '✅ Step 2: Jo screen khule usme app select karke "Unrestricted" set karo\n\n' +
-      'Ye sirf ek baar karna hai. Iske baad aapka koi bhi km nahi jayega!',
+      '✅ Step 2: "Unrestricted" set karo\n\n' +
+      'Ye sirf ek baar karna hai. Iske baad aapka koi bhi km miss nahi hoga!',
       [
         {
-          text: '⏩ Baad Mein',
+          text: 'Baad Mein',
           style: 'cancel',
           onPress: () => resolve(false),
         },
         {
-          text: '✅ Allow Karo',
+          text: 'Allow Karo',
           onPress: async () => {
             await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true');
             await openBatteryOptimizationSettings(packageName);
@@ -87,7 +88,7 @@ export async function showBatteryOptimizationDialog({ force = false, packageName
           },
         },
       ],
-      { cancelable: false }
+      'battery'
     );
   });
 }
@@ -103,8 +104,8 @@ export async function remindBatteryOptimizationIfNeeded(packageName = 'com.kisan
   if (alreadyShown === 'true') return; // Already handled, don't nag
 
   return new Promise((resolve) => {
-    Alert.alert(
-      '⚠️ GPS Band Ho Sakta Hai!',
+    showCustomAlert(
+      'GPS Band Ho Sakta Hai!',
       'Aapne abhi tak Battery Optimization disable nahi ki.\n\n' +
       'Agar aap app minimize ya close karte hain, toh GPS tracking band ho sakti hai aur km data loss ho sakta hai.\n\n' +
       'Abhi fix karein?',
@@ -115,7 +116,7 @@ export async function remindBatteryOptimizationIfNeeded(packageName = 'com.kisan
           onPress: () => resolve(false),
         },
         {
-          text: '✅ Haan, Fix Karo',
+          text: 'Haan, Fix Karo',
           onPress: async () => {
             await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true');
             await openBatteryOptimizationSettings(packageName);
@@ -123,7 +124,7 @@ export async function remindBatteryOptimizationIfNeeded(packageName = 'com.kisan
           },
         },
       ],
-      { cancelable: true }
+      'warning'
     );
   });
 }

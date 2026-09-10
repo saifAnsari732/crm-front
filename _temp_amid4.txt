@@ -1,0 +1,186 @@
+                  <Text style={[styles.empSub, { color: C.sub }]}>{emp.department || 'Staff'} â€¢ {emp.role?.toUpperCase()}</Text>
+                </View>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: emp.isBlocked ? '#16a34a' : '#dc2626' }]} onPress={() => handleToggleBlock(emp._id)}>
+                  <Text style={styles.actionBtnTxt}>{emp.isBlocked ? 'Unblock' : 'Block'}</Text>
+                </TouchableOpacity>
+              </View>
+            </Surface>
+          )}
+        />
+      )}
+
+      {/* â”€â”€ TAB 6: TASKS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'tasks' && (
+        <FlatList
+          data={tasks}
+          keyExtractor={(item, idx) => item._id || String(idx)}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={styles.body}
+          renderItem={({ item }) => (
+            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+              <Text style={[styles.empName, { color: C.text }]}>{item.title}</Text>
+              <Text style={[styles.empSub, { color: C.sub }]}>Assigned: {item.employee?.name || 'Staff'}</Text>
+            </Surface>
+          )}
+        />
+      )}
+
+      {/* â”€â”€ TAB 7: EXPENSES & LEAVES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'expenses' && (
+        <FlatList
+          data={expenses}
+          keyExtractor={(item, idx) => item._id || String(idx)}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={styles.body}
+          renderItem={({ item }) => (
+            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+              <View style={styles.cardRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.empName, { color: C.text }]}>â‚¹{item.amount} â€” {item.category}</Text>
+                  <Text style={[styles.empSub, { color: C.sub }]}>{item.employee?.name}</Text>
+                </View>
+                {item.status === 'pending' && (
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a' }]} onPress={() => handleExpenseStatus(item._id, 'approved')}>
+                      <Text style={styles.actionBtnTxt}>Approve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#dc2626' }]} onPress={() => handleExpenseStatus(item._id, 'rejected')}>
+                      <Text style={styles.actionBtnTxt}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </Surface>
+          )}
+        />
+      )}
+
+      {/* â”€â”€ TAB 8: CONSOLIDATED REPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'reports' && (
+        <ScrollView contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Select Field Staff</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            {allEmployeesList.map((emp) => (
+              <TouchableOpacity
+                key={emp._id}
+                style={[
+                  styles.empChip,
+                  { borderColor: reportEmpId === emp._id ? '#283b96' : C.border, backgroundColor: reportEmpId === emp._id ? '#283b96' : C.surface }
+                ]}
+                onPress={() => setReportEmpId(emp._id)}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: reportEmpId === emp._id ? '#fff' : C.text }}>{emp.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Date Range</Text>
+          <View style={styles.dateRow}>
+            <View style={[styles.dateBox, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <Text style={[styles.dateLbl, { color: C.sub }]}>FROM</Text>
+              <TextInput style={[styles.dateInput, { color: C.text }]} value={reportStart} onChangeText={setReportStart} placeholder="YYYY-MM-DD" placeholderTextColor={C.sub} />
+            </View>
+            <Text style={{ color: C.sub, fontSize: 18, fontWeight: 'bold', marginHorizontal: 8 }}>â†’</Text>
+            <View style={[styles.dateBox, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <Text style={[styles.dateLbl, { color: C.sub }]}>TO</Text>
+              <TextInput style={[styles.dateInput, { color: C.text }]} value={reportEnd} onChangeText={setReportEnd} placeholder="YYYY-MM-DD" placeholderTextColor={C.sub} />
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.generateBtn} onPress={handleGenerateReport} disabled={reportLoading}>
+            {reportLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <FileText size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.generateBtnText}>Generate Staff Report</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {reportData && (
+            <Surface style={[styles.reportSummary, { backgroundColor: C.surface, borderColor: C.border, marginTop: 16 }]} elevation={1}>
+              <Text style={[styles.empName, { color: C.text, padding: 12, borderBottomWidth: 1, borderColor: C.border }]}>
+                Report for: {reportData.employee?.name} ({reportData.employee?.department || 'Staff'})
+              </Text>
+              {[
+                { label: 'Total Distance', val: `${(reportData.summary?.totalKm || 0).toFixed(2)} km` },
+                { label: 'Travel Pay (â‚¹2.5/km)', val: `â‚¹${(reportData.summary?.travelPay || 0).toFixed(2)}` },
+                { label: 'Client Meetings', val: reportData.summary?.totalMeetings || 0 },
+                { label: 'Total Expenses', val: `â‚¹${(reportData.summary?.totalExpenses || 0).toLocaleString('en-IN')}` },
+                { label: 'Tasks Completed', val: reportData.summary?.totalTasks || 0 },
+              ].map((r, i) => (
+                <View key={i} style={[styles.reportRow, { borderBottomColor: C.border }]}>
+                  <Text style={[styles.reportLabel, { color: C.sub }]}>{r.label}</Text>
+                  <Text style={[styles.reportVal, { color: C.text }]}>{r.val}</Text>
+                </View>
+              ))}
+            </Surface>
+          )}
+        </ScrollView>
+      )}
+
+      {/* Selfie Preview Modal */}
+      <Modal visible={!!selfieModalUrl} transparent animationType="fade" onRequestClose={() => setSelfieModalUrl(null)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ position: 'absolute', top: 40, right: 20, zIndex: 10 }} onPress={() => setSelfieModalUrl(null)}>
+            <X size={28} color="#fff" />
+          </TouchableOpacity>
+          {selfieModalUrl && (
+            <Image source={{ uri: selfieModalUrl }} style={{ width: width * 0.9, height: height * 0.6, borderRadius: 16, resizeMode: 'contain' }} />
+          )}
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  filterChipsRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1' },
+  chipActive: { backgroundColor: '#008080' },
+  chipText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: '#64748b' },
+  chipTextActive: { color: '#ffffff' },
+  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14, backgroundColor: '#283b96' },
+  historyBtnText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: '#ffffff' },
+  mapContainerLarge: { flex: 1, position: 'relative', minHeight: 380 },
+  mapLoader: { position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+  directoryContainerCompact: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 12, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  directoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  directoryTitle: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', letterSpacing: 0.5 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, height: 36 },
+  searchInput: { fontFamily: FONT, flex: 1, fontSize: 12, paddingVertical: 0 },
+  staffRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderBottomWidth: 1, borderRadius: 8, marginBottom: 4 },
+  listStatusDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', bottom: 0, right: 0, borderWidth: 1, borderColor: '#fff' },
+  dateFilterHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, gap: 12 },
+  filterApplyBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#008080', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  body: { padding: 14, paddingBottom: 30 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50 },
+  emptyText: { fontFamily: FONT, fontSize: 12, marginTop: 8 },
+  sectionTitle: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', letterSpacing: 0.4, marginBottom: 8, textTransform: 'uppercase' },
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  kpiCard: { width: (width - 44) / 4, borderRadius: 12, borderWidth: 1, padding: 8, alignItems: 'center' },
+  kpiVal: { fontFamily: FONT, fontSize: 16, fontWeight: 'bold' },
+  kpiLabel: { fontFamily: FONT, fontSize: 8, fontWeight: '700', textAlign: 'center', marginTop: 2 },
+  card: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
+  cardRow: { flexDirection: 'row', alignItems: 'center' },
+  empName: { fontFamily: FONT, fontSize: 13, fontWeight: 'bold' },
+  empSub: { fontFamily: FONT, fontSize: 10, marginTop: 1 },
+  statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  statusText: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' },
+  actionBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  actionBtnTxt: { fontFamily: FONT, color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  empChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, marginRight: 6 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  dateBox: { flex: 1, borderWidth: 1, borderRadius: 10, padding: 8 },
+  dateLbl: { fontFamily: FONT, fontSize: 8, fontWeight: 'bold' },
+  dateInput: { fontFamily: FONT, fontSize: 12, fontWeight: '600', padding: 0 },
+  generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#008080', borderRadius: 12, paddingVertical: 12 },
+  generateBtnText: { fontFamily: FONT, color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  reportSummary: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  reportRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1 },
+  reportLabel: { fontFamily: FONT, fontSize: 11 },
+  reportVal: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
+});

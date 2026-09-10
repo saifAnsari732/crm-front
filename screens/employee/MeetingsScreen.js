@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,16 +10,20 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
+import { useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { meetingApi, uploadAPI } from '../../services/api';
 
 export default function MeetingsScreen() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState(null);
@@ -81,21 +85,24 @@ export default function MeetingsScreen() {
   const fetchMeetings = async () => {
     try {
       setLoading(true);
+      setFetchError('');
       const res = await meetingApi.getMy();
       if (res.data && res.data.success) {
         setMeetings(res.data.meetings || []);
       }
-      console.log("miting",res)
     } catch (err) {
       console.log('⚠️ MeetingsScreen: Failed to fetch:', err.message);
+      setFetchError('Unable to load your meetings. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchMeetings();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMeetings();
+    }, [])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -181,21 +188,19 @@ export default function MeetingsScreen() {
 
       let uploadedSelfieUrl = null;
       if (selfieImage) {
-        const formData = new FormData();
+        let uploadRes;
         if (Platform.OS === 'web') {
+          const formData = new FormData();
           const response = await fetch(selfieImage.uri);
           const blob = await response.blob();
           formData.append('image', blob, `meeting_selfie_${Date.now()}.jpg`);
+          formData.append('folder', '/crm-tracker/meetings');
+          uploadRes = await uploadAPI.uploadImageFormData(formData);
         } else {
-          formData.append('image', {
-            uri: selfieImage.uri,
-            type: 'image/jpeg',
-            name: `meeting_selfie_${Date.now()}.jpg`
-          });
+          // Pass the URI directly for native
+          uploadRes = await uploadAPI.uploadImageFormData(selfieImage.uri);
         }
-        formData.append('folder', '/crm-tracker/meetings');
         
-        const uploadRes = await uploadAPI.uploadImageFormData(formData);
         if (uploadRes.data && uploadRes.data.success) {
           uploadedSelfieUrl = uploadRes.data.url;
         } else {
@@ -255,22 +260,34 @@ export default function MeetingsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Premium Header */}
-      <View style={styles.headerContainer}>
-        <LinearGradient
-          colors={['#0f172a', '#1e293b']}
-          style={styles.headerGradient}
-        >
+      {/* Premium Unique Header (Dashboard Brand Style) */}
+      <View style={[styles.headerContainer, { borderBottomLeftRadius: 40, borderBottomRightRadius: 40, shadowColor: '#fecdd3', shadowOpacity: 0.8, shadowRadius: 20, elevation: 10, backgroundColor: '#ffffff', paddingBottom: 24, zIndex: 10 }]}>
+        
+        {/* Soft Background Blob/Gradient simulation */}
+        <View style={{ position: 'absolute', top: 0, right: 0, width: '70%', height: '100%', backgroundColor: '#fff0f3', borderBottomRightRadius: 40, borderTopLeftRadius: 150, opacity: 0.8 }} />
+
+        <View style={[styles.headerGradient, { paddingBottom: 10, paddingTop: Platform.OS === 'ios' ? 70 : 50, backgroundColor: 'transparent' }]}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.headerTitle}>Client Visits</Text>
-              <Text style={styles.headerSub}>Database Logged Field Meetings</Text>
+              <Text style={{ fontSize: 10, fontWeight: "600", color: "#f43f5e", letterSpacing: 1.5, marginBottom: 4 }}>
+                FIELD ACTIVITY
+              </Text>
+              <View style={{ width: 16, height: 2, backgroundColor: '#f43f5e', marginBottom: 8, borderRadius: 2 }} />
+              
+              <Text style={{ fontSize: 32, fontWeight: '600', color: '#1e293b', letterSpacing: -0.5 }}>Client Visits</Text>
+              <Text style={{ fontSize: 13, color: '#64748b', marginTop: 1, fontWeight: '400' }}>Your Field Meeting Logs</Text>
             </View>
-            <View style={styles.badgeCount}>
-              <Text style={styles.badgeText}>{meetings.length} LOGGED</Text>
+            <View style={{ backgroundColor: '#e6fffa', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, shadowColor: '#00c6a9', shadowOpacity: 0.1, elevation: 2 }}>
+              <Text style={{ color: '#00c6a9', fontWeight: '900', fontSize: 16 }}>{meetings.length}</Text>
+              <Text style={{ color: '#00b4d8', fontSize: 9, fontWeight: 'bold' }}>LOGGED</Text>
             </View>
           </View>
-        </LinearGradient>
+          <TouchableOpacity style={styles.headerAddButton} onPress={handleOpenAddModal} activeOpacity={0.85}>
+            <Plus size={17} color="#ffffff" strokeWidth={2.5} />
+            <Text style={styles.headerAddButtonText}>ADD MEETING</Text>
+            <ArrowRight size={16} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Main List */}
@@ -288,11 +305,24 @@ export default function MeetingsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1d4ed8']} />
           }
         >
-          {meetings.length === 0 ? (
+          {fetchError ? (
             <Surface style={styles.emptyCard} elevation={1}>
-              <ClipboardList size={40} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No Visits Logged</Text>
-              <Text style={styles.emptySub}>
+              <View style={styles.emptyIconCircle}>
+                <ClipboardList size={32} color="#0284c7" />
+              </View>
+              <Text style={styles.emptyTitle}>Could not load meetings</Text>
+              <Text style={styles.emptySub}>{fetchError}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchMeetings}>
+                <Text style={styles.retryButtonText}>TRY AGAIN</Text>
+              </TouchableOpacity>
+            </Surface>
+          ) : meetings.length === 0 ? (
+            <Surface style={[styles.emptyCard, { backgroundColor: '#ffffff', borderRadius: 28, padding: 32, alignItems: 'center', borderColor: '#f1f5f9', borderWidth: 2, marginTop: 40 }]} elevation={0}>
+              <View style={{ backgroundColor: '#e6fffa', width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+                <ClipboardList size={40} color="#00c6a9" />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#1e293b', marginBottom: 12 }}>No Visits Logged</Text>
+              <Text style={{ fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 20 }}>
                 You haven't registered any client visit meetings yet. Press the (+) button below to log your first field visit!
               </Text>
             </Surface>
@@ -300,40 +330,40 @@ export default function MeetingsScreen() {
             meetings.map((item) => {
               const badge = getStatusBadgeStyle(item.status);
               return (
-                <Surface key={item._id || item.id} style={styles.meetingCard} elevation={2}>
-                  <View style={styles.cardHeader}>
+                <Surface key={item._id || item.id} style={[styles.meetingCard, { borderRadius: 24, padding: 16, backgroundColor: '#ffffff', marginBottom: 16, borderColor: '#f1f5f9', borderWidth: 1 }]} elevation={3}>
+                  <View style={[styles.cardHeader, { marginBottom: 16 }]}>
                     <View style={styles.clientInfoBlock}>
-                      <User size={16} color="#475569" style={{ marginRight: 6 }} />
-                      <Text style={styles.clientNameText}>{item.clientName}</Text>
+                      <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 12 }}>
+                        <User size={18} color="#64748b" />
+                      </View>
+                      <View>
+                        <Text style={[styles.clientNameText, { fontSize: 16, fontWeight: 'bold', color: '#1e293b' }]}>{item.clientName}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{item.mobileNumber}</Text>
+                      </View>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.statusBadgeText, { color: badge.text }]}>
-                        {badge.label}
+                    <View style={[styles.statusBadge, { backgroundColor: badge.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }]}>
+                      <Text style={[styles.statusBadgeText, { color: badge.text, fontSize: 10, fontWeight: 'bold' }]}>
+                         {badge.label}
                       </Text>
                     </View>
                   </View>
 
-                  <View style={styles.metaRow}>
-                    <Phone size={13} color="#64748b" style={{ marginRight: 6 }} />
-                    <Text style={styles.metaText}>{item.mobileNumber}</Text>
-                  </View>
-
-                  <View style={styles.metaRow}>
-                    <MapPin size={13} color="#64748b" style={{ marginRight: 6 }} />
-                    <Text style={styles.metaText} numberOfLines={1}>{item.meetingAddress}</Text>
+                  <View style={[styles.metaRow, { marginBottom: 12 }]}>
+                    <MapPin size={14} color="#94a3b8" style={{ marginRight: 8, marginTop: 2 }} />
+                    <Text style={[styles.metaText, { color: '#64748b', flex: 1, fontSize: 13, lineHeight: 18 }]} numberOfLines={2}>{item.meetingAddress}</Text>
                   </View>
 
                   {item.meetingNotes ? (
-                    <View style={styles.notesBlock}>
-                      <Text style={styles.notesTitle}>FEEDBACK NOTES:</Text>
-                      <Text style={styles.notesText}>{item.meetingNotes}</Text>
+                    <View style={[styles.notesBlock, { backgroundColor: '#e6fffa', padding: 12, borderRadius: 12, marginTop: 8 }]}>
+                      <Text style={[styles.notesTitle, { color: '#00c6a9', fontSize: 10, fontWeight: 'bold', marginBottom: 4 }]}>FEEDBACK NOTES</Text>
+                      <Text style={[styles.notesText, { color: '#475569', fontSize: 13 }]}>{item.meetingNotes}</Text>
                     </View>
                   ) : null}
 
-                  <View style={[styles.cardFooter, { justifyContent: 'space-between' }]}>
+                  <View style={[styles.cardFooter, { justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 16, marginTop: 16 }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Calendar size={12} color="#94a3b8" style={{ marginRight: 4 }} />
-                      <Text style={styles.dateText}>
+                      <Calendar size={14} color="#00b4d8" style={{ marginRight: 6 }} />
+                      <Text style={[styles.dateText, { color: '#64748b', fontSize: 12, fontWeight: '500' }]}>
                         {new Date(item.date || item.createdAt).toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'short',
@@ -344,11 +374,11 @@ export default function MeetingsScreen() {
                       </Text>
                     </View>
                     <TouchableOpacity 
-                      style={styles.editCardBtn} 
+                      style={[styles.editCardBtn, { backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }]} 
                       onPress={() => handleEditMeeting(item)}
                     >
-                      <Pencil size={11} color="#1d4ed8" style={{ marginRight: 4 }} />
-                      <Text style={styles.editCardBtnText}>Edit Report</Text>
+                      <Pencil size={12} color="#00b4d8" style={{ marginRight: 6 }} />
+                      <Text style={[styles.editCardBtnText, { color: '#00b4d8', fontSize: 12, fontWeight: 'bold' }]}>Edit</Text>
                     </TouchableOpacity>
                   </View>
                 </Surface>
@@ -358,19 +388,7 @@ export default function MeetingsScreen() {
         </ScrollView>
       )}
 
-      {/* Floating Add Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleOpenAddModal}
-        activeOpacity={0.85}
-      >
-        <LinearGradient
-          colors={['#1d4ed8', '#2563eb']}
-          style={styles.fabGradient}
-        >
-          <Plus size={24} color="#fff" />
-        </LinearGradient>
-      </TouchableOpacity>
+      
 
       {/* Log Visit Modal Overlay */}
       <Modal
@@ -379,25 +397,28 @@ export default function MeetingsScreen() {
         transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Surface style={styles.modalContent} elevation={5}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Surface style={[styles.modalContent, { borderTopLeftRadius: 36, borderTopRightRadius: 36, paddingHorizontal: 24, paddingVertical: 32 }]} elevation={5}>
             {/* Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
+            <View style={[styles.modalHeader, { marginBottom: 24, borderBottomWidth: 0 }]}>
+              <Text style={[styles.modalTitle, { fontSize: 22, fontWeight: '900', color: '#1e293b' }]}>
                 {editingMeeting ? 'Edit Client Visit' : 'Log Client Visit'}
               </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={{ backgroundColor: '#f1f5f9', padding: 8, borderRadius: 20 }}>
                 <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Client Name */}
-              <Text style={styles.inputLabel}>Client Name *</Text>
-              <View style={styles.inputWrapper}>
-                <User size={16} color="#94a3b8" style={{ marginLeft: 12, marginRight: 8 }} />
+              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569' }]}>Client Name *</Text>
+              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
+                <User size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { fontSize: 15 }]}
                   placeholder="Enter client name"
                   value={clientName}
                   onChangeText={setClientName}
@@ -406,11 +427,11 @@ export default function MeetingsScreen() {
               </View>
 
               {/* Mobile Number */}
-              <Text style={styles.inputLabel}>Mobile / Phone *</Text>
-              <View style={styles.inputWrapper}>
-                <Phone size={16} color="#94a3b8" style={{ marginLeft: 12, marginRight: 8 }} />
+              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Mobile / Phone *</Text>
+              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
+                <Phone size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { fontSize: 15 }]}
                   placeholder="Enter phone number"
                   keyboardType="phone-pad"
                   value={mobileNumber}
@@ -420,20 +441,20 @@ export default function MeetingsScreen() {
               </View>
 
               {/* Visit Location Address */}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
-                <Text style={[styles.inputLabel, { marginTop: 0, marginBottom: 0 }]}>Meeting Address *</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
+                <Text style={[styles.inputLabel, { marginTop: 0, marginBottom: 0, fontWeight: '700', color: '#475569' }]}>Meeting Address *</Text>
                 <TouchableOpacity onPress={handleFetchCurrentLocation} disabled={fetchingLocation}>
                   {fetchingLocation ? (
-                    <ActivityIndicator size="small" color="#1d4ed8" />
+                    <ActivityIndicator size="small" color="#00c6a9" />
                   ) : (
-                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1d4ed8' }}>Fetch Current</Text>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#00c6a9' }}>Fetch Current</Text>
                   )}
                 </TouchableOpacity>
               </View>
-              <View style={styles.inputWrapper}>
-                <MapPin size={16} color="#94a3b8" style={{ marginLeft: 12, marginRight: 8 }} />
+              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
+                <MapPin size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { fontSize: 15 }]}
                   placeholder="Enter shop or office address"
                   value={meetingAddress}
                   onChangeText={setMeetingAddress}
@@ -442,19 +463,21 @@ export default function MeetingsScreen() {
               </View>
 
               {/* Status Pills */}
-              <Text style={styles.inputLabel}>Status</Text>
-              <View style={styles.pillRow}>
+              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Status</Text>
+              <View style={[styles.pillRow, { marginBottom: 4 }]}>
                 <TouchableOpacity
                   style={[
                     styles.statusPill,
-                    status === 'scheduled' && styles.statusPillActivePending,
+                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
+                    status === 'scheduled' && { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
                   ]}
                   onPress={() => setStatus('scheduled')}
                 >
                   <Text
                     style={[
                       styles.statusPillText,
-                      status === 'scheduled' && styles.statusPillTextActive,
+                      { fontSize: 11, fontWeight: 'bold' },
+                      status === 'scheduled' && { color: '#d97706' },
                     ]}
                   >
                     PENDING
@@ -464,14 +487,16 @@ export default function MeetingsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.statusPill,
-                    status === 'completed' && styles.statusPillActiveCompleted,
+                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
+                    status === 'completed' && { backgroundColor: '#dcfce7', borderColor: '#10b981' },
                   ]}
                   onPress={() => setStatus('completed')}
                 >
                   <Text
                     style={[
                       styles.statusPillText,
-                      status === 'completed' && styles.statusPillTextActive,
+                      { fontSize: 11, fontWeight: 'bold' },
+                      status === 'completed' && { color: '#15803d' },
                     ]}
                   >
                     COMPLETED
@@ -481,14 +506,16 @@ export default function MeetingsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.statusPill,
-                    status === 'follow-up' && styles.statusPillActiveFollowUp,
+                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
+                    status === 'follow-up' && { backgroundColor: '#e0f2fe', borderColor: '#0284c7' },
                   ]}
                   onPress={() => setStatus('follow-up')}
                 >
                   <Text
                     style={[
                       styles.statusPillText,
-                      status === 'follow-up' && styles.statusPillTextActive,
+                      { fontSize: 11, fontWeight: 'bold' },
+                      status === 'follow-up' && { color: '#0369a1' },
                     ]}
                   >
                     FOLLOW-UP
@@ -497,10 +524,10 @@ export default function MeetingsScreen() {
               </View>
 
               {/* Notes */}
-              <Text style={styles.inputLabel}>Visit Notes / Feedback</Text>
-              <View style={[styles.inputWrapper, { height: 100, alignItems: 'flex-start', paddingTop: 10 }]}>
+              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Visit Notes / Feedback</Text>
+              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 100, alignItems: 'flex-start', paddingTop: 12, paddingHorizontal: 16 }]}>
                 <TextInput
-                  style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                  style={[styles.input, { height: 80, textAlignVertical: 'top', fontSize: 15 }]}
                   placeholder="Write client requirements or feedback..."
                   multiline={true}
                   numberOfLines={4}
@@ -513,19 +540,19 @@ export default function MeetingsScreen() {
               {/* Selfie Capture Box */}
               {!editingMeeting && (
                 <>
-                  <Text style={styles.inputLabel}>Meeting Selfie *</Text>
+                  <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Meeting Selfie *</Text>
                   <View style={styles.selfieContainer}>
                     {selfieImage ? (
-                      <View style={styles.selfieImageWrapper}>
-                        <Text style={{ fontSize: 12, color: '#10b981', marginBottom: 6, fontWeight: 'bold' }}>✓ Selfie Captured</Text>
-                        <TouchableOpacity onPress={() => setSelfieImage(null)} style={styles.retakeBtn}>
-                          <Text style={styles.retakeBtnText}>Retake Selfie</Text>
+                      <View style={[styles.selfieImageWrapper, { backgroundColor: '#ecfdf5', borderColor: '#10b981', borderRadius: 16 }]}>
+                        <Text style={{ fontSize: 14, color: '#10b981', marginBottom: 6, fontWeight: 'bold' }}>✓ Selfie Captured</Text>
+                        <TouchableOpacity onPress={() => setSelfieImage(null)} style={[styles.retakeBtn, { backgroundColor: '#10b981' }]}>
+                          <Text style={[styles.retakeBtnText, { color: '#fff' }]}>Retake Selfie</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      <TouchableOpacity style={styles.selfieUploadBox} onPress={handleCaptureSelfie}>
-                        <Camera size={24} color="#1d4ed8" />
-                        <Text style={styles.selfieBoxText}>Take a Selfie</Text>
+                      <TouchableOpacity style={[styles.selfieUploadBox, { borderRadius: 16, borderStyle: 'dashed', borderColor: '#00c6a9', backgroundColor: '#e6fffa' }]} onPress={handleCaptureSelfie}>
+                        <Camera size={28} color="#00c6a9" style={{ marginBottom: 8 }} />
+                        <Text style={[styles.selfieBoxText, { color: '#00c6a9', fontWeight: 'bold' }]}>Take a Selfie</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -534,26 +561,26 @@ export default function MeetingsScreen() {
 
               {/* Submit Button */}
               {submitting ? (
-                <ActivityIndicator size="small" color="#1d4ed8" style={{ marginTop: 24, marginBottom: 12 }} />
+                <ActivityIndicator size="large" color="#00c6a9" style={{ marginTop: 24, marginBottom: 12 }} />
               ) : (
                 <TouchableOpacity
-                  style={styles.submitBtn}
+                  style={[styles.submitBtn, { marginTop: 24, shadowColor: '#00c6a9', shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 }]}
                   onPress={handleSaveMeeting}
                 >
                   <LinearGradient
-                    colors={['#1d4ed8', '#2563eb']}
-                    style={styles.submitBtnGradient}
+                    colors={['#00b4d8', '#00c6a9']}
+                    style={[styles.submitBtnGradient, { borderRadius: 16, height: 60 }]}
                   >
-                    <Text style={styles.submitBtnText}>
+                    <Text style={[styles.submitBtnText, { fontSize: 16, fontWeight: 'bold' }]}>
                       {editingMeeting ? 'Update Visit Report' : 'Save Visit Report'}
                     </Text>
-                    <Check size={16} color="#fff" style={{ marginLeft: 6 }} />
+                    <Check size={20} color="#fff" style={{ marginLeft: 8 }} />
                   </LinearGradient>
                 </TouchableOpacity>
               )}
             </ScrollView>
           </Surface>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -578,6 +605,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerAddButton: {
+    marginTop: 20,
+    minHeight: 48,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0284c7',
+    shadowColor: '#0284c7',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  headerAddButtonText: {
+    flex: 1,
+    marginLeft: 10,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   headerTitle: {
     fontSize: 24,
@@ -616,7 +666,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 180,
   },
   emptyCard: {
     backgroundColor: '#fff',
@@ -640,6 +690,28 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#e0f2fe',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#0284c7',
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   meetingCard: {
     backgroundColor: '#fff',

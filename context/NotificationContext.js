@@ -5,6 +5,8 @@ import Constants from 'expo-constants';
 import socketService from '../services/socket';
 import { useAuth } from './AuthContext';
 import { notificationAPI } from '../services/api';
+import { storage } from '../services/storage';
+import { showCustomAlert } from '../components/GlobalAlert';
 
 // ─── Detect Expo Go vs Production APK ────────────────────────────────────────
 // expo-notifications causes errors in Expo Go (SDK 53+).
@@ -14,7 +16,7 @@ const isExpoGo = Constants.appOwnership === 'expo';
 let Notifications = null;
 let nativeNotificationsAvailable = false;
 
-if (!isExpoGo) {
+if (!isExpoGo && Platform.OS !== 'web') {
   // Production APK — load expo-notifications safely
   try {
     Notifications = require('expo-notifications');
@@ -72,8 +74,25 @@ export const NotificationProvider = ({ children }) => {
         const { status: existing } = await Notifications.getPermissionsAsync();
         let finalStatus = existing;
         if (existing !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
+          // Pre-prompt for push notifications
+          const userAgreed = await new Promise((resolve) => {
+            showCustomAlert(
+              "Enable Notifications",
+              "We need notification permissions to send you important updates on tasks, leaves, and expenses.",
+              [
+                { text: "Not Now", onPress: () => resolve(false), style: "cancel" },
+                { text: "Allow", onPress: () => resolve(true) }
+              ],
+              'notification'
+            );
+          });
+          
+          if (userAgreed) {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+          } else {
+            finalStatus = 'denied';
+          }
         }
         if (finalStatus !== 'granted') {
           console.log('⚠️ Native Notifications: Permission denied.');

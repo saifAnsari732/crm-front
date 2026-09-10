@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   StyleSheet, View, TouchableOpacity, ScrollView, 
-  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator 
+  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image 
 } from 'react-native';
 import { Text, TextInput, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,13 +17,7 @@ const { width } = Dimensions.get('window');
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
-  
-  React.useEffect(() => {
-    fetch(`${BASE_URL}/health`)
-      .then(res => res.json())
-      .then(data => console.log('✅ Network Test Success:', data))
-      .catch(err => console.error('❌ Network Test Failed:', err.message));
-  }, []);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
@@ -78,14 +72,13 @@ export default function LoginScreen() {
           {/* Top Brand Logo Container */}
           <View style={styles.brandContainer}>
             <Surface style={styles.logoSurface} elevation={2}>
-              <LinearGradient
-                colors={['#00332c', '#00201a']}
-                style={styles.logoGradient}
-              >
-                <Network size={36} color="#fff" />
-              </LinearGradient>
+              <Image 
+                source={require('../../assets/kisanLogo.png')}
+                style={styles.logoGradient} 
+                resizeMode="cover"
+              />
             </Surface>
-            <Text style={styles.brandTitle}>FieldTrack Pro</Text>
+            <Text style={styles.brandTitle}>kisanTeam</Text>
             <Text style={styles.brandSubtitle}>
               Secure employee portal for enterprise field operations and fleet management.
             </Text>
@@ -164,12 +157,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             {/* Register Proxy Link */}
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/register')}>
-                <Text style={styles.registerLink}>Register</Text>
-              </TouchableOpacity>
-            </View>
+           
           </Surface>
 
           {/* Secure Encryption & System Indicators */}

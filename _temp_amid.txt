@@ -1,0 +1,290 @@
+
+  // â”€â”€â”€ 1. Data Fetching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const fetchAllData = useCallback(async () => {
+    try {
+      const [locationsRes, statsRes, empRes, attRes] = await Promise.all([
+        trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
+        adminAPI.getDashboard().catch(() => ({ data: { success: false } })),
+        adminAPI.getEmployees({ limit: 200, role: 'all' }).catch(() => ({ data: { success: false } })),
+        adminAPI.getAttendance({ date: selectedDate }).catch(() => ({ data: { success: false } })),
+      ]);
+
+      if (locationsRes.data?.success) setLiveLocations(locationsRes.data.locations || []);
+      if (statsRes.data?.success) setStats(statsRes.data.stats || null);
+      if (empRes.data?.success) {
+        setAllEmployeesList(empRes.data.employees || []);
+        if (!reportEmpId && empRes.data.employees?.length > 0) {
+          setReportEmpId(empRes.data.employees[0]._id);
+        }
+        if (!historyEmpId && empRes.data.employees?.length > 0) {
+          setHistoryEmpId(empRes.data.employees[0]._id);
+        }
+      }
+      if (attRes.data?.success) setAttendanceRecords(attRes.data.records || []);
+    } catch (e) {
+      console.log('Error fetching admin monitoring data:', e.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [selectedDate]);
+
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await adminAPI.getHistory({
+        employeeId: historyEmpId || undefined,
+        date: historyDate || undefined,
+      });
+      if (res.data?.success) {
+        setHistorySessions(res.data.history || []);
+      }
+    } catch (e) {
+      setHistorySessions([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyEmpId, historyDate]);
+
+  const fetchTasks = async () => {
+    try {
+      const res = await taskAPI.getAll();
+      if (res.data?.success) setTasks(res.data.tasks || []);
+    } catch (e) {}
+  };
+
+  const fetchExpenses = async () => {
+    try {
+      const res = await expenseAPI.getAll({ limit: 50 });
+      if (res.data?.success) setExpenses(res.data.expenses || []);
+    } catch (e) {}
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const res = await leaveAPI.getAll();
+      if (res.data?.success) setLeaves(res.data.leaves || []);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchAllData();
+
+    let socket;
+    const initSocket = async () => {
+      try {
+        socket = await socketService.connect();
+        if (socket) {
+          socket.on('employee_location', (data) => {
+            setLiveLocations((prev) => {
+              const idx = prev.findIndex((l) => l.employeeId === data.employeeId || l.sessionId === data.sessionId);
+              if (idx > -1) {
+                const upd = [...prev];
+                upd[idx] = {
+                  ...upd[idx],
+                  lat: data.lat,
+                  lng: data.lng,
+                  totalDistance: data.totalDistance,
+                  address: data.address || upd[idx].address,
+                  updatedAt: new Date().toISOString(),
+                };
+                return upd;
+              }
+              return prev;
+            });
+          });
+
+          socket.on('employee_tracking_started', fetchAllData);
+          socket.on('employee_tracking_stopped', fetchAllData);
+        }
+      } catch (e) {}
+    };
+
+    initSocket();
+    const interval = setInterval(fetchAllData, 10000);
+
+    return () => {
+      clearInterval(interval);
+      if (socket) {
+        socket.off('employee_location');
+        socket.off('employee_tracking_started');
+        socket.off('employee_tracking_stopped');
+      }
+    };
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    if (activeTab === 'history') fetchHistory();
+    if (activeTab === 'tasks' && tasks.length === 0) fetchTasks();
+    if (activeTab === 'expenses' && expenses.length === 0) fetchExpenses();
+    if (activeTab === 'leaves' && leaves.length === 0) fetchLeaves();
+  }, [activeTab, fetchHistory]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    if (activeTab === 'history') await fetchHistory();
+    if (activeTab === 'tasks') await fetchTasks();
+    if (activeTab === 'expenses') await fetchExpenses();
+    if (activeTab === 'leaves') await fetchLeaves();
+    setRefreshing(false);
+  };
+
+  // Select employee & load Polyline route
+  const handleSelectEmployee = async (emp) => {
+    setSelectedEmployee(emp);
+    if (emp.lat && emp.lng && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: parseFloat(emp.lat),
+        longitude: parseFloat(emp.lng),
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      }, 1000);
+    }
+
+    const sessId = emp.sessionId || emp._id;
+    if (sessId) {
+      setLoadingRoute(true);
+      try {
+        const res = await trackingAPI.getSession(sessId);
+        if (res.data?.success && res.data.session?.coordinates) {
+          const coords = res.data.session.coordinates.map((c) => ({
+            latitude: parseFloat(c.lat),
+            longitude: parseFloat(c.lng),
+          }));
+          setRouteCoords(coords);
+        }
+      } catch (e) {
+        setRouteCoords([]);
+      } finally {
+        setLoadingRoute(false);
+      }
+    } else {
+      setRouteCoords([]);
+    }
+  };
+
+  // Load a historical session onto the map
+  const handleViewHistorySession = async (session) => {
+    setActiveTab('telemetry');
+    const sessId = session.sessionId || session._id;
+    setLoadingRoute(true);
+    try {
+      const res = await trackingAPI.getSession(sessId);
+      if (res.data?.success && res.data.session?.coordinates) {
+        const coords = res.data.session.coordinates.map((c) => ({
+          latitude: parseFloat(c.lat),
+          longitude: parseFloat(c.lng),
+        }));
+        setRouteCoords(coords);
+        if (coords.length > 0 && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: coords[0].latitude,
+            longitude: coords[0].longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }, 1000);
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load route points.');
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
+  // Generate consolidated report
+  const handleGenerateReport = async () => {
+    if (!reportEmpId) {
+      Alert.alert('Select Staff', 'Please select an employee first.');
+      return;
+    }
+    setReportLoading(true);
+    try {
+      const res = await adminAPI.getConsolidatedReport({
+        employeeId: reportEmpId,
+        startDate: reportStart,
+        endDate: reportEnd,
+      });
+      if (res.data?.success) {
+        setReportData(res.data.data);
+      } else {
+        Alert.alert('Error', res.data?.message || 'Failed to fetch report.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to generate report.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // Actions
+  const handleApproveEmp = async (id) => {
+    try {
+      await adminAPI.approveEmployee(id);
+      fetchAllData();
+    } catch (e) {}
+  };
+
+  const handleToggleBlock = async (id) => {
+    try {
+      await adminAPI.toggleBlock(id);
+      fetchAllData();
+    } catch (e) {}
+  };
+
+  const handleExpenseStatus = async (id, status) => {
+    try {
+      await expenseAPI.approve(id, { status });
+      fetchExpenses();
+    } catch (e) {}
+  };
+
+  const handleLeaveStatus = async (id, status) => {
+    try {
+      await leaveAPI.updateStatus(id, { status });
+      fetchLeaves();
+    } catch (e) {}
+  };
+
+  // Directory Staff Mapping
+  const baseStaffList = allEmployeesList.length > 0 ? allEmployeesList : liveLocations;
+
+  const directoryStaff = baseStaffList.map((emp) => {
+    const liveLoc = liveLocations.find((l) =>
+      (l.employeeId && String(l.employeeId) === String(emp._id || emp.employeeId)) ||
+      (l.employeeIdCode && emp.employeeId && String(l.employeeIdCode) === String(emp.employeeId)) ||
+      (l.name && emp.name && l.name.toLowerCase() === emp.name.toLowerCase())
+    );
+
+    return {
+      _id: emp._id || emp.employeeId,
+      name: emp.name || 'Field Agent',
+      avatar: emp.avatar || liveLoc?.avatar,
+      department: emp.department || liveLoc?.department || 'Field Services',
+      phone: emp.phone,
+      isTracking: !!liveLoc || emp.isTracking,
+      isOnline: emp.isOnline,
+      lat: liveLoc?.lat || emp.lat || null,
+      lng: liveLoc?.lng || emp.lng || null,
+      totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
+      address: liveLoc?.address || emp.address || (liveLoc ? 'Tracking Active' : 'Not Punched In'),
+      sessionId: liveLoc?.sessionId || emp.sessionId || null,
+      startTime: liveLoc?.startTime || emp.startTime || null,
+      updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
+    };
+  });
+
+  const activeCount = directoryStaff.filter(s => s.isTracking).length;
+  const totalEmpCount = directoryStaff.length;
+  const punchedOutCount = Math.max(0, totalEmpCount - activeCount);
+
+  const filteredDirectory = directoryStaff.filter((emp) => {
+    const matchesSearch = (emp.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (emp.address || '').toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (mapFilter === 'ACTIVE') return emp.isTracking;
+    if (mapFilter === 'PUNCHED_OUT') return !emp.isTracking;
+    return true;
+  });

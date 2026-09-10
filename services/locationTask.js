@@ -4,13 +4,15 @@ import { storage } from './storage';
 import axios from 'axios';
 import { BASE_URL } from './api';
 import { enqueueCoordinate, flushOfflineQueue, haversineKm } from './offlineSync';
+import { scheduleNoMovementNotification } from './trackingNotification';
 
 export const BACKGROUND_TRACKING_TASK = 'BACKGROUND_TRACKING';
 
 // ─── Thresholds ───────────────────────────────────────────────────────────────
-const MIN_ACCURACY_METERS = 50;   // Ignore readings worse than 50m accuracy
-const MIN_MOVE_METERS = 30;       // Must move at least 30m to count as movement
-const MIN_SPEED_MS = 0.5;         // Must be moving at ≥0.5 m/s (1.8 km/h) to count
+const MIN_ACCURACY_METERS = 120;
+const MIN_MOVE_METERS = 5;       // Must move at least 10m to count as movement (captures road curves perfectly)
+const STATIONARY_SPEED_MPS = 0.5; // Below this, GPS fixes are treated as stationary unless the jump is substantial.
+const STATIONARY_DRIFT_METERS = 120;
 const MAX_SPEED_KMH = 200;        // Anything faster is a GPS teleport glitch, ignore
 
 // ─── Haversine in meters ──────────────────────────────────────────────────────
@@ -19,17 +21,14 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ─── Background Task Definition ───────────────────────────────────────────────
-TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, error }) => {
-  if (error) {
-    console.error('📍 BackgroundTask Error:', error.message);
-    return;
-  }
-
-  if (!locations || locations.length === 0) return;
-
-  const location = locations[0];
+const processLocation = async (location) => {
   const { latitude, longitude, speed, accuracy, heading } = location.coords;
   const timestamp = location.timestamp;
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp)) {
+    console.log('📍 BackgroundTask: Invalid GPS payload, skipping.');
+    return;
+  }
 
   // ── Gate 1: Poor GPS accuracy → ignore ──────────────────────────────────
   if (accuracy > MIN_ACCURACY_METERS) {
@@ -50,22 +49,40 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
         lastLocation = JSON.parse(lastLocationStr);
         const distMeters = getDistanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude);
 
-        // Dynamic threshold: if GPS accuracy is borderline (20-50m), require more distance
-        const movementThreshold = accuracy > 20 ? MIN_MOVE_METERS * 1.5 : MIN_MOVE_METERS;
-
-        // Speed check: combined guard. If OS says speed < 0.5 m/s AND distance is small → definitely not moving
-        const speedTooLow = speed >= 0 && speed < MIN_SPEED_MS && distMeters < 60;
+        // Dynamic threshold: if GPS accuracy is poor, require slightly more distance to prevent drift
+        // BUT cap at 50m max — otherwise pocket GPS (accuracy 200-400m) would need 200m+ movement to register!
+        // Keep the movement gate small enough for slow starts and short GPS intervals.
+        // Android often reports 0 or an unknown speed while the phone is in a pocket,
+        // so distance and the backend teleport guard are the reliable signals.
+        const rawThreshold = accuracy > 30 ? Math.max(MIN_MOVE_METERS, accuracy * 0.15) : MIN_MOVE_METERS;
+        const movementThreshold = Math.min(rawThreshold, 25);
         const distTooShort = distMeters < movementThreshold;
 
-        if (distTooShort || speedTooLow) {
+        if (distTooShort) {
           // Not moving. Skip this point entirely.
           return;
         }
 
-        // ── Gate 3: Unrealistic teleport check ────────────────────────────────
+        // A parked phone can wander tens of metres between fixes. Do not turn
+        // low-speed accuracy drift into distance; a moving bike normally
+        // exceeds this distance between 10-second GPS updates.
         const timeDiffSecs = lastLocation.timestamp
-          ? (Date.now() - new Date(lastLocation.timestamp).getTime()) / 1000
+          ? (timestamp - new Date(lastLocation.timestamp).getTime()) / 1000
           : 0;
+        const reportedSpeedMps = Number(speed);
+        // A fix with no reliable speed and mediocre accuracy is GPS drift, not
+        // travelled distance. Do not let a location jump inflate the cache.
+        if ((!Number.isFinite(reportedSpeedMps) || reportedSpeedMps < STATIONARY_SPEED_MPS) && accuracy > 30) {
+          return;
+        }
+        const accuracyDriftLimit = Math.max(STATIONARY_DRIFT_METERS, (accuracy || 0) * 0.75);
+        const calculatedSpeedMps = timeDiffSecs > 0 ? distMeters / timeDiffSecs : 0;
+        const effectiveSpeedMps = Math.max(reportedSpeedMps || 0, calculatedSpeedMps);
+        if (effectiveSpeedMps < STATIONARY_SPEED_MPS && distMeters < accuracyDriftLimit) {
+          return;
+        }
+
+        // ── Gate 3: Unrealistic teleport check ────────────────────────────────
 
         if (timeDiffSecs > 0) {
           const calculatedSpeedKmh = (distMeters / 1000) / (timeDiffSecs / 3600);
@@ -82,6 +99,7 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
 
     // ─── Employee is genuinely moving. Process this point. ───────────────────
     const newCoord = {
+      eventId: `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`,
       lat: latitude,
       lng: longitude,
       speed: speed || 0,
@@ -92,6 +110,15 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
 
     // Update last recorded location in storage FIRST (so next tick has reference)
     await storage.setItem('last_recorded_location', JSON.stringify(newCoord));
+    await scheduleNoMovementNotification(sessionId);
+
+    // Persist a monotonic local checkpoint immediately. This is the key no-loss
+    // guarantee: even if the network drops or the OS kills the app, the accepted
+    // movement is still retained in local storage before the server reply arrives.
+    const previousLocalDistance = Number.parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+    const segmentKm = lastLocation ? haversineKm(lastLocation.lat, lastLocation.lng, latitude, longitude) : 0;
+    const nextLocalDistance = previousLocalDistance + (Number.isFinite(segmentKm) ? segmentKm : 0);
+    await storage.setItem('tracking_accumulated_distance', Math.max(previousLocalDistance, nextLocalDistance).toFixed(3));
 
     console.log(`📍 BackgroundTask: ✅ Movement detected! [${latitude.toFixed(5)}, ${longitude.toFixed(5)}] | Acc:${accuracy.toFixed(0)}m | Speed:${(speed || 0).toFixed(1)}m/s`);
 
@@ -135,5 +162,21 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
 
   } catch (e) {
     console.error('📍 BackgroundTask: Unhandled error in background tick:', e);
+  }
+};
+
+TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, error }) => {
+  if (error) {
+    console.error('📍 BackgroundTask Error:', error.message);
+    return;
+  }
+
+  if (!locations || locations.length === 0) return;
+
+  // Android may batch several GPS fixes while the phone is locked or in a pocket.
+  // Process every fix in timestamp order so route segments are never discarded.
+  const orderedLocations = [...locations].sort((a, b) => a.timestamp - b.timestamp);
+  for (const location of orderedLocations) {
+    await processLocation(location);
   }
 });

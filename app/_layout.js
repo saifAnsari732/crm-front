@@ -17,11 +17,14 @@ SplashScreen.preventAutoHideAsync();
 
 export { ErrorBoundary } from 'expo-router';
 
+// Splash must play only once per JS session — not on tab changes / remounts
+let splashCompleted = false;
+
 function InitialLayout() {
   const { user, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!splashCompleted);
 
   // ── Bootstrap offline resilience on app start ────────────────────────────
   useEffect(() => {
@@ -35,14 +38,22 @@ function InitialLayout() {
 
     const inAuthGroup = segments.some(s => s === '(auth)');
     const inEmployeeGroup = segments.some(s => s === '(employee)');
+    const inAdminGroup = segments.some(s => s === '(admin)');
+    const isAdmin = user?.role === 'admin' || user?.role === 'hr';
 
     if (!user) {
       // Unauthenticated: force redirection to Login Screen
       if (!inAuthGroup) {
         router.replace('/(auth)/login');
       }
+    } else if (isAdmin) {
+      // Admin/HR: route to admin workspace
+      if (!inAdminGroup) {
+        console.log(`🏃 Navigation: Routing admin ${user.name} to admin dashboard.`);
+        router.replace('/(admin)/dashboard');
+      }
     } else {
-      // Authenticated: route directly to employee workspace
+      // Regular employee: route directly to employee workspace
       if (!inEmployeeGroup) {
         console.log(`🏃 Navigation: Routing authenticated user ${user.name} to employee workspace.`);
         router.replace('/(employee)/dashboard');
@@ -51,10 +62,10 @@ function InitialLayout() {
   }, [user, segments, isLoading, showSplash]);
 
   useEffect(() => {
-    if (!isLoading) {
-      SplashScreen.hideAsync();
+    if (!isLoading && !showSplash) {
+      SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isLoading]);
+  }, [isLoading, showSplash]);
 
   if (isLoading) {
     return (
@@ -64,22 +75,28 @@ function InitialLayout() {
     );
   }
 
-  if (showSplash) {
-    return <AnimatedSplash onFinish={() => setShowSplash(false)} />;
-  }
+  const finishSplash = () => {
+    splashCompleted = true;
+    setShowSplash(false);
+  };
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)/login" options={{ animation: 'fade' }} />
-      <Stack.Screen name="(auth)/register" options={{ animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="(employee)" options={{ animation: 'slide_from_right' }} />
-    </Stack>
+    <View style={{ flex: 1 }}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)/login" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(auth)/register" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="(employee)" options={{ animation: 'none' }} />
+        <Stack.Screen name="(admin)" options={{ animation: 'none' }} />
+      </Stack>
+      {showSplash ? <AnimatedSplash onFinish={finishSplash} /> : null}
+    </View>
   );
 }
 
 import { SettingsProvider } from '../context/SettingsContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import NotificationBanner from '../components/NotificationBanner';
+import GlobalAlert, { globalAlertRef } from '../components/GlobalAlert';
 
 export default function RootLayout() {
   return (
@@ -89,6 +106,7 @@ export default function RootLayout() {
           <NotificationProvider>
             <InitialLayout />
             <NotificationBanner />
+            <GlobalAlert ref={globalAlertRef} />
           </NotificationProvider>
         </SettingsProvider>
       </AuthProvider>

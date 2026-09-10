@@ -1,0 +1,341 @@
+  const baseStaffList = allEmployeesList.length > 0 ? allEmployeesList : liveLocations;
+
+  const directoryStaff = baseStaffList.map((emp) => {
+    const liveLoc = liveLocations.find((l) =>
+      (l.employeeId && String(l.employeeId) === String(emp._id || emp.employeeId)) ||
+      (l.employeeIdCode && emp.employeeId && String(l.employeeIdCode) === String(emp.employeeId)) ||
+      (l.name && emp.name && l.name.toLowerCase() === emp.name.toLowerCase())
+    );
+
+    return {
+      _id: emp._id || emp.employeeId,
+      name: emp.name || 'Field Agent',
+      avatar: emp.avatar || liveLoc?.avatar,
+      department: emp.department || liveLoc?.department || 'Field Services',
+      phone: emp.phone,
+      isTracking: !!liveLoc || emp.isTracking,
+      isOnline: emp.isOnline,
+      lat: liveLoc?.lat || emp.lat || null,
+      lng: liveLoc?.lng || emp.lng || null,
+      totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
+      address: liveLoc?.address || emp.address || (liveLoc ? 'Tracking Active' : 'Not Punched In'),
+      sessionId: liveLoc?.sessionId || emp.sessionId || null,
+      startTime: liveLoc?.startTime || emp.startTime || null,
+      updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
+    };
+  });
+
+  const activeCount = directoryStaff.filter(s => s.isTracking).length;
+  const totalEmpCount = directoryStaff.length;
+  const punchedOutCount = Math.max(0, totalEmpCount - activeCount);
+
+  const filteredDirectory = directoryStaff.filter((emp) => {
+    const matchesSearch = (emp.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (emp.address || '').toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (mapFilter === 'ACTIVE') return emp.isTracking;
+    if (mapFilter === 'PUNCHED_OUT') return !emp.isTracking;
+    return true;
+  });
+
+  const defaultRegion = {
+    latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.4499,
+    longitude: liveLocations[0]?.lng ? parseFloat(liveLocations[0].lng) : 80.3319,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  };
+
+  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'â€”');
+  const fmtTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'â€”');
+
+  return (
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      {/* â”€â”€ Scrollable Tab Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* â”€â”€ TAB 1: LIVE MAP SYSTEM (Maximum Screen Height!) â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'telemetry' && (
+        <View style={{ flex: 1 }}>
+          {/* Status Filter Chips */}
+          <View style={styles.filterChipsRow}>
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'ALL' && styles.chipActive]}
+              onPress={() => setMapFilter('ALL')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'ALL' && styles.chipTextActive]}>ALL ({totalEmpCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'ACTIVE' && styles.chipActive]}
+              onPress={() => setMapFilter('ACTIVE')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'ACTIVE' && styles.chipTextActive]}>ACTIVE ({activeCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'PUNCHED_OUT' && styles.chipActive]}
+              onPress={() => setMapFilter('PUNCHED_OUT')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'PUNCHED_OUT' && styles.chipTextActive]}>PUNCHED OUT ({punchedOutCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => router.push('/(employee)/admin/history')}
+            >
+              <FileText size={13} color="#fff" />
+              <Text style={styles.historyBtnText}>KM HISTORY</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Interactive Map View (EXPANDED HEIGHT) */}
+          <View style={styles.mapContainerLarge}>
+            <MapViewComponent
+              ref={mapRef}
+              initialRegion={defaultRegion}
+              directoryStaff={directoryStaff}
+              routeCoords={routeCoords}
+              loadingRoute={loadingRoute}
+              onSelectEmployee={handleSelectEmployee}
+            />
+
+            {loadingRoute && (
+              <View style={styles.mapLoader}>
+                <ActivityIndicator color="#008080" size="small" />
+                <Text style={{ fontFamily: FONT, fontSize: 11, marginLeft: 8, color: '#008080', fontWeight: 'bold' }}>Drawing GPS Route Path...</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Collapsable Bottom Directory */}
+          <View style={[styles.directoryContainerCompact, { backgroundColor: C.surface }]}>
+            <TouchableOpacity style={styles.directoryHeader} onPress={() => setShowDirectory(!showDirectory)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Users size={16} color="#008080" />
+                <Text style={[styles.directoryTitle, { color: C.text }]}>TEAM DIRECTORY ({filteredDirectory.length})</Text>
+              </View>
+              {showDirectory ? <ChevronDown size={20} color={C.sub} /> : <ChevronUp size={20} color={C.sub} />}
+            </TouchableOpacity>
+
+            {showDirectory && (
+              <>
+                <View style={[styles.searchBox, { backgroundColor: C.bg, borderColor: C.border, marginHorizontal: 0, marginBottom: 8 }]}>
+                  <Search size={16} color={C.sub} style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.searchInput, { color: C.text }]}
+                    placeholder="Search staff..."
+                    placeholderTextColor={C.sub}
+                    value={search}
+                    onChangeText={setSearch}
+                  />
+                </View>
+
+                <FlatList
+                  data={filteredDirectory}
+                  keyExtractor={(item, idx) => item._id || String(idx)}
+                  style={{ maxHeight: 180 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.staffRow,
+                        { borderColor: C.border },
+                        selectedEmployee?._id === item._id && { backgroundColor: isDark ? '#334155' : '#e0f2fe' }
+                      ]}
+                      onPress={() => handleSelectEmployee(item)}
+                    >
+                      <View style={{ position: 'relative' }}>
+                        {getAvatarUrl(item.avatar) ? (
+                          <Avatar.Image size={36} source={{ uri: getAvatarUrl(item.avatar) }} />
+                        ) : (
+                          <Avatar.Text size={36} label={(item.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                        )}
+                        <View style={[styles.listStatusDot, { backgroundColor: item.isTracking ? '#16a34a' : '#94a3b8' }]} />
+                      </View>
+
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={[styles.empName, { color: C.text }]}>{item.name}</Text>
+                        <Text style={[styles.empSub, { color: C.sub }]} numberOfLines={1}>
+                          {item.isTracking ? item.address : 'Not Punched In'}
+                        </Text>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {item.isTracking ? (
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#008080' }}>
+                            {(parseFloat(item.totalDistance) || 0).toFixed(1)} km
+                          </Text>
+                        ) : (
+                          <Text style={{ fontSize: 11, color: C.sub }}>Offline</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              </>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* â”€â”€ TAB 2: GPS TRACKING HISTORY (Date Filter & Session Replay) â”€ */}
+      {activeTab === 'history' && (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.dateFilterHeader, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateLbl, { color: C.sub }]}>FILTER DATE</Text>
+              <TextInput
+                style={[styles.dateInput, { color: C.text }]}
+                value={historyDate}
+                onChangeText={setHistoryDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={C.sub}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.filterApplyBtn} onPress={fetchHistory}>
+              <RefreshCw size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Apply Date</Text>
+            </TouchableOpacity>
+          </View>
+
+          {historyLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator color="#283b96" size="large" />
+              <Text style={{ color: C.sub, marginTop: 10, fontSize: 12 }}>Loading GPS Tracking History...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={historySessions}
+              keyExtractor={(item, idx) => item._id || String(idx)}
+              contentContainerStyle={styles.body}
+              ListEmptyComponent={
+                <View style={styles.center}>
+                  <Clock size={40} color={C.sub} />
+                  <Text style={[styles.emptyText, { color: C.sub }]}>No tracking history found for {historyDate}</Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+                  <View style={styles.cardRow}>
+                    <Avatar.Text size={40} label={(item.employee?.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.empName, { color: C.text }]}>{item.employee?.name || 'Field Agent'}</Text>
+                      <Text style={[styles.empSub, { color: C.sub }]}>
+                        Date: {fmtDate(item.date)} â€¢ Start: {fmtTime(item.startTime)}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#008080' }}>
+                        {(item.totalDistance || 0).toFixed(2)} km
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={[styles.generateBtn, { marginTop: 10, paddingVertical: 8 }]} onPress={() => handleViewHistorySession(item)}>
+                    <Play size={14} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.generateBtnText}>Replay Route Path on Map</Text>
+                  </TouchableOpacity>
+                </Surface>
+              )}
+            />
+          )}
+        </View>
+      )}
+
+      {/* â”€â”€ TAB 3: OVERVIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'overview' && (
+        <ScrollView contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Operational KPIs</Text>
+          <View style={styles.kpiGrid}>
+            {[
+              { label: 'Total Employees', val: stats?.totalEmployees || totalEmpCount, color: '#283b96' },
+              { label: 'Online Now', val: stats?.activeEmployees || 0, color: '#2563eb' },
+              { label: 'Tracking Now', val: activeCount, color: '#16a34a' },
+              { label: 'Today KM', val: `${(stats?.totalKm || 0).toFixed(1)}km`, color: '#0891b2' },
+              { label: 'Total Meetings', val: stats?.totalMeetings || 0, color: '#7c3aed' },
+              { label: 'Pending Expenses', val: stats?.pendingExpenses || 0, color: '#dc2626' },
+              { label: 'Total Tasks', val: stats?.totalTasks || 0, color: '#ea580c' },
+              { label: 'Total Leads', val: stats?.totalLeads || 0, color: '#0d9488' },
+            ].map((k, i) => (
+              <Surface key={i} style={[styles.kpiCard, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+                <Text style={[styles.kpiVal, { color: k.color }]}>{k.val}</Text>
+                <Text style={[styles.kpiLabel, { color: C.sub }]}>{k.label}</Text>
+              </Surface>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      {/* â”€â”€ TAB 4: ATTENDANCE (Date Filter Enabled) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'attendance' && (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.dateFilterHeader, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateLbl, { color: C.sub }]}>FILTER DATE</Text>
+              <TextInput
+                style={[styles.dateInput, { color: C.text }]}
+                value={selectedDate}
+                onChangeText={setSelectedDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={C.sub}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.filterApplyBtn} onPress={fetchAllData}>
+              <RefreshCw size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Filter</Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={attendanceRecords}
+            keyExtractor={(item, idx) => item._id || String(idx)}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            contentContainerStyle={styles.body}
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <CalendarCheck size={40} color={C.sub} />
+                <Text style={[styles.emptyText, { color: C.sub }]}>No attendance records for {selectedDate}</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+                <View style={styles.cardRow}>
+                  <Avatar.Text size={40} label={(item.employee?.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.empName, { color: C.text }]}>{item.employee?.name || 'Employee'}</Text>
+                    <Text style={[styles.empSub, { color: C.sub }]}>
+                      Date: {fmtDate(item.date)} â€¢ Check In: {fmtTime(item.checkIn)}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: item.status === 'present' ? '#dcfce7' : '#fee2e2' }]}>
+                    <Text style={[styles.statusText, { color: item.status === 'present' ? '#15803d' : '#dc2626' }]}>
+                      {(item.status || 'PRESENT').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                {item.selfieUrl && (
+                  <TouchableOpacity onPress={() => setSelfieModalUrl(item.selfieUrl)}>
+                    <Text style={{ fontSize: 11, color: '#283b96', fontWeight: 'bold', marginTop: 4 }}>ðŸ“¸ View Punch-In Selfie</Text>
+                  </TouchableOpacity>
+                )}
+              </Surface>
+            )}
+          />
+        </View>
+      )}
+
+      {/* â”€â”€ TAB 5: EMPLOYEES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'employees' && (
+        <FlatList
+          data={allEmployeesList.filter(e => (e.name || '').toLowerCase().includes(search.toLowerCase()))}
+          keyExtractor={(item) => item._id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={styles.body}
+          renderItem={({ item: emp }) => (
+            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
+              <View style={styles.cardRow}>
+                <Avatar.Text size={40} label={(emp.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#334155' }} labelStyle={{ color: '#fff' }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.empName, { color: C.text }]}>{emp.name}</Text>
+                  <Text style={[styles.empSub, { color: C.sub }]}>{emp.department || 'Staff'} â€¢ {emp.role?.toUpperCase()}</Text>

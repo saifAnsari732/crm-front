@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  StyleSheet, View, ScrollView, TouchableOpacity, Alert, Switch, Dimensions, Platform 
+  StyleSheet, View, ScrollView, TouchableOpacity, Alert, Switch, Dimensions, Platform, Linking, AppState 
 } from 'react-native';
 import { Text, Avatar, Surface, ActivityIndicator } from 'react-native-paper';
 import { 
   CheckCircle2, Gauge, Award, Bell, Sun, Globe, LogOut, 
-  ChevronRight, Pencil, ClipboardCheck, Calendar, Wallet, FileSpreadsheet 
+  ChevronRight, Pencil, ClipboardCheck, Calendar, Wallet, FileSpreadsheet,
+  Shield, MapPin, Navigation, BatteryCharging, Camera
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { taskApi, expenseApi, uploadAPI, authAPI, getAvatarUrl } from '../../services/api';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+let Notifications = null;
+try {
+  Notifications = require('expo-notifications');
+} catch (e) {
+  // Gracefully ignored in Expo Go
+}
 import { useSettings } from '../../context/SettingsContext';
+import { openBatteryOptimizationSettings } from '../../services/batteryOptimization';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +52,76 @@ export default function ProfileScreen() {
   const currentThemeLabel = theme === 'dark' 
     ? (language === 'en' ? 'Current: Dark Mode' : 'वर्तमान: डार्क मोड') 
     : (language === 'en' ? 'Current: Light Mode' : 'वर्तमान: लाइट मोड');
+
+  // ─── Permission States ────────────────────────────────────────────────────
+  const [permissions, setPermissions] = useState({
+    locationForeground: false,
+    locationBackground: false,
+    notifications: false,
+    camera: false,
+  });
+
+  const checkPermissions = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      const [fgLoc, bgLoc, notif, cam] = await Promise.all([
+        Location.getForegroundPermissionsAsync(),
+        Location.getBackgroundPermissionsAsync(),
+        Notifications ? Notifications.getPermissionsAsync() : Promise.resolve({ status: 'denied' }),
+        ImagePicker.getCameraPermissionsAsync(),
+      ]);
+      setPermissions({
+        locationForeground: fgLoc.status === 'granted',
+        locationBackground: bgLoc.status === 'granted',
+        notifications: notif.status === 'granted',
+        camera: cam.status === 'granted',
+      });
+    } catch (e) {
+      console.log('⚠️ ProfileScreen: Permission check failed:', e.message);
+    }
+  }, []);
+
+  // Re-check permissions when user comes back from phone settings
+  useEffect(() => {
+    checkPermissions();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkPermissions();
+    });
+    return () => sub.remove();
+  }, [checkPermissions]);
+
+  const handlePermissionPress = async (type) => {
+    if (Platform.OS === 'web') return;
+    switch (type) {
+      case 'locationForeground': {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') Linking.openSettings();
+        break;
+      }
+      case 'locationBackground': {
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        if (status !== 'granted') Linking.openSettings();
+        break;
+      }
+      case 'notifications': {
+        if (!Notifications) break;
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') Linking.openSettings();
+        break;
+      }
+      case 'camera': {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') Linking.openSettings();
+        break;
+      }
+      case 'battery': {
+        await openBatteryOptimizationSettings();
+        break;
+      }
+    }
+    // Re-check after granting
+    setTimeout(checkPermissions, 1000);
+  };
 
   const fetchProfileStats = async () => {
     try {
@@ -98,20 +177,17 @@ export default function ProfileScreen() {
 
         setUploading(true);
 
-        const formData = new FormData();
+        let uploadRes;
         if (Platform.OS === 'web') {
+          const formData = new FormData();
           const response = await fetch(selectedAsset.uri);
           const blob = await response.blob();
           formData.append('image', blob, filename);
+          uploadRes = await uploadAPI.uploadImageFormData(formData);
         } else {
-          formData.append('image', {
-            uri: selectedAsset.uri,
-            type: 'image/jpeg',
-            name: filename
-          });
+          // Pass the URI directly for native
+          uploadRes = await uploadAPI.uploadImageFormData(selectedAsset.uri);
         }
-
-        const uploadRes = await uploadAPI.uploadImageFormData(formData);
 
         if (uploadRes.data && uploadRes.data.success) {
           const imageUrl = uploadRes.data.url;
@@ -340,7 +416,140 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </Surface>
 
-      {/* 5. Logout Button */}
+      {/* ─── 5. APP PERMISSIONS SECTION ─────────────────────────────────────── */}
+      {Platform.OS !== 'web' && (
+        <>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {language === 'en' ? '🔐 App Permissions' : '🔐 ऐप अनुमतियाँ'}
+          </Text>
+          <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+            
+            {/* Permission: Location (Foreground) */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+              onPress={() => handlePermissionPress('locationForeground')}
+            >
+              <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Location Access' : 'लोकेशन एक्सेस'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                  {language === 'en' ? 'Required for GPS tracking' : 'GPS ट्रैकिंग के लिए ज़रूरी'}
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
+                  {permissions.locationForeground ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Permission: Background Location */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+              onPress={() => handlePermissionPress('locationBackground')}
+            >
+              <Navigation size={20} color={permissions.locationBackground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Background Location' : 'बैकग्राउंड लोकेशन'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
+                  {permissions.locationBackground
+                    ? (language === 'en' ? '"Allow all the time" is ON' : '"हमेशा अनुमति दें" चालू है')
+                    : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" करें')
+                  }
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
+                  {permissions.locationBackground ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Permission: Battery Optimization */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+              onPress={() => handlePermissionPress('battery')}
+            >
+              <BatteryCharging size={20} color="#f59e0b" style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Battery Unrestricted' : 'बैटरी अनरिस्ट्रिक्टेड'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: '#f59e0b' }]}>
+                  {language === 'en' ? 'Tap to set → prevents GPS kill' : 'टैप करें → GPS बंद होने से बचाएँ'}
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: '#fef3c7' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>SET</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Permission: Notifications */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+              onPress={() => handlePermissionPress('notifications')}
+            >
+              <Bell size={20} color={permissions.notifications ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Notifications' : 'नोटिफिकेशन'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                  {language === 'en' ? 'Shift alerts & task updates' : 'शिफ्ट अलर्ट और टास्क अपडेट'}
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: permissions.notifications ? '#dcfce7' : '#fee2e2' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.notifications ? '#15803d' : '#dc2626' }}>
+                  {permissions.notifications ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Permission: Camera */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomWidth: 0 }]}
+              onPress={() => handlePermissionPress('camera')}
+            >
+              <Camera size={20} color={permissions.camera ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Camera' : 'कैमरा'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                  {language === 'en' ? 'Selfie check-in & expense receipts' : 'सेल्फी चेक-इन और खर्चे की रसीदें'}
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.camera ? '#15803d' : '#dc2626' }}>
+                  {permissions.camera ? 'ON' : 'OFF'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+          </Surface>
+
+          {/* Warning banner if critical permissions are OFF */}
+          {(!permissions.locationBackground || !permissions.locationForeground) && (
+            <TouchableOpacity 
+              style={styles.warningBanner}
+              onPress={() => handlePermissionPress('locationBackground')}
+            >
+              <Shield size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.warningText}>
+                {language === 'en' 
+                  ? '⚠️ Location OFF — KM will NOT track! Tap to fix.' 
+                  : '⚠️ लोकेशन बंद है — KM ट्रैक नहीं होगा! ठीक करने के लिए टैप करें'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
+
       <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: colors.surface }]} onPress={handleLogout}>
         <LogOut size={18} color="#ef4444" style={{ marginRight: 8 }} />
         <Text style={styles.logoutBtnText}>{t('logout')}</Text>
@@ -361,7 +570,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 160, // Extra padding for safe scrolling past floating bottom nav
     alignItems: 'center',
   },
   profileHeaderBox: {
@@ -594,5 +803,28 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 2,
     textAlign: 'center',
+  },
+  permBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    borderRadius: 14,
+    padding: 14,
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  warningText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
   },
 });

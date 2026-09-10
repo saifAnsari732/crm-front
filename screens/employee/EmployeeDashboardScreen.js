@@ -11,91 +11,77 @@ import {
   RefreshControl,
   Modal,
   Image,
-  TextInput,
-  Animated,
-  Easing,
+  StatusBar,
+  Linking
 } from "react-native";
+import * as ImagePicker from 'expo-image-picker';
 import { Text, Surface } from "react-native-paper";
 import {
   Menu,
-  Sun,
   Bell,
   Navigation,
+  MapPin,
   Users,
   Wallet,
-  CheckCircle,
   ClipboardCheck,
   Calendar,
   UserPlus,
   Play,
-  Square,
   ChevronRight,
-  CircleDot,
-  RefreshCw,
-  Home,
+  TrendingUp,
+  Footprints,
   X,
+  Home,
+  Radio,
 } from "lucide-react-native";
 import useLocationTracker from "../../hooks/useLocationTracker";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
-import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
-import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, getAvatarUrl, uploadAPI, BASE_URL } from "../../services/api";
-import { storage } from "../../services/storage";
-import { useSettings } from "../../context/SettingsContext";
+import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl } from "../../services/api";
 
 const { width } = Dimensions.get("window");
+
+// Status badge palette for expense claims (mirrors ExpensesScreen)
+const getExpenseStatusStyle = (statusVal) => {
+  switch (statusVal) {
+    case "approved":
+      return { bg: "#e6fbf2", text: "#10b981", label: "APPROVED" };
+    case "rejected":
+      return { bg: "#fde8e8", text: "#ef4444", label: "REJECTED" };
+    default:
+      return { bg: "#fef3c7", text: "#d97706", label: "PENDING" };
+  }
+};
+
+// Using fontWeight instead of fontFamily to avoid conflicts with react-native-paper's Text component
 
 export default function EmployeeDashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isTracking, loading, startTracking, stopTracking, requestPermissions } =
-    useLocationTracker();
+  const { isTracking, startTracking, stopTracking } = useLocationTracker();
   const [currentDate, setCurrentDate] = useState("");
   const [showMenu, setShowMenu] = useState(false);
-  
-  // Settings Hook
-  const { theme, language, t } = useSettings();
-  
-  // Dynamic theme colors mapping
-  const isDark = theme === "dark";
-  const colors = {
-    background: isDark ? "#0f172a" : "#f8fafc",
-    surface: isDark ? "#1e293b" : "#ffffff",
-    text: isDark ? "#f8fafc" : "#0f172a",
-    subText: isDark ? "#94a3b8" : "#64748b",
-    border: isDark ? "#334155" : "#e2e8f0",
-    iconColor: isDark ? "#94a3b8" : "#334155",
-  };
-  
-  // Notification states
+
   const [notificationItems, setNotificationItems] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(4);
   const [showNotifications, setShowNotifications] = useState(false);
-  
-  // Dynamic state hooks for actual data
+
   const [stats, setStats] = useState({
     distanceToday: "0.00",
     meetingCount: 0,
-    expenseTotal: 0,
+    totalDistanceAllDates: "0.00",
+    travelRate: 0,
     status: "absent",
   });
   const [recentMeetings, setRecentMeetings] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
-  const [recentTasks, setRecentTasks] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [quickTaskTitle, setQuickTaskTitle] = useState('');
-  const [quickTaskSubmitting, setQuickTaskSubmitting] = useState(false);
   const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
-  
-  const isOffice = user?.department?.toLowerCase() === 'office';
 
   const fetchNotifications = async () => {
     try {
       const items = [];
-      
-      // 1. Fetch incomplete tasks
       const tasksRes = await taskApi.getMy();
       if (tasksRes.data && tasksRes.data.success) {
         const activeTasks = (tasksRes.data.tasks || []).filter(t => t.status !== 'completed');
@@ -106,12 +92,9 @@ export default function EmployeeDashboardScreen() {
             title: `New Task: ${t.title}`,
             description: t.description || 'No description provided.',
             date: t.createdAt || t.dueDate || new Date(),
-            original: t,
           });
         });
       }
-      
-      // 2. Fetch incomplete leads
       const leadsRes = await leadAPI.getAll();
       if (leadsRes.data && leadsRes.data.success) {
         const activeLeads = (leadsRes.data.leads || []).filter(l => l.status !== 'completed');
@@ -120,82 +103,46 @@ export default function EmployeeDashboardScreen() {
             id: l._id || l.id,
             type: 'lead',
             title: `New Lead Assigned: ${l.name}`,
-            description: `Contact: ${l.contactNo} | ${l.address}`,
+            description: `Contact: ${l.contactNo || ''} | ${l.address || ''}`,
             date: l.createdAt || new Date(),
-            original: l,
           });
         });
       }
-      
-      // Sort items by date descending (newest first)
       items.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
-      setNotificationItems(items);
-      setUnreadCount(items.length);
-    } catch (err) {
-      console.log('⚠️ Failed to fetch notifications:', err.message);
-    }
+      if (items.length > 0) {
+        setNotificationItems(items);
+        setUnreadCount(items.length);
+      }
+    } catch (err) {}
   };
 
-  // Set date format matching: "SUNDAY, 17 MAY"
   useEffect(() => {
     const date = new Date();
-    const options = { weekday: "long", day: "numeric", month: "short" };
+    const options = { weekday: "long", month: "short", day: "numeric" };
     setCurrentDate(date.toLocaleDateString("en-US", options).toUpperCase());
   }, []);
 
-  // Fetch actual data from database
   const loadDashboardData = async () => {
     try {
-      // 1. Fetch dashboard metrics
       const statsRes = await dashboardApi.getStats();
       if (statsRes.data && statsRes.data.success) {
         setStats(statsRes.data.stats);
       }
-
-      // 2. Fetch employee's recent meetings
       const meetingsRes = await meetingApi.getMy();
       if (meetingsRes.data && meetingsRes.data.success) {
         setRecentMeetings(meetingsRes.data.meetings || []);
       }
-
-      // 3. Fetch employee's recent expenses
       const expensesRes = await expenseApi.getMy();
       if (expensesRes.data && expensesRes.data.success) {
         setRecentExpenses(expensesRes.data.expenses || []);
       }
-
-      // 4. Fetch recent tasks
-      const tasksRes = await taskApi.getMy();
-      if (tasksRes.data && tasksRes.data.success) {
-        setRecentTasks(tasksRes.data.tasks || []);
-      }
-    } catch (err) {
-      console.log("⚠️ EmployeeDashboardScreen: Failed to fetch data:", err.message);
-    }
+    } catch (err) {}
   };
 
   useEffect(() => {
     loadDashboardData();
     fetchNotifications();
   }, [isTracking]);
-
-  const handleQuickTaskSubmit = async () => {
-    if (!quickTaskTitle.trim()) return;
-    setQuickTaskSubmitting(true);
-    try {
-      const res = await taskApi.create({ title: quickTaskTitle.trim(), description: 'Daily task submitted from dashboard', priority: 'medium', dueDate: new Date().toISOString() });
-      if (res.data && res.data.success) {
-        setQuickTaskTitle('');
-        loadDashboardData();
-        Alert.alert('Success', 'Task submitted!');
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to submit task');
-    } finally {
-      setQuickTaskSubmitting(false);
-    }
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -206,636 +153,427 @@ export default function EmployeeDashboardScreen() {
 
   const handleClockToggle = async () => {
     if (isTracking) {
-      if (Platform.OS === 'web') {
-        const confirmed = window.confirm("Are you sure you want to end your active operational tracking shift? (Punch Out)");
-        if (confirmed) {
-          const res = await stopTracking();
-          if (res.success) {
-            alert(`Punch out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`);
-            loadDashboardData();
-          } else {
-            alert(res.error || "Failed to stop tracking session.");
-          }
-        }
-      } else {
-        Alert.alert(
-          "Confirm Punch Out",
-          "Are you sure you want to end your active operational tracking shift?",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Punch Out",
-              style: "destructive",
-              onPress: async () => {
-                const res = await stopTracking();
-                if (res.success) {
-                  Alert.alert(
-                    "Shift Ended",
-                    `Punch out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`,
-                  );
-                  loadDashboardData();
-                } else {
-                  Alert.alert(
-                    "Error",
-                    res.error || "Failed to stop tracking session.",
-                  );
-                }
-              },
+      Alert.alert(
+        "Confirm Clock Out",
+        "Are you sure you want to end your active operational tracking shift?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "End Shift",
+            style: "destructive",
+            onPress: async () => {
+              const res = await stopTracking();
+              if (res.success) {
+                Alert.alert(
+                  "Shift Ended",
+                  `Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`,
+                );
+                loadDashboardData();
+              } else {
+                Alert.alert("Error", res.error || "Failed to stop tracking session.");
+              }
             },
-          ],
-        );
-      }
+          },
+        ],
+      );
     } else {
       try {
-        const hasLocationPermission = await requestPermissions();
-        if (!hasLocationPermission) {
-          Alert.alert("Permission Denied", "Location permissions are required to start your shift.");
+        setIsUploadingSelfie(true);
+
+        // 1. Prompt mandatory selfie check-in
+        const cameraPerm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!cameraPerm.granted) {
+          Alert.alert(
+            "Camera Permission Required",
+            "Camera access is mandatory to take a selfie check-in before starting your shift.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open Settings", onPress: () => Linking.openSettings() }
+            ]
+          );
+          setIsUploadingSelfie(false);
           return;
         }
 
-        const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permissionResult.granted) {
-          Alert.alert('Permission Denied', 'Camera permission is required to punch in.');
-          return;
-        }
-
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
+        const photoResult = await ImagePicker.launchCameraAsync({
           allowsEditing: true,
-          aspect: [3, 4],
-          quality: 0.1, // Reduced to 0.1 to prevent PHP proxy timeout (upload fails on 0.7 if file > 3MB)
+          aspect: [1, 1],
+          quality: 0.6,
+          cameraType: ImagePicker.CameraType?.front || 'front',
         });
 
-        if (result.canceled || !result.assets || result.assets.length === 0) {
-          return; // User cancelled
-        }
-
-        const selfieImage = result.assets[0];
-        const formData = new FormData();
-        if (Platform.OS === 'web') {
-          // On Web, always fetch the blob to ensure it's a valid Blob/File object that FormData accepts
-          const response = await fetch(selfieImage.uri);
-          const blob = await response.blob();
-          formData.append('file', blob, `punchin_selfie_${Date.now()}.jpg`);
-          formData.append('fileName', `punchin_selfie_${Date.now()}.jpg`);
-        } else {
-          // On Mobile, FormData expects an object with uri, type, and name
-          formData.append('file', {
-            uri: selfieImage.uri,
-            type: 'image/jpeg',
-            name: `punchin_selfie_${Date.now()}.jpg`
-          });
-          formData.append('fileName', `punchin_selfie_${Date.now()}.jpg`);
-        }
-        
-        formData.append('folder', '/crm-tracker/attendance');
-        
-        console.log('--- UPLOAD DEBUG START ---');
-        console.log('Uploading directly to ImageKit to bypass PHP Proxy Timeout...');
-        
-        setIsUploadingSelfie(true);
-        try {
-          const uploadRes = await uploadAPI.uploadImageDirect(formData);
-          
-          console.log('Upload Response Received:', uploadRes);
-          console.log('--- UPLOAD DEBUG END ---');
-          
-          let selfieUrl = '';
-          if (uploadRes && uploadRes.data && uploadRes.data.success) {
-             selfieUrl = uploadRes.data.url;
-          } else {
-             const errMsg = (uploadRes && uploadRes.data) ? JSON.stringify(uploadRes.data) : "No data";
-             Alert.alert("Upload Failed", `Could not upload selfie: ${errMsg}`);
-             return; // Block Punch In if upload fails
-          }
-
-          const res = await startTracking(selfieUrl);
-          if (res.success) {
-            Alert.alert(
-              "Shift Started",
-              "Selfie captured. You are now ON DUTY. Background GPS tracking initialized.",
-            );
-            loadDashboardData();
-          } else {
-            Alert.alert(
-              "Failed to Start Shift",
-              res.error || "Check permission permissions and try again.",
-            );
-          }
-        } finally {
+        if (photoResult.canceled || !photoResult.assets?.length) {
+          Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
           setIsUploadingSelfie(false);
+          return;
+        }
+
+        const selfieAsset = photoResult.assets[0];
+        let uploadRes;
+
+        if (Platform.OS === 'web') {
+          const formData = new FormData();
+          const filename = selfieAsset.uri.split('/').pop() || 'selfie.jpg';
+          const resp = await fetch(selfieAsset.uri);
+          const blob = await resp.blob();
+          formData.append('image', blob, filename);
+          uploadRes = await uploadAPI.uploadImageFormData(formData);
+        } else {
+          // Native Platforms (iOS/Android): pass URI directly to let api.js handle FileSystem.uploadAsync
+          uploadRes = await uploadAPI.uploadImageFormData(selfieAsset.uri);
+        }
+
+        const selfieUrl = uploadRes.data?.url || '';
+
+        // 2. Start tracking session with uploaded selfie
+        const res = await startTracking(selfieUrl);
+        if (res.success) {
+          loadDashboardData();
+          router.replace("/(employee)/tracking");
+        } else {
+          Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
         }
       } catch (err) {
-        console.log('Error during punch in:', err);
-        Alert.alert("Error", "Error during Punch-In: " + (err.message || JSON.stringify(err)));
+        console.log('Selfie capture error:', err.message);
+        Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
+      } finally {
+        setIsUploadingSelfie(false);
       }
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 1. Header Bar */}
-      <View style={[styles.headerBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={() => setShowMenu(true)}
-          style={styles.headerIconBtn}
-        >
-          <Menu size={22} color={colors.iconColor} />
-        </TouchableOpacity>
-        <View style={styles.headerRightGroup}>
-          <TouchableOpacity
-            onPress={() => setShowNotifications(true)}
-            style={styles.notificationIconBtn}
-          >
-            <Bell size={22} color={colors.iconColor} />
-            {unreadCount > 0 && (
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>{unreadCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            onPress={() => router.push("/(employee)/profile")}
-            style={[styles.avatarPill, { overflow: 'hidden' }]}
-          >
-            {getAvatarUrl(user?.avatar) ? (
-              <Image source={{ uri: getAvatarUrl(user.avatar) }} style={{ width: "100%", height: "100%" }} />
-            ) : (
-              <Text style={styles.avatarText}>
-                {user?.name?.charAt(0).toUpperCase() || "S"}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#d5f5ee" translucency={false} />
 
       <ScrollView
+        style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#1d4ed8"]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00c6a9"]} />}
       >
-        {/* 2. Welcome Profile Card */}
-        <Surface style={styles.welcomeCard} elevation={4}>
-          <LinearGradient
-            colors={["#09545eff", "#023a3aff"]}
-            style={styles.welcomeGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.welcomeTopRow}>
-              <View style={styles.welcomeLeftInfo}>
-                <Text style={styles.dateLabel}>
-                  {currentDate || "SUNDAY, 17 MAY"}
-                </Text>
-                <Text style={styles.welcomeText}>
-                  {t('hiText')}, {user?.name || "saif"}! 👋
-                </Text>
-                <View style={styles.pillRow}>
-                  <View style={styles.subPill}>
-                    <Text style={styles.subPillText}>
-                      {user?.role?.toUpperCase() || "FIELD SERVICES"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+        {/* ── UNIFIED DARK EMERALD TEAL TOP HEADER ── */}
+        <LinearGradient
+          colors={isTracking ? ["#66bac0", "#4adfd2"] : ["#168178", "#65b9b9"]}
+          style={styles.topMintHeader}
+        >
+          {/* Top Navbar Row */}
+          <View style={styles.navHeaderRow}>
+            <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.navCircleBtn}>
+              <Menu size={18} color="#ffffff" />
+            </TouchableOpacity>
 
-              {/* Profile image avatar on right */}
-              <View style={styles.profileAvatarBox}>
-                <View style={[styles.avatarImgContainer, { overflow: 'hidden' }]}>
-                  {getAvatarUrl(user?.avatar) ? (
-                    <Image source={{ uri: getAvatarUrl(user.avatar) }} style={{ width: "100%", height: "100%" }} />
-                  ) : (
-                    <Text style={styles.avatarBigLetter}>
-                      {user?.name?.charAt(0).toUpperCase() || "S"}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* Bottom status row */}
-            {!isOffice && (
-            <View style={styles.welcomeBottomRow}>
-              <TouchableOpacity
-                style={[styles.enableLocationBtn, { width: '100%', justifyContent: 'center', backgroundColor: isTracking ? '#ef4444' : '#10b981', paddingVertical: 12, borderRadius: 12 }]}
-                onPress={handleClockToggle}
-              >
-                <Navigation size={18} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={[styles.enableLocationText, { fontSize: 16, fontWeight: 'bold', color: '#fff' }]}>
-                  {isTracking ? "PUNCH-OUT (STOP TRACKING)" : "PUNCH-IN (START SHIFT)"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            )}
-          </LinearGradient>
-        </Surface>
-
-        {isOffice ? (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 10 }]}>Submit Daily Task</Text>
-            </View>
-            <Surface style={[styles.officeTaskInputCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={2}>
-              <View style={styles.officeInputHeader}>
-                <ClipboardCheck size={20} color="#0a3d3c" style={{marginRight: 8}}/>
-                <Text style={[styles.officeInputTitle, { color: colors.text }]}>What are you working on today?</Text>
-              </View>
-              <TextInput
-                style={[styles.officeTextInput, { borderColor: colors.border, color: colors.text, backgroundColor: colors.background }]}
-                placeholder="E.g. Preparing weekly HR report..."
-                placeholderTextColor={colors.subText}
-                value={quickTaskTitle}
-                onChangeText={setQuickTaskTitle}
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.officeSubmitBtn, quickTaskTitle.trim() === '' && {opacity: 0.6}]}
-                onPress={handleQuickTaskSubmit}
-                disabled={quickTaskSubmitting || quickTaskTitle.trim() === ''}
-              >
-                <LinearGradient
-                   colors={['#0a3d3c', '#062828']}
-                   style={styles.officeSubmitGradient}
-                >
-                  {quickTaskSubmitting ? (
-                     <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Text style={styles.officeSubmitText}>Submit Task</Text>
-                      <ChevronRight size={16} color="#fff" style={{marginLeft: 6}}/>
-                    </>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </Surface>
-
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 10 }]}>My Recent Tasks</Text>
-              <TouchableOpacity onPress={() => router.push("/tasks")}>
-                <Text style={styles.viewAllText}>{t('viewAll')}</Text>
-              </TouchableOpacity>
-            </View>
-            {recentTasks.length === 0 ? (
-              <Surface style={[styles.expenseCard, { justifyContent: 'center', paddingVertical: 24, backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <Text style={{ fontSize: 12, color: colors.subText, textAlign: 'center', width: '100%' }}>No tasks submitted yet.</Text>
-              </Surface>
-            ) : (
-              recentTasks.slice(0, 5).map(task => {
-                const isCompleted = task.status === 'completed';
-                return (
-                <Surface key={task._id || task.id} style={[styles.officeTaskItem, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                  <View style={styles.officeTaskLeft}>
-                    <View style={[styles.officeTaskIconBadge, isCompleted ? {backgroundColor: 'rgba(16, 185, 129, 0.1)'} : {backgroundColor: 'rgba(59, 130, 246, 0.1)'}]}>
-                       {isCompleted ? <CheckCircle size={18} color="#10b981" /> : <Calendar size={18} color="#3b82f6" />}
-                    </View>
-                    <View style={styles.officeTaskContent}>
-                      <Text style={[styles.officeTaskTitle, { color: colors.text }, isCompleted && {textDecorationLine: 'line-through', color: colors.subText}]} numberOfLines={2}>
-                        {task.title}
-                      </Text>
-                      <Text style={[styles.officeTaskDate, { color: colors.subText }]}>
-                        {new Date(task.createdAt || task.dueDate).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.officeTaskStatus, isCompleted ? {backgroundColor: 'rgba(16, 185, 129, 0.15)'} : {backgroundColor: 'rgba(245, 158, 11, 0.15)'}]}>
-                    <Text style={[styles.officeTaskStatusText, isCompleted ? {color: '#10b981'} : {color: '#f59e0b'}]}>
-                      {task.status?.toUpperCase() || 'PENDING'}
-                    </Text>
-                  </View>
-                </Surface>
-              )})
-            )}
-          </>
-        ) : (
-          <>
-            {/* 3. KPI Grid (2x2) */}
-            <View style={styles.kpiGrid}>
-              {/* Box 1: Distance & Rate */}
-              <Surface style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <View style={styles.kpiHeader}>
-                  <Text style={[styles.kpiTitle, { color: colors.subText }]}>{t('distanceToday')}</Text>
-                  <Navigation size={18} color="#00b4d8" />
-                </View>
-                <Text style={[styles.kpiValue, { color: colors.text }]}>
-                  {stats?.distanceToday || "0.00"} km
-                </Text>
-              </Surface>
-
-              {/* Box 2: Meetings */}
-              <Surface style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <View style={styles.kpiHeader}>
-                  <Text style={[styles.kpiTitle, { color: colors.subText }]}>{t('meetings')}</Text>
-                  <Users size={18} color="#a855f7" />
-                </View>
-                <Text style={[styles.kpiValue, { color: colors.text }]}>{stats?.meetingCount || 0}</Text>
-              </Surface>
-
-              {/* Box 3: Total Distance */}
-              <Surface style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <View style={styles.kpiHeader}>
-                  <Text style={[styles.kpiTitle, { color: colors.subText }]}>TOTAL DISTANCE</Text>
-                  <Navigation size={18} color="#00b4d8" />
-                </View>
-                <Text style={[styles.kpiValue, { color: colors.text }]}>{stats?.totalDistanceAllDates || "0.00"} km</Text>
-              </Surface>
-
-              {/* Box 4: Travel Rate */}
-              <Surface style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <View style={styles.kpiHeader}>
-                  <Text style={[styles.kpiTitle, { color: colors.subText }]}>TRAVEL RATE</Text>
-                  <Wallet size={18} color="#f59e0b" />
-                </View>
-                <Text style={[styles.kpiValue, { color: colors.text }]}>₹{stats?.travelRate || 0}/km</Text>
-              </Surface>
-            </View>
-
-            {/* 4. Quick Operations */}
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('quickOperations')}</Text>
-            <View style={styles.operationsGrid}>
-              {/* Start/Stop Tracking */}
-               <TouchableOpacity
-                style={styles.opBtnWrapper}
-                onPress={() => router.push("/tracking")}
-              >
-                <LinearGradient
-                  colors={["#075555ff", "#044d6eff"]}
-                  style={styles.opBtn}
-                >
-                  <Play size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.opBtnText, { color: colors.text }]}>{t('tracking')}</Text>
-              </TouchableOpacity>
-
-
-              {/* My Tasks */}
-              <TouchableOpacity
-                style={styles.opBtnWrapper}
-                onPress={() => router.push("/tasks")}
-              >
-                <LinearGradient
-                  colors={["#2563eb", "#1d4ed8"]}
-                  style={styles.opBtn}
-                >
-                  <ClipboardCheck size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.opBtnText, { color: colors.text }]}>{t('actionPlan').toUpperCase()}</Text>
-              </TouchableOpacity>
-
-              {/* Apply Leave */}
-              <TouchableOpacity
-                style={styles.opBtnWrapper}
-                onPress={() => router.push("/leaves")}
-              >
-                <LinearGradient
-                  colors={["#059669", "#047857"]}
-                  style={styles.opBtn}
-                >
-                  <Calendar size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.opBtnText, { color: colors.text }]}>{t('applyLeave')}</Text>
-              </TouchableOpacity>
-
-              {/* Add Meeting */}
-              <TouchableOpacity
-                style={styles.opBtnWrapper}
-                onPress={() => router.push("/meetings")}
-              >
-                <LinearGradient
-                  colors={["#7c3aed", "#6d28d9"]}
-                  style={styles.opBtn}
-                >
-                  <UserPlus size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.opBtnText, { color: colors.text }]}>{t('addMeeting')}</Text>
-              </TouchableOpacity>
-
-              {/* Add Expense */}
-              <TouchableOpacity
-                style={styles.opBtnWrapper}
-                onPress={() => router.push("/expenses")}
-              >
-                <LinearGradient
-                  colors={["#ea580c", "#c2410c"]}
-                  style={styles.opBtn}
-                >
-                  <Wallet size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.opBtnText, { color: colors.text }]}>{t('addExpense')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 5. Recent Meetings */}
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('recentMeetings')}</Text>
-              <TouchableOpacity onPress={() => router.push("/meetings")}>
-                <Text style={styles.viewAllText}>{t('viewAll')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {recentMeetings.length === 0 ? (
-              <Surface style={[styles.meetingCard, { justifyContent: 'center', paddingVertical: 24, backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                <Text style={{ fontSize: 12, color: colors.subText, textAlign: 'center', width: '100%' }}>No meetings logged yet.</Text>
-              </Surface>
-            ) : (
-              recentMeetings.slice(0, 3).map((meeting) => (
-                <Surface key={meeting._id || meeting.id} style={[styles.meetingCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                  <View style={styles.meetingAvatar}>
-                    <Text style={styles.meetingAvatarText}>
-                      {meeting.clientName?.charAt(0).toUpperCase() || "C"}
-                    </Text>
-                  </View>
-                  <View style={styles.meetingInfo}>
-                    <Text style={[styles.meetingAgentName, { color: colors.text }]}>{meeting.clientName}</Text>
-                    <Text style={[styles.meetingAgentSub, { color: colors.subText }]}>
-                      {meeting.meetingNotes ? meeting.meetingNotes.substring(0, 32) + "..." : "No visit feedback notes logged"}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.meetingBadge,
-                      meeting.status === "completed" && { backgroundColor: "rgba(16, 185, 129, 0.15)" },
-                      meeting.status === "follow-up" && { backgroundColor: "rgba(59, 130, 246, 0.15)" },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.meetingBadgeText,
-                        meeting.status === "completed" && { color: "#10b981" },
-                        meeting.status === "follow-up" && { color: "#2563eb" },
-                      ]}
-                    >
-                      {meeting.status?.toUpperCase() || "PENDING"}
-                    </Text>
-                  </View>
-                </Surface>
-              ))
-            )}
-
-            {/* 6. Recent Expenses */}
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('recentExpenses')}</Text>
-              <TouchableOpacity onPress={() => router.push("/(employee)/expenses")}>
-                <Text style={styles.viewAllText}>{t('viewAll')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.expenseList}>
-              {recentExpenses.length === 0 ? (
-                <Surface style={[styles.expenseCard, { justifyContent: 'center', paddingVertical: 24, backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                  <Text style={{ fontSize: 12, color: colors.subText, textAlign: 'center', width: '100%' }}>No expenses claimed yet.</Text>
-                </Surface>
-              ) : (
-                recentExpenses.slice(0, 3).map((expense) => (
-                  <Surface key={expense._id || expense.id} style={[styles.expenseCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-                    <View style={styles.expenseLeft}>
-                      <View style={[styles.expenseIconBox, expense.status === "approved" && { backgroundColor: "rgba(16, 185, 129, 0.12)" }]}>
-                        <Wallet
-                          size={18}
-                          color={expense.status === "approved" ? "#10b981" : "#f59e0b"}
-                        />
-                      </View>
-                      <View style={styles.expenseInfo}>
-                        <Text style={[styles.expenseName, { color: colors.text }]}>
-                          {expense.category ? expense.category.toUpperCase() : "ALLOWANCE"}
-                        </Text>
-                        <Text style={[styles.expenseDate, { color: colors.subText }]}>
-                          {expense.date ? new Date(expense.date).toLocaleDateString('en-GB') : "Today"}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.expenseRight}>
-                      <Text style={[styles.expenseValue, { color: colors.text }]}>₹{expense.amount}</Text>
-                      <View
-                        style={[
-                          styles.approvedBadge,
-                          expense.status === "pending" && { backgroundColor: "rgba(245, 158, 11, 0.15)" },
-                          expense.status === "rejected" && { backgroundColor: "rgba(239, 68, 68, 0.15)" },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.approvedBadgeText,
-                            expense.status === "pending" && { color: "#f59e0b" },
-                            expense.status === "rejected" && { color: "#ef4444" },
-                          ]}
-                        >
-                          {expense.status?.toUpperCase() || "PENDING"}
-                        </Text>
-                      </View>
-                    </View>
-                  </Surface>
-                ))
-              )}
-            </View>
-          </>
-        )}
-      </ScrollView>
-
-      {/* 7. Notifications Modal */}
-      <Modal
-        visible={showNotifications}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowNotifications(false)}
-      >
-        <View style={styles.notificationOverlay}>
-          <TouchableOpacity 
-            style={styles.notificationDismissArea} 
-            activeOpacity={1} 
-            onPress={() => setShowNotifications(false)} 
-          />
-          
-          <Surface style={[styles.notificationPanel, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={5}>
-            <View style={[styles.notificationHeader, { borderBottomColor: colors.border }]}>
-              <View style={styles.notificationHeaderLeft}>
-                <Bell size={20} color="#008080" />
-                <Text style={[styles.notificationTitleText, { color: colors.text }]}>Notifications</Text>
+            <View style={styles.navRightGroup}>
+              <TouchableOpacity onPress={() => setShowNotifications(true)} style={styles.navCircleBtn}>
+                <Bell size={18} color="#ffffff" />
                 {unreadCount > 0 && (
-                  <View style={styles.headerBadge}>
-                    <Text style={styles.headerBadgeText}>{unreadCount}</Text>
+                  <View style={styles.badgeContainer}>
+                    <Text style={styles.badgeText}>{unreadCount}</Text>
                   </View>
                 )}
-              </View>
-              <TouchableOpacity onPress={() => setShowNotifications(false)} style={styles.closeNotifBtn}>
-                <X size={18} color="#64748b" />
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => router.push("/(employee)/profile")} style={styles.userAvatarContainer}>
+                {getAvatarUrl(user?.avatar) ? (
+                  <Image source={{ uri: getAvatarUrl(user.avatar) }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={styles.avatarInitial}>
+                    {user?.name?.charAt(0).toUpperCase() || "S"}
+                  </Text>
+                )}
+                <View style={styles.onlineDot} />
               </TouchableOpacity>
             </View>
+          </View>
 
-            <ScrollView 
-              style={[styles.notificationListScroll, { backgroundColor: colors.background }]}
-              showsVerticalScrollIndicator={false}
-            >
-              {notificationItems.length === 0 ? (
-                <View style={styles.emptyNotificationView}>
-                  <Bell size={32} color="#94a3b8" />
-                  <Text style={[styles.emptyNotificationText, { color: colors.text }]}>All caught up!</Text>
-                  <Text style={[styles.emptyNotificationSubtext, { color: colors.subText }]}>No pending tasks or leads assigned by admin.</Text>
-                </View>
-              ) : (
-                notificationItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.notificationItem, { borderBottomColor: colors.border }]}
-                    onPress={() => {
-                      setShowNotifications(false);
-                      if (item.type === 'task') {
-                        router.push('/tasks');
-                      } else {
-                        router.push('/leads');
-                      }
-                    }}
-                  >
-                    <View style={styles.notificationItemHeader}>
-                      <View style={[styles.notificationTypeIndicator, { backgroundColor: item.type === 'task' ? '#eff6ff' : '#ecfdf5' }]}>
-                        <Text style={[styles.notificationTypeText, { color: item.type === 'task' ? '#2563eb' : '#10b981' }]}>
-                          {item.type.toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={[styles.notificationItemTime, { color: colors.subText }]}>
-                        {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                      </Text>
-                    </View>
-                    <Text style={[styles.notificationItemTitle, { color: colors.text }]}>{item.title}</Text>
-                    <Text style={[styles.notificationItemDesc, { color: colors.subText }]}>{item.description}</Text>
-                  </TouchableOpacity>
-                ))
+          {/* Welcome Text + Dynamic Waving / Rider Boy Row */}
+          <View style={styles.welcomeBannerContent}>
+            <View style={styles.welcomeLeftCol}>
+              <Text style={styles.dateLabelText}>{currentDate || "SUNDAY, SEP 6"}</Text>
+              <Text style={styles.greetingTitle}>
+                Hi, {(user?.name || "Kisan Team").trim().split(/\s+/)[0].toUpperCase()}
+              </Text>
+              {(user?.name || "Kisan Team").trim().split(/\s+/).slice(1).length > 0 && (
+                <Text style={styles.greetingSurname}>
+                  {(user?.name || "Kisan Team").trim().split(/\s+/).slice(1).join(" ").toUpperCase()}
+                </Text>
               )}
-            </ScrollView>
-          </Surface>
+
+              <View style={[styles.roleBadgeBox, isTracking && { backgroundColor: "#065f46" }]}>
+                <Text style={[styles.roleBadgeText, isTracking && { color: "#a7f3d0" }]}>
+                  {isTracking ? "ON SHIFT • RIDER MODE 🏍️" : user?.role?.toUpperCase() || "EMPLOYEE"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Dynamic Image: Waving Boy when OFF, 3D Biker Scooter Boy when ON */}
+            <Image
+              source={
+                isTracking
+                  ? require('../../assets/images/biker_boy.png')
+                  : require('../../assets/images/waving_boy.jpg')
+              }
+              style={isTracking ? styles.bikerBoyImgTop : styles.wavingBoyImgTop}
+              resizeMode="contain"
+            />
+          </View>
+
+          {/* Full Width Punch-In Pill Button with Glassmorphic pill look */}
+          <TouchableOpacity
+            style={[
+              styles.punchPillBtnFull,
+              isTracking
+                ? { backgroundColor: "rgba(241, 11, 11, 0.95)", borderColor: "#fca5a5" }
+                : { backgroundColor: "rgba(34, 123, 238, 0.95)", borderColor: "#5eea8d" },
+              isUploadingSelfie && { opacity: 0.88 }
+            ]}
+            onPress={handleClockToggle}
+            disabled={isUploadingSelfie}
+          >
+            <View style={[styles.punchLeftIconWrap, isTracking && { backgroundColor: "rgba(255,255,255,0.3)" }]}>
+              {isUploadingSelfie ? <ActivityIndicator size="small" color="#fff" /> : <Radio size={16} color="#fff" />}
+            </View>
+
+            <Text style={styles.punchPillBtnTextFull}>
+              {isUploadingSelfie
+                ? 'UPLOADING SELFIE...'
+                : isTracking ? 'PUNCH-OUT (END SHIFT)' : 'PUNCH-IN (START SHIFT)'}
+            </Text>
+
+            <View style={styles.circleArrowBtn}>
+              {isUploadingSelfie ? (
+                <ActivityIndicator size="small" color={isTracking ? '#dc2626' : '#0d4d49'} />
+              ) : (
+                <ChevronRight size={16} color={isTracking ? '#dc2626' : '#0d4d49'} />
+              )}
+            </View>
+          </TouchableOpacity>
+        </LinearGradient>
+
+        {/* ── BODY CONTENT ── */}
+        <View style={styles.bodyContentPadding}>
+          {/* 3. Sleek Compact KPI Stat Cards (2x2 Grid) */}
+          <View style={styles.kpiGrid}>
+            {/* Card 1: DISTANCE TODAY */}
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/tracking")}>
+              <Surface style={styles.statCard} elevation={1}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconCircle, { backgroundColor: '#e0f7fa' }]}>
+                    <MapPin size={15} color="#00b4d8" />
+                  </View>
+                  <TrendingUp size={14} color="#00c6a9" />
+                </View>
+                <Text style={styles.statLabelText}>DISTANCE</Text>
+                <Text style={styles.statValueText}>{stats?.distanceToday || "0.00"} km</Text>
+              </Surface>
+            </TouchableOpacity>
+
+            {/* Card 2: MEETINGS */}
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/meetings")}>
+              <Surface style={styles.statCard} elevation={1}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconCircle, { backgroundColor: '#f3e8ff' }]}>
+                    <Users size={15} color="#a855f7" />
+                  </View>
+                  <TrendingUp size={14} color="#a855f7" />
+                </View>
+                <Text style={styles.statLabelText}>MEETINGS</Text>
+                <Text style={styles.statValueText}>{stats?.meetingCount || 0}</Text>
+              </Surface>
+            </TouchableOpacity>
+
+            {/* Card 3: TOTAL DISTANCE */}
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/tracking")}>
+              <Surface style={styles.statCard} elevation={1}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconCircle, { backgroundColor: '#e0f2fe' }]}>
+                    <Footprints size={15} color="#2563eb" />
+                  </View>
+                  <TrendingUp size={14} color="#2563eb" />
+                </View>
+                <Text style={styles.statLabelText}>TOTAL DISTANCE</Text>
+                <Text style={styles.statValueText}>{stats?.totalDistanceAllDates || "0.00"} km</Text>
+              </Surface>
+            </TouchableOpacity>
+
+            {/* Card 4: TRAVEL RATE */}
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/expenses")}>
+              <Surface style={styles.statCard} elevation={1}>
+                <View style={styles.statHeaderRow}>
+                  <View style={[styles.statIconCircle, { backgroundColor: '#fef3c7' }]}>
+                    <Wallet size={15} color="#f59e0b" />
+                  </View>
+                  <TrendingUp size={14} color="#f59e0b" />
+                </View>
+                <Text style={styles.statLabelText}>TRAVEL RATE</Text>
+                <Text style={styles.statValueText}>₹{stats?.travelRate || 0}/km</Text>
+              </Surface>
+            </TouchableOpacity>
+          </View>
+
+          {/* 4. QUICK OPERATIONS */}
+          <Text style={styles.sectionHeaderTitle}>QUICK OPERATIONS</Text>
+          <View style={styles.quickOpsRow}>
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/tracking")}>
+              <LinearGradient colors={["#00c6a9", "#00b4d8"]} style={styles.quickOpGradientIcon}>
+                <Play size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>TRACKING</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/tasks")}>
+              <LinearGradient colors={["#3b82f6", "#1d4ed8"]} style={styles.quickOpGradientIcon}>
+                <ClipboardCheck size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>ACTION PLAN</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/leaves")}>
+              <LinearGradient colors={["#10b981", "#059669"]} style={styles.quickOpGradientIcon}>
+                <Calendar size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>APPLY LEAVE</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/meetings")}>
+              <LinearGradient colors={["#a855f7", "#7c3aed"]} style={styles.quickOpGradientIcon}>
+                <UserPlus size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>ADD MEETING</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/expenses")}>
+              <LinearGradient colors={["#f97316", "#ea580c"]} style={styles.quickOpGradientIcon}>
+                <Wallet size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>ADD EXPENSE</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 5. RECENT MEETINGS */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>RECENT MEETINGS</Text>
+            <TouchableOpacity onPress={() => router.push("/meetings")}>
+              <Text style={styles.viewAllBtnText}>View All ›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentMeetings.length === 0 ? (
+            <Surface style={styles.emptyMeetingCard} elevation={1}>
+              <View style={styles.meetingAvatarCircle}>
+                <Text style={styles.meetingAvatarInitial}>T</Text>
+              </View>
+              <View style={styles.meetingDetailCol}>
+                <Text style={styles.meetingClientTitle}>Test</Text>
+                <Text style={styles.meetingNotesSub}>Sjsbhsjs...</Text>
+              </View>
+              <View style={styles.meetingStatusBadge}>
+                <Text style={styles.meetingStatusBadgeText}>SCHEDULED</Text>
+              </View>
+            </Surface>
+          ) : (
+            recentMeetings.slice(0, 3).map((meeting) => (
+              <Surface key={meeting._id || meeting.id} style={styles.meetingCardItem} elevation={1}>
+                <View style={styles.meetingAvatarCircle}>
+                  <Text style={styles.meetingAvatarInitial}>
+                    {meeting.clientName?.charAt(0).toUpperCase() || "T"}
+                  </Text>
+                </View>
+                <View style={styles.meetingDetailCol}>
+                  <Text style={styles.meetingClientTitle}>{meeting.clientName}</Text>
+                  <Text style={styles.meetingNotesSub} numberOfLines={1}>
+                    {meeting.meetingNotes || "Sjsbhsjs..."}
+                  </Text>
+                </View>
+                <View style={styles.meetingStatusBadge}>
+                  <Text style={styles.meetingStatusBadgeText}>
+                    {(meeting.status || "SCHEDULED").toUpperCase()}
+                  </Text>
+                </View>
+              </Surface>
+            ))
+          )}
+
+          {/* 6. RECENT EXPENSES */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>RECENT EXPENSES</Text>
+            <TouchableOpacity onPress={() => router.push("/expenses")}>
+              <Text style={styles.viewAllBtnText}>View All ›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentExpenses.length === 0 ? (
+            <Surface style={styles.emptyMeetingCard} elevation={1}>
+              <View style={styles.meetingAvatarCircle}>
+                <Wallet size={16} color="#0284c7" />
+              </View>
+              <View style={styles.meetingDetailCol}>
+                <Text style={styles.meetingClientTitle}>No expenses yet</Text>
+                <Text style={styles.meetingNotesSub}>Tap ADD EXPENSE to log a claim.</Text>
+              </View>
+            </Surface>
+          ) : (
+            recentExpenses.slice(0, 3).map((expense) => {
+              const badge = getExpenseStatusStyle(expense.status);
+              const cat = expense.category ? expense.category.toUpperCase() : "FIELD EXPENSE";
+              return (
+                <Surface key={expense._id || expense.id} style={styles.meetingCardItem} elevation={1}>
+                  <View style={styles.meetingAvatarCircle}>
+                    <Text style={styles.meetingAvatarInitial}>{cat.charAt(0)}</Text>
+                  </View>
+                  <View style={styles.meetingDetailCol}>
+                    <Text style={styles.meetingClientTitle}>
+                      {cat === "FOOD" ? "MEALS" : cat} — ₹{expense.amount}
+                    </Text>
+                    <Text style={styles.meetingNotesSub} numberOfLines={1}>
+                      {new Date(expense.date || expense.createdAt).toLocaleDateString("en-GB")} • {expense.description || ""}
+                    </Text>
+                  </View>
+                  <View style={[styles.meetingStatusBadge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.meetingStatusBadgeText, { color: badge.text }]}>{badge.label}</Text>
+                  </View>
+                </Surface>
+              );
+            })
+          )}
+
+        </View>
+      </ScrollView>
+
+      <Modal visible={isUploadingSelfie} transparent animationType="fade" onRequestClose={() => null}>
+        <View style={styles.uploadOverlay}>
+          <View style={styles.uploadLoaderCard}>
+            <ActivityIndicator size="large" color="#0a3d3c" />
+            <Text style={styles.uploadLoaderTitle}>Uploading selfie</Text>
+            <Text style={styles.uploadLoaderText}>Please wait while your punch-in image is being uploaded.</Text>
+          </View>
         </View>
       </Modal>
 
-      {/* Slide sidebar navigation Drawer Modal (Premium custom "all action" implementation) */}
+      {/* Slide sidebar navigation Drawer Modal */}
       <Modal
         visible={showMenu}
-        transparent={true}
+        transparent
         animationType="slide"
         onRequestClose={() => setShowMenu(false)}
       >
         <View style={styles.menuOverlay}>
           {/* Transparent left part to tap and close */}
-          <TouchableOpacity 
-            style={styles.menuDismissArea} 
-            activeOpacity={1} 
-            onPress={() => setShowMenu(false)} 
+          <TouchableOpacity
+            style={styles.menuDismissArea}
+            activeOpacity={1}
+            onPress={() => setShowMenu(false)}
           />
-          
+
           <Surface style={styles.menuPanel} elevation={5}>
             <LinearGradient
-              colors={['#0a3d3c', '#002626']}
+              colors={["#0a3d3c", "#002626"]}
               style={styles.menuGradient}
             >
               {/* Menu Header */}
               <View style={styles.menuHeader}>
                 <View style={styles.menuUserPill}>
-                  <View style={[styles.menuUserAvatar, { overflow: 'hidden' }]}>
+                  <View style={[styles.menuUserAvatar, { overflow: "hidden" }]}>
                     {getAvatarUrl(user?.avatar) ? (
                       <Image source={{ uri: getAvatarUrl(user.avatar) }} style={{ width: "100%", height: "100%" }} />
                     ) : (
@@ -845,7 +583,7 @@ export default function EmployeeDashboardScreen() {
                     )}
                   </View>
                   <View style={styles.menuUserInfo}>
-                    <Text style={styles.menuUserName} numberOfLines={1}>{user?.name || "sikandar Ali"}</Text>
+                    <Text style={styles.menuUserName} numberOfLines={1}>{user?.name || "Employee"}</Text>
                     <Text style={styles.menuUserRole}>{user?.role?.toUpperCase() || "EMPLOYEE"}</Text>
                   </View>
                 </View>
@@ -857,43 +595,41 @@ export default function EmployeeDashboardScreen() {
               {/* Menu Items List */}
               <ScrollView style={styles.menuItemsScroll} showsVerticalScrollIndicator={false}>
                 <Text style={styles.menuSectionTitle}>NAVIGATION</Text>
-                
+
                 {[
-                  { label: 'Dashboard', route: '/', icon: 'Home', desc: 'Main control center' },
-                  { label: 'Daily Action Plan', route: '/tasks', icon: 'ClipboardCheck', desc: 'View & add daily actions' },
-                  { label: 'Live GPS Tracking', route: '/tracking', icon: 'Navigation', desc: 'Realtime speed & distance' },
-                  { label: 'Client Meetings', route: '/meetings', icon: 'Users', desc: 'Log feedback & visit details' },
-                  { label: 'Expenses & Claims', route: '/expenses', icon: 'Wallet', desc: 'Submit logs & receipt uploads' },
-                  { label: 'Leaves & Attendance', route: '/leaves', icon: 'Calendar', desc: 'Request leave sessions' },
-                  { label: 'My Profile', route: '/(employee)/profile', icon: 'UserCircle', desc: 'Account details' },
-                ].map((item) => {
-                  return (
-                    <TouchableOpacity
-                      key={item.label}
-                      style={styles.menuItemBtn}
-                      onPress={() => {
-                        setShowMenu(false);
-                        router.push(item.route);
-                      }}
-                    >
-                      <View style={styles.menuItemIconBox}>
-                        {/* We render the corresponding icon */}
-                        {item.icon === 'Home' && <Home size={18} color="#fff" />}
-                        {item.icon === 'ClipboardCheck' && <ClipboardCheck size={18} color="#fff" />}
-                        {item.icon === 'Navigation' && <Navigation size={18} color="#fff" />}
-                        {item.icon === 'Users' && <Users size={18} color="#fff" />}
-                        {item.icon === 'Wallet' && <Wallet size={18} color="#fff" />}
-                        {item.icon === 'Calendar' && <Calendar size={18} color="#fff" />}
-                        {item.icon === 'UserCircle' && <UserPlus size={18} color="#fff" />}
-                      </View>
-                      <View style={styles.menuItemTextContainer}>
-                        <Text style={styles.menuItemLabel}>{item.label}</Text>
-                        <Text style={styles.menuItemSub}>{item.desc}</Text>
-                      </View>
-                      <ChevronRight size={14} color="#52525b" />
-                    </TouchableOpacity>
-                  );
-                })}
+                  { label: "Dashboard", route: "/dashboard", icon: "Home", desc: "Main control center" },
+                  { label: "Live GPS Tracking", route: "/tracking", icon: "Navigation", desc: "Realtime speed & distance" },
+                  { label: "Daily Action Plan", route: "/tasks", icon: "ClipboardCheck", desc: "View & add daily actions" },
+                  { label: "Leads", route: "/leads", icon: "Users", desc: "View assigned leads" },
+                  { label: "Client Meetings", route: "/meetings", icon: "Calendar", desc: "Log feedback & visit details" },
+                  { label: "Expenses & Claims", route: "/expenses", icon: "Wallet", desc: "Submit logs & receipt uploads" },
+                  { label: "Leaves & Attendance", route: "/leaves", icon: "ClipboardCheck", desc: "Request leave sessions" },
+                  { label: "My Profile", route: "/(employee)/profile", icon: "UserCircle", desc: "Account details" },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.label}
+                    style={styles.menuItemBtn}
+                    onPress={() => {
+                      setShowMenu(false);
+                      router.push(item.route);
+                    }}
+                  >
+                    <View style={styles.menuItemIconBox}>
+                      {item.icon === "Home" && <Home size={18} color="#fff" />}
+                      {item.icon === "ClipboardCheck" && <ClipboardCheck size={18} color="#fff" />}
+                      {item.icon === "Navigation" && <Navigation size={18} color="#fff" />}
+                      {item.icon === "Users" && <Users size={18} color="#fff" />}
+                      {item.icon === "Wallet" && <Wallet size={18} color="#fff" />}
+                      {item.icon === "Calendar" && <Calendar size={18} color="#fff" />}
+                      {item.icon === "UserCircle" && <UserPlus size={18} color="#fff" />}
+                    </View>
+                    <View style={styles.menuItemTextContainer}>
+                      <Text style={styles.menuItemLabel}>{item.label}</Text>
+                      <Text style={styles.menuItemSub}>{item.desc}</Text>
+                    </View>
+                    <ChevronRight size={14} color="#52525b" />
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
 
               <View style={styles.menuFooter}>
@@ -904,564 +640,451 @@ export default function EmployeeDashboardScreen() {
         </View>
       </Modal>
 
-      {/* Uploading Selfie Overlay */}
-      {isUploadingSelfie && <UploadingOverlay />}
+      {/* Notifications Modal */}
+      <Modal visible={showNotifications} transparent animationType="fade" onRequestClose={() => setShowNotifications(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalDismissArea} activeOpacity={1} onPress={() => setShowNotifications(false)} />
+          <Surface style={styles.notificationModalPanel} elevation={5}>
+            <View style={styles.notifHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Bell size={20} color="#008080" />
+                <Text style={styles.notifHeaderTitle}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.notifCountBadge}>
+                    <Text style={styles.notifCountText}>{unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setShowNotifications(false)} style={styles.closeNotifIconBtn}>
+                <X size={18} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 16 }}>
+              {notificationItems.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                  <Bell size={32} color="#94a3b8" />
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 10 }}>All caught up!</Text>
+                </View>
+              ) : (
+                notificationItems.map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.notifItemCard} onPress={() => setShowNotifications(false)}>
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#0f172a' }}>{item.title}</Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{item.description}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </Surface>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// Custom Uploading Overlay Component
-const UploadingOverlay = () => {
-  const [spinValue] = useState(new Animated.Value(0));
-  const [pulseValue] = useState(new Animated.Value(1));
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 2000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseValue, {
-          toValue: 1.2,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseValue, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        })
-      ])
-    ).start();
-  }, []);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
-
-  return (
-    <Modal transparent={true} visible={true} animationType="fade">
-      <View style={styles.uploadOverlayContainer}>
-        <View style={styles.uploadBox}>
-          <Animated.View style={{ transform: [{ scale: pulseValue }] }}>
-            <View style={styles.uploadIconCircle}>
-              <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                <RefreshCw size={36} color="#008080" />
-              </Animated.View>
-            </View>
-          </Animated.View>
-          
-          <Text style={styles.uploadingTitle}>Uploading Punch...</Text>
-          <Text style={styles.uploadingSub}>Please wait while your selfie is verified and location is fetched.</Text>
-          
-          <View style={styles.progressBarContainer}>
-            <Animated.View style={[
-              styles.progressBarFill, 
-              {
-                width: pulseValue.interpolate({
-                  inputRange: [1, 1.2],
-                  outputRange: ['60%', '100%']
-                })
-              }
-            ]} />
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc", // Very clean premium light background
+    backgroundColor: "#f5f8f8",
   },
-  TextInput: {
-    borderWidth: 1,
+  scrollContainer: {
+    flex: 1,
   },
-  headerBar: {
+  scrollContent: {
+    paddingBottom: 140, // Increased to account for floating bottom nav
+  },
+  uploadOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadLoaderCard: {
+    width: width * 0.8,
+    maxWidth: 320,
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    padding: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  uploadLoaderTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  uploadLoaderText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  topMintHeader: {
+    paddingTop: Platform.OS === "ios" ? 44 : 24,
+    paddingHorizontal: 20,
+    paddingBottom: 55,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    zIndex: 1,
+  },
+  navHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 44   : 37,
-    paddingBottom: 12,
-    paddingHorizontal: 20,
-    backgroundColor: "#ffffff", // Clean white background
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0", // Soft grey border
+    marginBottom: 28,
+
   },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f1f5f9", // Light grey button backing
+  navCircleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    marginTop: 12,
   },
-  headerRightGroup: {
+  navRightGroup: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  redBadgeDot: {
+  badgeContainer: {
+    position: "absolute",
+    top: -5,
+    right: -2,
+    backgroundColor: "#ef4444",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  userAvatarContainer: {
+    width: 38,
+    height: 40,
+    borderRadius: 19,
+    backgroundColor: "#ffffff",
+    elevation: 2,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+    marginTop: 10,
+  },
+  avatarImg: {
+    width: 38,
+    height: 40,
+    borderRadius: 19,
+  },
+  avatarInitial: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  onlineDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: "#10b981",
     position: "absolute",
     top: 0,
     right: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#ef4444",
-  },
-  avatarPill: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#0a3d3c", // Forest Teal brand color for avatar
-    justifyContent: "center",
-    alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#008080",
+    borderColor: "#fff",
   },
-  avatarText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "bold",
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  welcomeCard: {
-    borderRadius: 24,
-    overflow: "hidden",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  welcomeGradient: {
-    padding: 22,
-  },
-  welcomeTopRow: {
+  welcomeBannerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
+    alignItems: "center",
+    position: "relative",
+    marginBottom: 24,
+    paddingTop: 20,
   },
-  welcomeLeftInfo: {
+  welcomeLeftCol: {
     flex: 1,
   },
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#cbd5e1",
-    letterSpacing: 1,
+  dateLabelText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: 0.8,
   },
-  welcomeText: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#fff",
+  greetingTitle: {
+    fontSize: 19,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginTop: 6,
+    letterSpacing: 0.3,
+  },
+  greetingSurname: {
+    fontSize: 19,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginTop: 1,
+    marginLeft: 35,
+    letterSpacing: 0.2,
+  },
+  roleBadgeBox: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    alignSelf: "flex-start",
     marginTop: 6,
   },
-  pillRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-  },
-  subPill: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  subPillText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  profileAvatarBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarImgContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarBigLetter: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  welcomeBottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.15)",
-    paddingTop: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-    paddingBottom: 24,
-  },
-  menuThemeText: {
-    color: "#94a3b8",
-    fontSize: 10,
-    fontWeight: "bold",
-    letterSpacing: 1.2,
-  },
-  menuThemeToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e293b",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  menuThemeToggleText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "bold",
-    marginLeft: 6,
-  },
-  officeTaskInputCard: {
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    marginBottom: 28,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  officeInputHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  officeInputTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  officeTextInput: {
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 14,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    marginBottom: 16,
-  },
-  officeSubmitBtn: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  officeSubmitGradient: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  officeSubmitText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  officeTaskItem: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  officeTaskLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    paddingRight: 10,
-  },
-  officeTaskIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  officeTaskContent: {
-    flex: 1,
-  },
-  officeTaskTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  officeTaskDate: {
-    fontSize: 11,
-  },
-  officeTaskStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  officeTaskStatusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  statusPillText: {
-    color: "#fff",
+  roleBadgeText: {
+    color: "#5eead4",
     fontSize: 9.5,
-    fontWeight: "bold",
+    fontWeight: "600",
     letterSpacing: 0.5,
   },
-  enableLocationBtn: {
+  wavingBoyImgTop: {
+    width: 195,
+    height: 200,
+    position: "absolute",
+    right: -20,
+    top: -1,
+    paddingTop: 15,
+  },
+  bikerBoyImgTop: {
+    width: 195,
+    height: 200,
+    position: "absolute",
+    right: -20,
+    top: -10,
+  },
+  punchPillBtnFull: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 12,
+    paddingRight: 6,
+    borderRadius: 28,
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 2.15,
+    shadowRadius: 8,
+    zIndex: 2,
+    marginTop: 45,
   },
-  enableLocationText: {
-    color: "#fff",
-    fontSize: 9.5,
-    fontWeight: "bold",
+  punchLeftIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  punchPillBtnTextFull: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    flex: 1,
+    textAlign: "center",
+  },
+  circleArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  bodyContentPadding: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
   },
   kpiGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  kpiCard: {
-    backgroundColor: "#ffffff", // White card
-    borderRadius: 16,
-    padding: 16,
+  statCardWrap: {
     width: "48%",
+    marginBottom: 12,
+  },
+  statCard: {
+    width: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0", // Soft grey border
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderColor: "#e2e8f0",
   },
-  kpiHeader: {
+  statHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  kpiTitle: {
-    fontSize: 9.5,
-    fontWeight: "bold",
-    color: "#64748b", // Slate grey
-    letterSpacing: 0.5,
-  },
-  kpiValue: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#0f172a", // Dark text
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#475569", // Dark grey for visibility
-    letterSpacing: 0.8,
-    marginBottom: 16,
-    textTransform: "uppercase",
-  },
-  operationsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  opBtnWrapper: {
-    alignItems: "center",
-    width: "18%",
-  },
-  opBtn: {
-    width: 48,
-    height: 48,
+  statIconCircle: {
+    width: 25,
+    height: 25,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 3,
   },
-  opBtnText: {
-    color: "#475569", // Darker gray for light theme readability
-    fontSize: 8.5,
-    fontWeight: "bold",
+  statLabelText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.3,
+  },
+  statValueText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginTop: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: 0.6,
+    marginBottom: 12,
+  },
+  quickOpsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    gap: 10,
+  },
+  quickOpBtnItem: {
+    width: "45%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 0,
+  },
+  quickOpGradientIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+    elevation: 3,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+  },
+  quickOpLabelText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#334155",
     textAlign: "center",
+    letterSpacing: 0.4,
+    marginTop: 2,
   },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 10,
   },
-  viewAllText: {
+  viewAllBtnText: {
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#00b4d8",
   },
-  meetingCard: {
-    backgroundColor: "#ffffff", // White card
-    borderRadius: 16,
-    padding: 14,
+  emptyMeetingCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  meetingAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#f1f5f9", // Light background
+  emptyTextMsg: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  emptyTextSub: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: "#64748b",
+    marginTop: 1,
+  },
+  meetingCardItem: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  meetingAvatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#e0f2fe",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
-  meetingAvatarText: {
-    color: "#00b4d8",
-    fontWeight: "bold",
-    fontSize: 14,
+  meetingAvatarInitial: {
+    color: "#0284c7",
+    fontWeight: "700",
+    fontSize: 13,
   },
-  meetingInfo: {
+  meetingDetailCol: {
     flex: 1,
   },
-  meetingAgentName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#0f172a", // Dark text
+  meetingClientTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#0f172a",
   },
-  meetingAgentSub: {
-    fontSize: 10,
+  meetingNotesSub: {
+    fontSize: 9.5,
+    fontWeight: "400",
     color: "#64748b",
-    marginTop: 2,
+    marginTop: 1,
   },
-  meetingBadge: {
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  meetingStatusBadge: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
   },
-  meetingBadgeText: {
-    color: "#f59e0b",
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  expenseList: {
-    gap: 10,
-  },
-  expenseCard: {
-    backgroundColor: "#ffffff", // White card
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  expenseLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  expenseIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  expenseInfo: {
-    justifyContent: "center",
-  },
-  expenseName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#0f172a", // Dark text
-  },
-  expenseDate: {
-    fontSize: 10,
-    color: "#64748b",
-    marginTop: 2,
-  },
-  expenseRight: {
-    alignItems: "flex-end",
-  },
-  expenseValue: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#0f172a", // Dark text
-    marginBottom: 4,
-  },
-  approvedBadge: {
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  approvedBadgeText: {
-    color: "#10b981",
-    fontSize: 8,
-    fontWeight: "bold",
-    letterSpacing: 0.5,
+  meetingStatusBadgeText: {
+    color: "#d97706",
+    fontSize: 8.5,
+    fontWeight: "700",
   },
   menuOverlay: {
     flex: 1,
@@ -1589,201 +1212,58 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "bold",
   },
-  notificationIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f1f5f9",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
-  badgeContainer: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    backgroundColor: "#ef4444",
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 4,
-    borderWidth: 1.5,
-    borderColor: "#fff",
-  },
-  badgeText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "bold",
-  },
-  notificationOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.4)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
   },
-  notificationDismissArea: {
+  modalDismissArea: {
     ...StyleSheet.absoluteFillObject,
   },
-  notificationPanel: {
+  notificationModalPanel: {
     width: width * 0.9,
     maxHeight: "75%",
     backgroundColor: "#ffffff",
     borderRadius: 20,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  notificationHeader: {
+  notifHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
-  notificationHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  notificationTitleText: {
-    fontSize: 16,
-    fontWeight: "bold",
+  notifHeaderTitle: {
+    fontSize: 15,
+    fontWeight: "700",
     color: "#0f172a",
   },
-  headerBadge: {
+  notifCountBadge: {
     backgroundColor: "#ef4444",
-    borderRadius: 10,
+    borderRadius: 9,
     paddingHorizontal: 6,
     paddingVertical: 1,
   },
-  headerBadgeText: {
+  notifCountText: {
     color: "#fff",
     fontSize: 10,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
-  closeNotifBtn: {
+  closeNotifIconBtn: {
     padding: 4,
-    borderRadius: 8,
+    borderRadius: 6,
     backgroundColor: "#f1f5f9",
   },
-  notificationListScroll: {
-    padding: 16,
-  },
-  emptyNotificationView: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-  },
-  emptyNotificationText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#475569",
-    marginTop: 12,
-  },
-  emptyNotificationSubtext: {
-    fontSize: 11,
-    color: "#94a3b8",
-    textAlign: "center",
-    marginTop: 4,
-    paddingHorizontal: 20,
-    lineHeight: 16,
-  },
-  uploadOverlayContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadBox: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 30,
-    width: '80%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  uploadIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#e6f2f2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  uploadingTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 8,
-  },
-  uploadingSub: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 18,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 6,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#008080',
-    borderRadius: 3,
-  },
-  notificationItem: {
+  notifItemCard: {
     backgroundColor: "#f8fafc",
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    padding: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-  },
-  notificationItemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  notificationTypeIndicator: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  notificationTypeText: {
-    fontSize: 8.5,
-    fontWeight: "bold",
-  },
-  notificationItemTime: {
-    fontSize: 10,
-    color: "#94a3b8",
-  },
-  notificationItemTitle: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#0f172a",
-    marginBottom: 4,
-  },
-  notificationItemDesc: {
-    fontSize: 11,
-    color: "#64748b",
-    lineHeight: 15,
   },
 });

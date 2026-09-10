@@ -1,14 +1,37 @@
 import axios from 'axios';
 import { storage } from './storage';
-
+import { Platform } from 'react-native';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 
 let unauthorizedCallback = null;
 export const setUnauthorizedCallback = (callback) => {
   unauthorizedCallback = callback;
 };
 
-// export const BASE_URL = 'https://kisanteamapp.online/api'; // Production URL
-export const BASE_URL = 'http://192.168.0.116:5000/api'; // Local URL
+// ==========================================
+// GROUP 1: WEB & EXPO GO (LOCAL TESTING)
+// ==========================================
+// Web par localhost chalega, aur Expo Go par aapka WiFi IP
+const DEV_URL = Platform.OS === 'web' ? 'http://localhost:5000/api' : 'http://192.168.0.110:5000/api';
+
+// ==========================================
+// GROUP 2: PRODUCTION (LIVE SERVER)
+// ==========================================
+const PROD_URL = 'https://kisanteamapp.online/api';
+
+const resolveBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim();
+
+  // Abhi testing ke liye DEV_URL return kar rahe hain
+  // Agar production live karna ho, toh PROD_URL ko uncomment karein aur DEV_URL ko comment karein.
+  
+  return DEV_URL;
+  // return PROD_URL;
+};
+
+export const BASE_URL = resolveBaseUrl();
+
 export const getAvatarUrl = (avatar) => {
   if (!avatar || typeof avatar !== 'string') return null;
   const clean = avatar.trim();
@@ -24,10 +47,6 @@ export const getAvatarUrl = (avatar) => {
   }
   return `${baseUrlWithoutApi}/${clean}`;
 };
-
-// export const BASE_URL = 'https://kisanteamweb.it.com/api'; // MilesWeb (alternative)
-
-console.log('Using Active API Base URL:', BASE_URL);
 
 const API = axios.create({
   baseURL: BASE_URL,
@@ -180,14 +199,30 @@ export const notificationAPI = {
 export const uploadAPI = {
   getAuth: () => API.get('/upload/auth'),
   uploadImage: (data) => API.post('/upload/image', data),
-  uploadImageFormData: async (formData) => {
+  uploadImageFormData: async (formDataOrUri, filename = 'image.jpg') => {
     try {
-      console.log('API call: POST /upload/image via fetch');
+      console.log('API call: POST /upload/image');
       const token = await storage.getItem('userToken') || await storage.getItem('token');
       
+      // For Native (iOS/Android) we pass the URI and use expo-file-system
+      if (typeof formDataOrUri === 'string' && Platform.OS !== 'web') {
+        const response = await FileSystemLegacy.uploadAsync(`${BASE_URL}/upload/image`, formDataOrUri, {
+          httpMethod: 'POST',
+          uploadType: FileSystemLegacy.FileSystemUploadType?.MULTIPART ?? 1,
+          fieldName: 'image',
+          mimeType: 'image/jpeg',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = JSON.parse(response.body);
+        return { data };
+      }
+      
+      // Fallback for Web where it's a real FormData object
       const response = await fetch(`${BASE_URL}/upload/image`, {
         method: 'POST',
-        body: formData,
+        body: formDataOrUri,
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -196,27 +231,50 @@ export const uploadAPI = {
       const data = await response.json();
       return { data };
     } catch (err) {
-      console.error('Fetch Upload Error:', err);
+      console.error('Upload Error:', err);
       return { data: { success: false, message: err.message || 'Network Error' } };
     }
   },
-  uploadImageDirect: async (formData) => {
+  uploadImageDirect: async (formDataOrObj) => {
     try {
       // 1. Get Auth params from our backend
       const authRes = await API.get('/upload/auth');
       if (!authRes.data.success) throw new Error('Failed to get upload auth');
       const { signature, expire, token, publicKey } = authRes.data;
 
-      // 2. Append Auth params to the existing FormData
-      formData.append('publicKey', publicKey);
-      formData.append('signature', signature);
-      formData.append('expire', expire);
-      formData.append('token', token);
+      // For Native: if we received an object with uri, use FileSystem.uploadAsync
+      if (typeof formDataOrObj === 'object' && formDataOrObj.uri && Platform.OS !== 'web') {
+        const response = await FileSystemLegacy.uploadAsync('https://upload.imagekit.io/api/v1/files/upload', formDataOrObj.uri, {
+          httpMethod: 'POST',
+          uploadType: FileSystemLegacy.FileSystemUploadType?.MULTIPART ?? 1,
+          fieldName: 'file',
+          mimeType: 'image/jpeg',
+          parameters: {
+            fileName: formDataOrObj.fileName || 'image.jpg',
+            folder: formDataOrObj.folder || '/',
+            publicKey,
+            signature,
+            expire: String(expire),
+            token
+          }
+        });
+        const data = JSON.parse(response.body);
+        if (data.fileId) {
+          return { data: { success: true, url: data.url, fileId: data.fileId, thumbnailUrl: data.thumbnailUrl } };
+        }
+        return { data: { success: false, message: data.message || 'ImageKit upload failed' } };
+      }
+
+      // 2. Append Auth params to the existing FormData for web
+      formDataOrObj.append('publicKey', publicKey);
+      formDataOrObj.append('signature', signature);
+      formDataOrObj.append('expire', expire);
+      formDataOrObj.append('token', token);
 
       // 3. Upload directly to ImageKit bypassing our Node/PHP server
       const response = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
         method: 'POST',
-        body: formData,
+        body: formDataOrObj,
       });
 
       const data = await response.json();

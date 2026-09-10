@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, View, ScrollView, TouchableOpacity, TextInput, 
   Alert, Dimensions, Platform, ActivityIndicator, RefreshControl, Image,
-  Modal
+  Modal, KeyboardAvoidingView
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import { 
   DollarSign, Calendar, Truck, Utensils, Fuel, FileText, 
   ChevronRight, CheckCircle2, AlertCircle, Clock, UploadCloud, 
-  Plus, Wallet, XCircle, X, MapPin, Navigation, Bike, Train, Bus, Car
+  Plus, Wallet, XCircle, X, MapPin, Navigation, Bike, Train, Bus, Car, Building2, Package
 } from 'lucide-react-native';
 import Svg, { Rect, Path, Line, Circle } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,14 +34,6 @@ export default function ExpensesScreen() {
   
   const [history, setHistory] = useState([]);
   
-  // DA Specific States
-  const [daHistory, setDaHistory] = useState([]);
-  const [totalDA, setTotalDA] = useState(0);
-  const [showDaModal, setShowDaModal] = useState(false);
-  const [daAmount, setDaAmount] = useState('');
-  const [daReceiptImage, setDaReceiptImage] = useState(null);
-  const [claimingDA, setClaimingDA] = useState(false);
-  
   // Image Upload State
   const [receiptImage, setReceiptImage] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -60,12 +52,6 @@ export default function ExpensesScreen() {
       if (res.data && res.data.success) {
         setHistory(res.data.expenses || []);
       }
-      
-      const userRes = await authApi.getMe();
-      if (userRes.data && userRes.data.success) {
-        setDaHistory(userRes.data.user.daHistory || []);
-        setTotalDA(userRes.data.user.DA || 0);
-      }
     } catch (err) {
       console.log('⚠️ ExpensesScreen: Failed to fetch history:', err.message);
     } finally {
@@ -77,7 +63,7 @@ export default function ExpensesScreen() {
     fetchExpenses();
   }, []);
 
-  const handlePickImage = async (isDA = false) => {
+  const handlePickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permissionResult.granted === false) {
@@ -93,11 +79,7 @@ export default function ExpensesScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        if (isDA) {
-          setDaReceiptImage(result.assets[0]);
-        } else {
-          setReceiptImage(result.assets[0]);
-        }
+        setReceiptImage(result.assets[0]);
       }
     } catch (error) {
       console.log('Error picking image:', error);
@@ -105,64 +87,7 @@ export default function ExpensesScreen() {
     }
   };
 
-  const handleClaimDA = async () => {
-    if (!daAmount) {
-      Alert.alert('Incomplete Fields', 'Please specify the DA amount.');
-      return;
-    }
 
-    try {
-      setClaimingDA(true);
-      let receiptUrl = '';
-      
-      if (daReceiptImage && daReceiptImage.base64) {
-        setUploadingImage(true);
-        try {
-          const formData = new FormData();
-          if (Platform.OS === 'web') {
-            const response = await fetch(daReceiptImage.uri);
-            const blob = await response.blob();
-            formData.append('image', blob, `da_receipt_${Date.now()}.jpg`);
-          } else {
-            formData.append('image', {
-              uri: daReceiptImage.uri,
-              type: 'image/jpeg',
-              name: `da_receipt_${Date.now()}.jpg`
-            });
-          }
-          formData.append('folder', '/crm-tracker/receipts');
-
-          const uploadRes = await uploadAPI.uploadImageFormData(formData);
-          if (uploadRes.data && uploadRes.data.success) {
-            receiptUrl = uploadRes.data.url;
-          }
-        } catch (uploadErr) {
-          console.log('⚠️ ExpensesScreen: Image upload failed:', uploadErr.message);
-        } finally {
-          setUploadingImage(false);
-        }
-      }
-
-      const payload = {
-        amount: parseFloat(daAmount),
-        receipt: receiptUrl
-      };
-
-      const res = await expenseApi.claimDA(payload);
-      if (res.data && res.data.success) {
-        Alert.alert('Success', 'Your Daily Allowance has been claimed!');
-        setDaAmount('');
-        setDaReceiptImage(null);
-        setShowDaModal(false);
-        fetchExpenses();
-      }
-    } catch (e) {
-      console.log('⚠️ ExpensesScreen: DA Submission failed:', e.message);
-      Alert.alert('Submission Error', 'Failed to log DA claim. Please try again.');
-    } finally {
-      setClaimingDA(false);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!amount) {
@@ -183,24 +108,27 @@ export default function ExpensesScreen() {
       let receiptUrls = [];
       
       // 1. Upload receipt to ImageKit via Backend if one is selected
-      if (receiptImage && receiptImage.base64) {
+      if (receiptImage && receiptImage.uri) {
         setUploadingImage(true);
         try {
-          const formData = new FormData();
+          const fileName = `receipt_${Date.now()}.jpg`;
+          
+          let uploadRes;
           if (Platform.OS === 'web') {
+            const formData = new FormData();
             const response = await fetch(receiptImage.uri);
             const blob = await response.blob();
-            formData.append('image', blob, `receipt_${Date.now()}.jpg`);
+            formData.append('file', blob, fileName);
+            formData.append('fileName', fileName);
+            formData.append('folder', '/crm-tracker/receipts');
+            uploadRes = await uploadAPI.uploadImageDirect(formData);
           } else {
-            formData.append('image', {
+            uploadRes = await uploadAPI.uploadImageDirect({
               uri: receiptImage.uri,
-              type: 'image/jpeg',
-              name: `receipt_${Date.now()}.jpg`
+              fileName: fileName,
+              folder: '/crm-tracker/receipts'
             });
           }
-          formData.append('folder', '/crm-tracker/receipts');
-
-          const uploadRes = await uploadAPI.uploadImageFormData(formData);
           
           if (uploadRes.data && uploadRes.data.success) {
             receiptUrls.push(uploadRes.data.url);
@@ -305,18 +233,11 @@ export default function ExpensesScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity 
-            style={[styles.logNewBtnHeader, { backgroundColor: '#2563eb' }]} 
-            onPress={() => setShowDaModal(true)}
-          >
-            <DollarSign size={16} color="#fff" />
-            <Text style={styles.logNewBtnText}>Claim DA</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
             style={styles.logNewBtnHeader} 
             onPress={() => setShowAddModal(true)}
           >
             <Plus size={16} color="#fff" />
-            <Text style={styles.logNewBtnText}>Expense</Text>
+            <Text style={styles.logNewBtnText}>Add Expense</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -326,11 +247,6 @@ export default function ExpensesScreen() {
         <Surface style={[styles.statSummaryCard, { borderLeftColor: '#3b82f6' }]} elevation={1}>
           <Text style={styles.statSummaryLabel}>TOTAL CLAIMED</Text>
           <Text style={styles.statSummaryValue}>₹{totalClaimed}</Text>
-        </Surface>
-
-        <Surface style={[styles.statSummaryCard, { borderLeftColor: '#10b981' }]} elevation={1}>
-          <Text style={styles.statSummaryLabel}>TOTAL DA</Text>
-          <Text style={styles.statSummaryValue}>₹{totalDA.toFixed(2)}</Text>
         </Surface>
 
         <Surface style={[styles.statSummaryCard, { borderLeftColor: '#f59e0b' }]} elevation={1}>
@@ -346,7 +262,10 @@ export default function ExpensesScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <Surface style={styles.modalContent} elevation={5}>
             
             {/* Modal Header */}
@@ -363,20 +282,23 @@ export default function ExpensesScreen() {
               <Text style={styles.modalSectionLabel}>CATEGORY</Text>
               <View style={styles.modalCategoryRow}>
                 {[
-                  { id: 'Fuel', label: 'Fuel', emoji: '⛽' },
-                  { id: 'Food', label: 'Food', emoji: '🍽️' },
-                  { id: 'Hotel', label: 'Hotel', emoji: '🏨' },
-                  { id: 'Travel', label: 'Travel', emoji: '🚗' },
-                  { id: 'Misc', label: 'Misc', emoji: '📦' },
+                  { id: 'Fuel', label: 'Fuel', Icon: Fuel },
+                  { id: 'Food', label: 'Food', Icon: Utensils },
+                  { id: 'Hotel', label: 'Hotel', Icon: Building2 },
+                  { id: 'Travel', label: 'Travel', Icon: Car },
+                  { id: 'Misc', label: 'Misc', Icon: Package },
                 ].map((item) => {
                   const isSelected = category === item.id;
+                  const IconComponent = item.Icon;
                   return (
                     <TouchableOpacity
                       key={item.id}
                       style={[styles.modalCategoryBtn, isSelected && styles.modalCategoryBtnActive]}
                       onPress={() => setCategory(item.id)}
                     >
-                      <Text style={styles.modalCategoryEmoji}>{item.emoji}</Text>
+                      <View style={styles.modalCategoryEmoji}>
+                        <IconComponent size={20} color={isSelected ? '#3b82f6' : '#64748b'} />
+                      </View>
                       <Text style={[styles.modalCategoryLabel, isSelected && styles.modalCategoryLabelActive]}>
                         {item.label}
                       </Text>
@@ -393,19 +315,20 @@ export default function ExpensesScreen() {
                   {/* Transport Mode buttons */}
                   <View style={styles.transportModeRow}>
                     {[
-                      { id: 'bike', label: 'BIKE', emoji: '🚲' },
-                      { id: 'train', label: 'TREN', emoji: '🚆' },
-                      { id: 'bus', label: 'BUS', emoji: '🚌' },
-                      { id: 'taxi', label: 'TAXXY', emoji: '🚕' },
+                      { id: 'bike', label: 'BIKE', Icon: Bike },
+                      { id: 'train', label: 'TRAIN', Icon: Train },
+                      { id: 'bus', label: 'BUS', Icon: Bus },
+                      { id: 'taxi', label: 'TAXI', Icon: Car },
                     ].map((mode) => {
                       const isModeSelected = transportMode === mode.id;
+                      const ModeIcon = mode.Icon;
                       return (
                         <TouchableOpacity
                           key={mode.id}
                           style={[styles.transportModeBtn, isModeSelected && styles.transportModeBtnActive]}
                           onPress={() => setTransportMode(mode.id)}
                         >
-                          <Text style={styles.transportModeEmoji}>{mode.emoji}</Text>
+                          <ModeIcon size={16} color={isModeSelected ? '#3b82f6' : '#64748b'} style={styles.transportModeEmoji} />
                           <Text style={[styles.transportModeLabel, isModeSelected && styles.transportModeLabelActive]}>
                             {mode.label}
                           </Text>
@@ -487,10 +410,17 @@ export default function ExpensesScreen() {
               <View style={styles.smallReceiptContainer}>
                 {receiptImage ? (
                   <View style={styles.smallImageWrapper}>
-                    <Image source={{ uri: receiptImage.uri }} style={styles.smallImagePreview} />
-                    <TouchableOpacity style={styles.smallRemoveBtn} onPress={() => setReceiptImage(null)}>
-                      <XCircle size={16} color="#ef4444" fill="#fff" />
-                    </TouchableOpacity>
+                    <Image source={{ uri: receiptImage.uri }} style={[styles.smallImagePreview, uploadingImage && { opacity: 0.5 }]} />
+                    {uploadingImage && (
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                        <ActivityIndicator size="small" color="#2563eb" />
+                      </View>
+                    )}
+                    {!uploadingImage && (
+                      <TouchableOpacity style={styles.smallRemoveBtn} onPress={() => setReceiptImage(null)}>
+                        <XCircle size={16} color="#ef4444" fill="#fff" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <TouchableOpacity style={styles.smallDashedUploadBox} onPress={handlePickImage}>
@@ -521,77 +451,10 @@ export default function ExpensesScreen() {
 
             </ScrollView>
           </Surface>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* 3B. Add DA Claim Modal */}
-      <Modal
-        visible={showDaModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowDaModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Surface style={[styles.modalContent, { maxHeight: '60%' }]} elevation={5}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Claim Daily Allowance</Text>
-              <TouchableOpacity onPress={() => setShowDaModal(false)} style={styles.closeBtn}>
-                <X size={20} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {/* DA Amount */}
-              <Text style={styles.modalSectionLabel}>AMOUNT (₹) *</Text>
-              <TextInput
-                placeholder="0.00"
-                placeholderTextColor="#52525b"
-                value={daAmount}
-                onChangeText={setDaAmount}
-                keyboardType="decimal-pad"
-                style={styles.modalTextInput}
-              />
-
-              {/* Receipt photo */}
-              <Text style={styles.modalSectionLabel}>DA RECEIPT PHOTO (Optional)</Text>
-              <View style={styles.smallReceiptContainer}>
-                {daReceiptImage ? (
-                  <View style={styles.smallImageWrapper}>
-                    <Image source={{ uri: daReceiptImage.uri }} style={styles.smallImagePreview} />
-                    <TouchableOpacity style={styles.smallRemoveBtn} onPress={() => setDaReceiptImage(null)}>
-                      <XCircle size={16} color="#ef4444" fill="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.smallDashedUploadBox} onPress={() => handlePickImage(true)}>
-                    <Plus size={18} color="#94a3b8" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Footer action buttons */}
-              <View style={styles.modalFooter}>
-                <TouchableOpacity onPress={() => setShowDaModal(false)} style={styles.cancelBtn}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.submitBtnDark, claimingDA && { opacity: 0.8 }]} 
-                  onPress={handleClaimDA}
-                  disabled={claimingDA}
-                >
-                  {claimingDA ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.submitBtnTextDark}>
-                      {uploadingImage ? 'Uploading...' : 'Submit'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </Surface>
-        </View>
-      </Modal>
 
       {/* 4. Submission History */}
       <View style={styles.sectionHeader}>
@@ -636,45 +499,17 @@ export default function ExpensesScreen() {
                   </View>
                 </View>
 
-                <ChevronRight size={16} color="#cbd5e1" style={{ marginLeft: 8 }} />
+                {item.receipts && item.receipts.length > 0 ? (
+                  <Image 
+                    source={{ uri: item.receipts[0] }} 
+                    style={{ width: 32, height: 32, borderRadius: 6, marginLeft: 8 }} 
+                  />
+                ) : (
+                  <ChevronRight size={16} color="#cbd5e1" style={{ marginLeft: 8 }} />
+                )}
               </Surface>
             );
           })
-        )}
-      </View>
-
-      {/* 5. DA History */}
-      <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-        <Text style={styles.sectionTitle}>DA Claims History</Text>
-      </View>
-
-      <View style={styles.historyList}>
-        {daHistory.length === 0 ? (
-          <Surface style={[styles.historyCard, { justifyContent: 'center', paddingVertical: 24 }]} elevation={1}>
-            <Text style={{ fontSize: 12, color: '#64748b', textAlign: 'center', width: '100%' }}>No DA claimed yet.</Text>
-          </Surface>
-        ) : (
-          daHistory.map((item, index) => (
-            <Surface key={item._id || index} style={styles.historyCard} elevation={1}>
-              <View style={styles.cardLeft}>
-                <View style={styles.historyIconCircle}>
-                  <DollarSign size={16} color="#475569" />
-                </View>
-                <View style={styles.historyInfo}>
-                  <Text style={styles.historyCardTitle}>DAILY ALLOWANCE</Text>
-                  <Text style={styles.historyCardMeta} numberOfLines={1}>
-                    {new Date(item.date).toLocaleDateString('en-GB')}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.cardRight}>
-                <Text style={styles.historyAmount}>₹{item.amount}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: '#e6fbf2' }]}>
-                  <Text style={[styles.statusBadgeText, { color: '#10b981' }]}>CLAIMED</Text>
-                </View>
-              </View>
-            </Surface>
-          ))
         )}
       </View>
 
@@ -756,19 +591,24 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#18181b', // Ultra sleek dark carbon background
+    backgroundColor: '#ffffff',
     borderRadius: 24,
     width: '100%',
     maxHeight: '90%',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#27272a',
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -777,12 +617,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#27272a',
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#0f172a',
   },
   closeBtn: {
     padding: 4,
@@ -793,58 +634,56 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   modalSectionLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    color: '#71717a',
+    color: '#64748b',
     letterSpacing: 1,
     marginBottom: 8,
-    marginTop: 14,
+    marginTop: 16,
   },
   modalCategoryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   modalCategoryBtn: {
-    width: '18%',
-    aspectRatio: 1,
-    backgroundColor: '#202023',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#27272a',
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   modalCategoryBtnActive: {
-    borderColor: '#2563eb', // Sleek bright blue selection outline matching user screenshot
-    backgroundColor: '#1d2433',
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
   },
   modalCategoryEmoji: {
-    fontSize: 18,
     marginBottom: 4,
   },
   modalCategoryLabel: {
     fontSize: 9,
-    color: '#a1a1aa',
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: '#64748b',
   },
   modalCategoryLabelActive: {
-    color: '#ffffff',
-    fontWeight: 'bold',
+    color: '#3b82f6',
   },
   travelDetailsBox: {
-    backgroundColor: '#1c1c21',
+    backgroundColor: '#f8fafc',
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#1d2c4d', // Blueish tint container border
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     padding: 14,
     marginVertical: 12,
   },
   travelBoxLabel: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#2563eb',
+    color: '#3b82f6',
     letterSpacing: 0.8,
     marginBottom: 10,
   },
@@ -856,33 +695,32 @@ const styles = StyleSheet.create({
   transportModeBtn: {
     width: '23%',
     aspectRatio: 1.25,
-    backgroundColor: '#27272a',
+    backgroundColor: '#ffffff',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#3f3f46',
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   transportModeBtnActive: {
-    backgroundColor: '#2563eb', // Beautiful active blue base
+    backgroundColor: '#eff6ff',
     borderColor: '#3b82f6',
-    shadowColor: '#2563eb',
+    shadowColor: '#3b82f6',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   transportModeEmoji: {
-    fontSize: 16,
     marginBottom: 2,
   },
   transportModeLabel: {
     fontSize: 8,
-    color: '#a1a1aa',
+    color: '#64748b',
     fontWeight: 'bold',
   },
   transportModeLabelActive: {
-    color: '#ffffff',
+    color: '#3b82f6',
   },
   travelRouteRow: {
     flexDirection: 'row',
@@ -894,43 +732,43 @@ const styles = StyleSheet.create({
   travelInputLabel: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#71717a',
+    color: '#64748b',
     marginBottom: 6,
   },
   travelInputSlot: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#27272a',
+    backgroundColor: '#ffffff',
     borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#3f3f46',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     paddingHorizontal: 8,
     height: 38,
   },
   travelInput: {
     flex: 1,
     fontSize: 11,
-    color: '#ffffff',
+    color: '#0f172a',
     padding: 0,
   },
   modalTextInput: {
-    backgroundColor: '#27272a',
+    backgroundColor: '#f8fafc',
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#3f3f46',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     paddingHorizontal: 14,
     height: 48,
     fontSize: 13,
-    color: '#ffffff',
+    color: '#0f172a',
     marginBottom: 10,
   },
   modalDateSlot: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#27272a',
+    backgroundColor: '#f8fafc',
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#3f3f46',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     paddingHorizontal: 14,
     height: 48,
     marginBottom: 10,
@@ -938,7 +776,7 @@ const styles = StyleSheet.create({
   modalDateInput: {
     flex: 1,
     fontSize: 13,
-    color: '#ffffff',
+    color: '#0f172a',
   },
   smallReceiptContainer: {
     flexDirection: 'row',
@@ -952,8 +790,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#52525b',
-    backgroundColor: '#202023',
+    borderColor: '#94a3b8',
+    backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -989,23 +827,23 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   cancelBtnText: {
-    color: '#a1a1aa',
+    color: '#64748b',
     fontSize: 13,
     fontWeight: 'bold',
   },
   submitBtnDark: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3b82f6',
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,
     minWidth: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: '#3b82f6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
   submitBtnTextDark: {
     color: '#ffffff',

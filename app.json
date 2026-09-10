@@ -3,14 +3,16 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.12",
+    "version": "1.0.18",
     "orientation": "portrait",
-    "icon": "./assets/logo.jpeg",
+    "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo.jpeg",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+    "extra": {
+      "googleMapsApiKey": "AIzaSyCgmGEomqsMzK3Fcx5Q4eVj8yWLkBBrbbA",
+      "router": {},
+      "eas": {
+        "projectId": "51919d79-bd08-4843-885f-0fb69e0a9882"
+      }
     },
     "ios": {
       "supportsTablet": true,
@@ -20,7 +22,7 @@
       }
     },
     "android": {
-      "versionCode": 32,
+      "versionCode": 38,
       "package": "com.kisanteam.crm",
       "config": {
         "googleMaps": {
@@ -28,10 +30,9 @@
         }
       },
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.jpeg",
+        "foregroundImage": "./assets/kisanLogo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -47,11 +48,28 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.CAMERA",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
     },
     "web": {
-      "favicon": "./assets/logo.jpeg",
+      "favicon": "./assets/kisanLogo.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -60,7 +78,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/logo.jpeg",
+          "icon": "./assets/kisanLogo.png",
           "color": "#0a3d3c",
           "defaultChannel": "crm-alerts",
           "sounds": []
@@ -78,26 +96,20 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
             "useLegacyPackaging": false,
             "usesCleartextTraffic": true,
             "enableProguardInReleaseBuilds": false,
             "enableShrinkResourcesInReleaseBuilds": false,
-            "ndkVersion": "27.1.12297006"
+            "ndkVersion": "27.1.12297006",
+            "enableMinifyInReleaseBuilds": false
           }
         }
       ],
       "expo-font",
-      "expo-intent-launcher"
-
+      "expo-asset",
+      "expo-splash-screen",
+      "expo-status-bar"
     ],
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "e2aca0ed-c556-41ba-b772-43fbfc0bf4d2"
-      }
-    },
-    "owner": "easylearn"
+    "owner": "saifuddinansari"
   }
 }

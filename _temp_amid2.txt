@@ -1,0 +1,360 @@
+                return upd;
+              }
+              return prev;
+            });
+          });
+
+          socket.on('employee_tracking_started', fetchAllData);
+          socket.on('employee_tracking_stopped', fetchAllData);
+        }
+      } catch (e) {}
+    };
+
+    initSocket();
+    const interval = setInterval(fetchAllData, 10000);
+
+    return () => {
+      clearInterval(interval);
+      if (socket) {
+        socket.off('employee_location');
+        socket.off('employee_tracking_started');
+        socket.off('employee_tracking_stopped');
+      }
+    };
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    if (activeTab === 'history') fetchHistory();
+    if (activeTab === 'tasks' && tasks.length === 0) fetchTasks();
+    if (activeTab === 'expenses' && expenses.length === 0) fetchExpenses();
+    if (activeTab === 'leaves' && leaves.length === 0) fetchLeaves();
+  }, [activeTab, fetchHistory]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    if (activeTab === 'history') await fetchHistory();
+    if (activeTab === 'tasks') await fetchTasks();
+    if (activeTab === 'expenses') await fetchExpenses();
+    if (activeTab === 'leaves') await fetchLeaves();
+    setRefreshing(false);
+  };
+
+  // Select employee & load Polyline route
+  const handleSelectEmployee = async (emp) => {
+    setSelectedEmployee(emp);
+    if (emp.lat && emp.lng && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: parseFloat(emp.lat),
+        longitude: parseFloat(emp.lng),
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      }, 1000);
+    }
+
+    const sessId = emp.sessionId || emp._id;
+    if (sessId) {
+      setLoadingRoute(true);
+      try {
+        const res = await trackingAPI.getSession(sessId);
+        if (res.data?.success && res.data.session?.coordinates) {
+          const coords = res.data.session.coordinates.map((c) => ({
+            latitude: parseFloat(c.lat),
+            longitude: parseFloat(c.lng),
+          }));
+          setRouteCoords(coords);
+        }
+      } catch (e) {
+        setRouteCoords([]);
+      } finally {
+        setLoadingRoute(false);
+      }
+    } else {
+      setRouteCoords([]);
+    }
+  };
+
+  // Load a historical session onto the map
+  const handleViewHistorySession = async (session) => {
+    setActiveTab('telemetry');
+    const sessId = session.sessionId || session._id;
+    setLoadingRoute(true);
+    try {
+      const res = await trackingAPI.getSession(sessId);
+      if (res.data?.success && res.data.session?.coordinates) {
+        const coords = res.data.session.coordinates.map((c) => ({
+          latitude: parseFloat(c.lat),
+          longitude: parseFloat(c.lng),
+        }));
+        setRouteCoords(coords);
+        if (coords.length > 0 && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: coords[0].latitude,
+            longitude: coords[0].longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }, 1000);
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load route points.');
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
+  // Generate consolidated report
+  const handleGenerateReport = async () => {
+    if (!reportEmpId) {
+      Alert.alert('Select Staff', 'Please select an employee first.');
+      return;
+    }
+    setReportLoading(true);
+    try {
+      const res = await adminAPI.getConsolidatedReport({
+        employeeId: reportEmpId,
+        startDate: reportStart,
+        endDate: reportEnd,
+      });
+      if (res.data?.success) {
+        setReportData(res.data.data);
+      } else {
+        Alert.alert('Error', res.data?.message || 'Failed to fetch report.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to generate report.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // Actions
+  const handleApproveEmp = async (id) => {
+    try {
+      await adminAPI.approveEmployee(id);
+      fetchAllData();
+    } catch (e) {}
+  };
+
+  const handleToggleBlock = async (id) => {
+    try {
+      await adminAPI.toggleBlock(id);
+      fetchAllData();
+    } catch (e) {}
+  };
+
+  const handleExpenseStatus = async (id, status) => {
+    try {
+      await expenseAPI.approve(id, { status });
+      fetchExpenses();
+    } catch (e) {}
+  };
+
+  const handleLeaveStatus = async (id, status) => {
+    try {
+      await leaveAPI.updateStatus(id, { status });
+      fetchLeaves();
+    } catch (e) {}
+  };
+
+  // Directory Staff Mapping
+  const baseStaffList = allEmployeesList.length > 0 ? allEmployeesList : liveLocations;
+
+  const directoryStaff = baseStaffList.map((emp) => {
+    const liveLoc = liveLocations.find((l) =>
+      (l.employeeId && String(l.employeeId) === String(emp._id || emp.employeeId)) ||
+      (l.employeeIdCode && emp.employeeId && String(l.employeeIdCode) === String(emp.employeeId)) ||
+      (l.name && emp.name && l.name.toLowerCase() === emp.name.toLowerCase())
+    );
+
+    return {
+      _id: emp._id || emp.employeeId,
+      name: emp.name || 'Field Agent',
+      avatar: emp.avatar || liveLoc?.avatar,
+      department: emp.department || liveLoc?.department || 'Field Services',
+      phone: emp.phone,
+      isTracking: !!liveLoc || emp.isTracking,
+      isOnline: emp.isOnline,
+      lat: liveLoc?.lat || emp.lat || null,
+      lng: liveLoc?.lng || emp.lng || null,
+      totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
+      address: liveLoc?.address || emp.address || (liveLoc ? 'Tracking Active' : 'Not Punched In'),
+      sessionId: liveLoc?.sessionId || emp.sessionId || null,
+      startTime: liveLoc?.startTime || emp.startTime || null,
+      updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
+    };
+  });
+
+  const activeCount = directoryStaff.filter(s => s.isTracking).length;
+  const totalEmpCount = directoryStaff.length;
+  const punchedOutCount = Math.max(0, totalEmpCount - activeCount);
+
+  const filteredDirectory = directoryStaff.filter((emp) => {
+    const matchesSearch = (emp.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (emp.address || '').toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (mapFilter === 'ACTIVE') return emp.isTracking;
+    if (mapFilter === 'PUNCHED_OUT') return !emp.isTracking;
+    return true;
+  });
+
+  const defaultRegion = {
+    latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.4499,
+    longitude: liveLocations[0]?.lng ? parseFloat(liveLocations[0].lng) : 80.3319,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  };
+
+  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'â€”');
+  const fmtTime = (d) => (d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'â€”');
+
+  return (
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      {/* â”€â”€ Scrollable Tab Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* â”€â”€ TAB 1: LIVE MAP SYSTEM (Maximum Screen Height!) â”€â”€â”€â”€â”€â”€â”€ */}
+      {activeTab === 'telemetry' && (
+        <View style={{ flex: 1 }}>
+          {/* Status Filter Chips */}
+          <View style={styles.filterChipsRow}>
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'ALL' && styles.chipActive]}
+              onPress={() => setMapFilter('ALL')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'ALL' && styles.chipTextActive]}>ALL ({totalEmpCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'ACTIVE' && styles.chipActive]}
+              onPress={() => setMapFilter('ACTIVE')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'ACTIVE' && styles.chipTextActive]}>ACTIVE ({activeCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.chip, mapFilter === 'PUNCHED_OUT' && styles.chipActive]}
+              onPress={() => setMapFilter('PUNCHED_OUT')}
+            >
+              <Text style={[styles.chipText, mapFilter === 'PUNCHED_OUT' && styles.chipTextActive]}>PUNCHED OUT ({punchedOutCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => router.push('/(employee)/admin/history')}
+            >
+              <FileText size={13} color="#fff" />
+              <Text style={styles.historyBtnText}>KM HISTORY</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Interactive Map View (EXPANDED HEIGHT) */}
+          <View style={styles.mapContainerLarge}>
+            <MapViewComponent
+              ref={mapRef}
+              initialRegion={defaultRegion}
+              directoryStaff={directoryStaff}
+              routeCoords={routeCoords}
+              loadingRoute={loadingRoute}
+              onSelectEmployee={handleSelectEmployee}
+            />
+
+            {loadingRoute && (
+              <View style={styles.mapLoader}>
+                <ActivityIndicator color="#008080" size="small" />
+                <Text style={{ fontFamily: FONT, fontSize: 11, marginLeft: 8, color: '#008080', fontWeight: 'bold' }}>Drawing GPS Route Path...</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Collapsable Bottom Directory */}
+          <View style={[styles.directoryContainerCompact, { backgroundColor: C.surface }]}>
+            <TouchableOpacity style={styles.directoryHeader} onPress={() => setShowDirectory(!showDirectory)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Users size={16} color="#008080" />
+                <Text style={[styles.directoryTitle, { color: C.text }]}>TEAM DIRECTORY ({filteredDirectory.length})</Text>
+              </View>
+              {showDirectory ? <ChevronDown size={20} color={C.sub} /> : <ChevronUp size={20} color={C.sub} />}
+            </TouchableOpacity>
+
+            {showDirectory && (
+              <>
+                <View style={[styles.searchBox, { backgroundColor: C.bg, borderColor: C.border, marginHorizontal: 0, marginBottom: 8 }]}>
+                  <Search size={16} color={C.sub} style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.searchInput, { color: C.text }]}
+                    placeholder="Search staff..."
+                    placeholderTextColor={C.sub}
+                    value={search}
+                    onChangeText={setSearch}
+                  />
+                </View>
+
+                <FlatList
+                  data={filteredDirectory}
+                  keyExtractor={(item, idx) => item._id || String(idx)}
+                  style={{ maxHeight: 180 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.staffRow,
+                        { borderColor: C.border },
+                        selectedEmployee?._id === item._id && { backgroundColor: isDark ? '#334155' : '#e0f2fe' }
+                      ]}
+                      onPress={() => handleSelectEmployee(item)}
+                    >
+                      <View style={{ position: 'relative' }}>
+                        {getAvatarUrl(item.avatar) ? (
+                          <Avatar.Image size={36} source={{ uri: getAvatarUrl(item.avatar) }} />
+                        ) : (
+                          <Avatar.Text size={36} label={(item.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                        )}
+                        <View style={[styles.listStatusDot, { backgroundColor: item.isTracking ? '#16a34a' : '#94a3b8' }]} />
+                      </View>
+
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={[styles.empName, { color: C.text }]}>{item.name}</Text>
+                        <Text style={[styles.empSub, { color: C.sub }]} numberOfLines={1}>
+                          {item.isTracking ? item.address : 'Not Punched In'}
+                        </Text>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {item.isTracking ? (
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#008080' }}>
+                            {(parseFloat(item.totalDistance) || 0).toFixed(1)} km
+                          </Text>
+                        ) : (
+                          <Text style={{ fontSize: 11, color: C.sub }}>Offline</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              </>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* â”€â”€ TAB 2: GPS TRACKING HISTORY (Date Filter & Session Replay) â”€ */}
+      {activeTab === 'history' && (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.dateFilterHeader, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateLbl, { color: C.sub }]}>FILTER DATE</Text>
+              <TextInput
+                style={[styles.dateInput, { color: C.text }]}
+                value={historyDate}
+                onChangeText={setHistoryDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={C.sub}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.filterApplyBtn} onPress={fetchHistory}>
+              <RefreshCw size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12, marginLeft: 6 }}>Apply Date</Text>
+            </TouchableOpacity>
+          </View>
+
+          {historyLoading ? (

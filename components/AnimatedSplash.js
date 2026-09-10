@@ -2,8 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated, Dimensions, Platform, Image } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as SplashScreen from 'expo-splash-screen';
 
 const { width, height } = Dimensions.get('window');
+const useNativeDriver = Platform.OS !== 'web';
 
 export default function AnimatedSplash({ onFinish }) {
   const logoScale = useRef(new Animated.Value(0.4)).current;
@@ -15,6 +17,12 @@ export default function AnimatedSplash({ onFinish }) {
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Hide the native splash screen ONLY after our JS splash has mounted.
+    // This prevents the underlying screen (like Login) from flashing before the animation starts.
+    setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 50);
+
     // Staggered entrance animation for a premium feel
     Animated.sequence([
       Animated.delay(150),
@@ -24,12 +32,12 @@ export default function AnimatedSplash({ onFinish }) {
           toValue: 1,
           tension: 15,
           friction: 5,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
         Animated.timing(logoOpacity, {
           toValue: 1,
           duration: 500,
-          useNativeDriver: true,
+          useNativeDriver,
         })
       ]),
       // 2. Title slides up and fades in
@@ -37,25 +45,25 @@ export default function AnimatedSplash({ onFinish }) {
         Animated.timing(titleTranslateY, {
           toValue: 0,
           duration: 400,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
         Animated.timing(titleOpacity, {
           toValue: 1,
           duration: 400,
-          useNativeDriver: true,
+          useNativeDriver,
         })
       ]),
       // 3. Subtitle fades in smoothly
       Animated.timing(subtitleOpacity, {
         toValue: 1,
         duration: 400,
-        useNativeDriver: true,
+        useNativeDriver,
       }),
       // 4. Footer fades in
       Animated.timing(footerOpacity, {
         toValue: 1,
         duration: 500,
-        useNativeDriver: true,
+        useNativeDriver,
       })
     ]).start();
 
@@ -64,7 +72,7 @@ export default function AnimatedSplash({ onFinish }) {
       Animated.timing(progressAnim, {
         toValue: 1,
         duration: 1200,
-        useNativeDriver: true,
+        useNativeDriver,
       })
     ).start();
 
@@ -72,21 +80,21 @@ export default function AnimatedSplash({ onFinish }) {
     const timer = setTimeout(() => {
       // 1. Fade out texts and footer first
       Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(subtitleOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(footerOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 0, duration: 200, useNativeDriver }),
+        Animated.timing(subtitleOpacity, { toValue: 0, duration: 200, useNativeDriver }),
+        Animated.timing(footerOpacity, { toValue: 0, duration: 200, useNativeDriver }),
       ]).start(() => {
         // 2. Logo zooms in massively while fading out
         Animated.parallel([
           Animated.timing(logoScale, { 
             toValue: 20, // Scales up to 20x size
             duration: 400, 
-            useNativeDriver: true 
+            useNativeDriver 
           }),
           Animated.timing(logoOpacity, { 
             toValue: 0, 
             duration: 400, // Fades out during the zoom
-            useNativeDriver: true 
+            useNativeDriver 
           }),
         ]).start(onFinish);
       });
@@ -108,8 +116,9 @@ export default function AnimatedSplash({ onFinish }) {
           <Animated.View style={{ opacity: logoOpacity, transform: [{ scale: logoScale }], zIndex: 2 }}>
             <View style={styles.logoWrapper}>
               <Image 
-                source={require('../assets/logo.jpeg')} 
-                style={styles.logoImage} 
+                source={require('../assets/kisanLogo.png')}
+                style={styles.logoImage}
+                resizeMode="cover"
               />
             </View>
           </Animated.View>
@@ -179,7 +188,6 @@ const styles = StyleSheet.create({
     width: 105,
     height: 105,
     borderRadius: 52.5,
-    resizeMode: 'cover',
     backgroundColor: '#fff', 
   },
   brandTitle: {
@@ -187,9 +195,7 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '900',
     letterSpacing: 1.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadow: '0px 2px 8px rgba(0, 0, 0, 0.5)',
   },
   brandSubtitle: {
     color: '#94a3b8',

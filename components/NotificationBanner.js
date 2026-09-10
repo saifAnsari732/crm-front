@@ -5,6 +5,7 @@ import { Bell, ClipboardCheck, Wallet, Calendar, AlertCircle, X, Users } from 'l
 import { useNotification } from '../context/NotificationContext';
 
 const { width } = Dimensions.get('window');
+const useNativeDriver = Platform.OS !== 'web';
 
 const getNotificationDetails = (type) => {
   switch (type) {
@@ -56,7 +57,7 @@ export default function NotificationBanner() {
       // Slide Down animation
       Animated.spring(slideAnim, {
         toValue: Platform.OS === 'ios' ? 60 : 40, // Height placement adjusted for platform status bars
-        useNativeDriver: true,
+        useNativeDriver,
         tension: 50,
         friction: 8,
       }).start();
@@ -75,7 +76,7 @@ export default function NotificationBanner() {
     Animated.timing(slideAnim, {
       toValue: -150,
       duration: 350,
-      useNativeDriver: true,
+      useNativeDriver,
     }).start(() => {
       dismissNotification();
     });
