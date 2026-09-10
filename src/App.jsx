@@ -6,7 +6,6 @@ import { ThemeProvider } from './contexts/ThemeContext';
 
 // Components
 import LoadingScreen from './components/shared/LoadingScreen';
-import OfflineIndicator from './components/shared/OfflineIndicator';
 import NetworkStatus from './components/shared/NetworkStatus';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 
@@ -79,7 +78,6 @@ export default function App() {
             <Suspense fallback={<LoadingScreen />}>
               <AppRoutes />
             </Suspense>
-            <OfflineIndicator />
             <Toaster
               position="top-right"
               toastOptions={{
