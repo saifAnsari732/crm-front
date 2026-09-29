@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import AdminLayout from '../../components/layout/AdminLayout';
+import TrackProLayout from '../../components/layout/TrackProLayout';
 import { leadAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { Plus, Search, MapPin, Phone, X, MessageCircle, Filter, Users, Trash2 } from 'lucide-react';
@@ -75,7 +75,7 @@ export default function AdminLeads() {
   };
 
   return (
-    <AdminLayout>
+    <TrackProLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -204,6 +204,6 @@ export default function AdminLeads() {
           </div>
         )}
       </div>
-    </AdminLayout>
+    </TrackProLayout>
   );
 }

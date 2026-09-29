@@ -351,10 +351,10 @@ export const TrackingProvider = ({ children }) => {
   );
 };
 
-export const useTracking = () => {
+export function useTracking() {
   const ctx = useContext(TrackingContext);
   if (!ctx) {
     throw new Error('useTracking must be used within TrackingProvider');
   }
   return ctx;
-};
+}

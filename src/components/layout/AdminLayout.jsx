@@ -37,11 +37,12 @@ export default function AdminLayout({ children }) {
       <aside className={`fixed top-0 left-0 h-full w-64 z-50 flex flex-col border-r border-[var(--border-color)] bg-[var(--bg-sidebar)] backdrop-blur-xl transition-transform duration-300
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
         <div className="p-6 border-b border-[var(--border-color)]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white p-1"><img src="/images/kisanLogo.jpg" alt="Logo" className="w-full h-full object-contain" /></div>
-            <div>
-              <p className="font-bold text-[var(--text-main)] text-sm">Kisanteam CRM</p>
-              <p className="text-[var(--accent-safe)] text-xs font-medium">Admin Panel</p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white p-0.5 border border-slate-200">
+              <img src="/images/icon.jpg" alt="Icon" className="w-full h-full object-cover rounded-lg" />
+            </div>
+            <div className="min-w-0 flex items-center">
+              <img src="/images/superCompanyLOGO.png" alt="Company Logo" className="h-8 max-h-9 w-auto object-contain" />
             </div>
           </div>
         </div>

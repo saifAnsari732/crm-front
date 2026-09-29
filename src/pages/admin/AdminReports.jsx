@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import AdminLayout from '../../components/layout/AdminLayout';
+import TrackProLayout from '../../components/layout/TrackProLayout';
 import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import { FileText, Download, Calendar, User, Search, MapPin, Receipt, Briefcase, CheckCircle, Target, Image as ImageIcon } from 'lucide-react';
@@ -334,7 +334,7 @@ export default function AdminReports() {
   };
 
   return (
-    <AdminLayout>
+    <TrackProLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
@@ -599,6 +599,6 @@ export default function AdminReports() {
           </div>
         )}
       </div>
-    </AdminLayout>
+    </TrackProLayout>
   );
 }

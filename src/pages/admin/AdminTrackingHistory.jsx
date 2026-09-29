@@ -1,8 +1,31 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import AdminLayout from '../../components/layout/AdminLayout';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import TrackProLayout from '../../components/layout/TrackProLayout';
 import { adminAPI, trackingAPI } from '../../services/api.service';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
-import { Calendar, MapPin, Navigation, Clock, ChevronRight, Search, Download, Loader2, FileImage,Activity  } from 'lucide-react';
+import {
+  Calendar,
+  MapPin,
+  Navigation,
+  Clock,
+  ChevronRight,
+  Search,
+  Download,
+  Loader2,
+  FileImage,
+  Activity,
+  Gauge,
+  Route,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  TrendingUp,
+  SlidersHorizontal,
+  RefreshCw,
+  LogOut,
+  LogIn,
+  Battery,
+  ShieldCheck,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import L from 'leaflet';
 import html2canvas from 'html2canvas';
@@ -11,17 +34,22 @@ import html2canvas from 'html2canvas';
 const startIcon = L.divIcon({
   className: 'custom-start-marker',
   html: `<div style="width:28px;height:28px;border-radius:10px;background:#22c55e;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:10px;transform:rotate(45deg);"><div style="transform:rotate(-45deg)">IN</div></div>`,
-  iconSize: [28, 28], iconAnchor: [14, 14],
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
 });
+
 const endIcon = L.divIcon({
   className: 'custom-end-marker',
   html: `<div style="width:28px;height:28px;border-radius:10px;background:#ef4444;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:10px;transform:rotate(45deg);"><div style="transform:rotate(-45deg)">OUT</div></div>`,
-  iconSize: [28, 28], iconAnchor: [14, 14],
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
 });
+
 const stopIcon = L.divIcon({
   className: 'custom-stop-marker',
   html: `<div style="width:24px;height:24px;border-radius:50%;background:#f59e0b;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:10px;">P</div>`,
-  iconSize: [24, 24], iconAnchor: [12, 12],
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 });
 
 // Pulse Animation Style
@@ -56,29 +84,34 @@ if (!document.getElementById('trk-pulse-style')) {
   document.head.appendChild(pulseStyle);
 }
 
-
-// Multi-Marker re-center helper (fits all employees on screen)
+// Multi-Marker re-center helper (fits all employees on initial load)
 function MultiMapBounds({ sessions }) {
   const map = useMap();
   useEffect(() => {
     const validCoords = sessions
-      .map(s => s.coordinates?.[0])
-      .filter(c => c && c.lat && c.lng); 
+      .map((s) => s.coordinates?.[s.coordinates?.length - 1] || s.coordinates?.[0])
+      .filter((c) => c && c.lat && c.lng);
     if (validCoords.length > 0) {
-      const bounds = L.latLngBounds(validCoords.map(c => [c.lat, c.lng]));
+      const bounds = L.latLngBounds(validCoords.map((c) => [c.lat, c.lng]));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
     }
   }, [sessions, map]);
   return null;
 }
 
-// Individual Path re-center helper
+// Individual Path & Marker re-center helper
 function MapBounds({ coords, trigger }) {
   const map = useMap();
   useEffect(() => {
-    if (coords?.length > 0) {
-      const bounds = L.latLngBounds(coords.map(c => [c.lat, c.lng]));
-      map.fitBounds(bounds, { padding: [100, 100], maxZoom: 16 });
+    if (!coords || coords.length === 0) return;
+    if (coords.length === 1 && coords[0]?.lat && coords[0]?.lng) {
+      map.flyTo([coords[0].lat, coords[0].lng], 16, { duration: 1.0 });
+    } else if (coords.length > 1) {
+      const validCoords = coords.filter((c) => c && c.lat && c.lng);
+      if (validCoords.length > 0) {
+        const bounds = L.latLngBounds(validCoords.map((c) => [c.lat, c.lng]));
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+      }
     }
   }, [coords, map, trigger]);
   return null;
@@ -88,7 +121,9 @@ function MapBounds({ coords, trigger }) {
 function FlyTo({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
-    if (center) map.flyTo(center, zoom || 14, { duration: 1.2 });
+    if (center && center[0] && center[1]) {
+      map.flyTo(center, zoom || 15, { duration: 1.0 });
+    }
   }, [center, zoom, map]);
   return null;
 }
@@ -106,7 +141,7 @@ const processTimeline = (session) => {
     address: session.startAddress,
     lat: coords[0].lat,
     lng: coords[0].lng,
-    icon: 'target'
+    icon: 'target',
   });
 
   let lastEventCoord = coords[0];
@@ -115,27 +150,25 @@ const processTimeline = (session) => {
   for (let i = 1; i < coords.length; i++) {
     const c = coords[i];
     const prev = coords[i - 1];
-    
+
     const timeDiff = (new Date(c.timestamp) - new Date(prev.timestamp)) / (1000 * 60); // minutes
-    
+
     // Stop detection: Only register a stop if the time gap is significant (15+ mins)
-    // This prevents GPS throttling/battery optimization from creating dozens of fake stops
     if (timeDiff > 15) {
-      // If we were traveling, close that segment
       if (currentSegment.length > 0) {
-          const dist = currentSegment.reduce((acc, curr, idx) => {
-              if (idx === 0) return 0;
-              const p = currentSegment[idx-1];
-              const d = L.latLng(p.lat, p.lng).distanceTo(L.latLng(curr.lat, curr.lng)) / 1000;
-              return acc + d;
-          }, 0);
-          
-          events.push({
-            type: 'Drive',
-            duration: Math.round((new Date(prev.timestamp) - new Date(lastEventCoord.timestamp)) / (1000 * 60)),
-            distance: dist.toFixed(2),
-            icon: 'navigation'
-          });
+        const dist = currentSegment.reduce((acc, curr, idx) => {
+          if (idx === 0) return 0;
+          const p = currentSegment[idx - 1];
+          const d = L.latLng(p.lat, p.lng).distanceTo(L.latLng(curr.lat, curr.lng)) / 1000;
+          return acc + d;
+        }, 0);
+
+        events.push({
+          type: 'Drive',
+          duration: Math.round((new Date(prev.timestamp) - new Date(lastEventCoord.timestamp)) / (1000 * 60)),
+          distance: dist.toFixed(2),
+          icon: 'navigation',
+        });
       }
 
       events.push({
@@ -145,9 +178,9 @@ const processTimeline = (session) => {
         address: c.address,
         lat: c.lat,
         lng: c.lng,
-        icon: 'map-pin'
+        icon: 'map-pin',
       });
-      
+
       lastEventCoord = c;
       currentSegment = [];
     } else {
@@ -157,25 +190,25 @@ const processTimeline = (session) => {
 
   // Final Segment
   if (currentSegment.length > 0) {
-      const last = currentSegment[currentSegment.length - 1];
-      const dist = currentSegment.reduce((acc, curr, idx) => {
-          if (idx === 0) return 0;
-          const p = currentSegment[idx-1];
-          const d = L.latLng(p.lat, p.lng).distanceTo(L.latLng(curr.lat, curr.lng)) / 1000;
-          return acc + d;
-      }, 0);
-      
-      events.push({
-        type: 'Travel',
-        duration: Math.round((new Date(last.timestamp) - new Date(lastEventCoord.timestamp)) / (1000 * 60)),
-        distance: dist.toFixed(2),
-        icon: 'navigation'
-      });
+    const last = currentSegment[currentSegment.length - 1];
+    const dist = currentSegment.reduce((acc, curr, idx) => {
+      if (idx === 0) return 0;
+      const p = currentSegment[idx - 1];
+      const d = L.latLng(p.lat, p.lng).distanceTo(L.latLng(curr.lat, curr.lng)) / 1000;
+      return acc + d;
+    }, 0);
+
+    events.push({
+      type: 'Travel',
+      duration: Math.round((new Date(last.timestamp) - new Date(lastEventCoord.timestamp)) / (1000 * 60)),
+      distance: dist.toFixed(2),
+      icon: 'navigation',
+    });
   }
 
   // 2. Punch Out / Last Known
   const finalCoord = coords[coords.length - 1];
-  
+
   if (session.isActive) {
     events.push({
       type: 'Last Known Location',
@@ -183,16 +216,16 @@ const processTimeline = (session) => {
       address: finalCoord.address,
       lat: finalCoord.lat,
       lng: finalCoord.lng,
-      icon: 'activity'
+      icon: 'activity',
     });
     events.push({
       type: 'Punch Out',
       time: null,
-      address: 'Currently Tracking (Pending)',
+      address: 'Currently Tracking (Pending Check-Out)',
       lat: finalCoord.lat,
       lng: finalCoord.lng,
       icon: 'power',
-      isPending: true
+      isPending: true,
     });
   } else {
     events.push({
@@ -201,7 +234,7 @@ const processTimeline = (session) => {
       address: session.endAddress || finalCoord.address,
       lat: finalCoord.lat,
       lng: finalCoord.lng,
-      icon: 'power'
+      icon: 'power',
     });
   }
 
@@ -209,111 +242,178 @@ const processTimeline = (session) => {
 };
 
 export default function AdminTrackingHistory() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Date Filter Modes: 'today' | 'yesterday' | 'last7' | 'range'
+  const [filterMode, setFilterMode] = useState('today');
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [filters, setFilters] = useState({ date: new Date().toISOString().slice(0, 10), employeeId: '' });
   const [employees, setEmployees] = useState([]);
   const [selectionTrigger, setSelectionTrigger] = useState(0);
   const [flyCenter, setFlyCenter] = useState(null);
   const [flyZoom, setFlyZoom] = useState(14);
   const reportRef = useRef(null);
-  
+
+  // Fetch employees on mount
   useEffect(() => {
     fetchEmployees();
-    fetchHistory();
   }, []);
 
   const fetchEmployees = async () => {
     try {
-      const { data } = await adminAPI.getEmployees({ limit: 200, role: 'all' });
+      const { data } = await adminAPI.getEmployees({ limit: 300, role: 'all' });
       setEmployees(data.employees || []);
-    } catch { toast.error('Failed to load employees'); }
+    } catch {
+      toast.error('Failed to load employees');
+    }
   };
 
-  const fetchHistory = async () => {
+  // Set Preset Dates
+  const handlePresetSelect = (preset) => {
+    setFilterMode(preset);
+    const now = new Date();
+
+    if (preset === 'today') {
+      const d = now.toISOString().slice(0, 10);
+      setStartDate(d);
+      setEndDate(d);
+    } else if (preset === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const d = y.toISOString().slice(0, 10);
+      setStartDate(d);
+      setEndDate(d);
+    } else if (preset === 'last7') {
+      const s = new Date(now);
+      s.setDate(s.getDate() - 6);
+      setStartDate(s.toISOString().slice(0, 10));
+      setEndDate(now.toISOString().slice(0, 10));
+    }
+  };
+
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await adminAPI.getHistory(filters);
-      setHistory(data.history || []);
-      if (data.history?.length > 0) {
-        handleSelectSession(data.history[0]);
+      const params = {
+        employeeId: selectedEmployeeId || undefined,
+      };
+
+      if (startDate === endDate) {
+        params.date = startDate;
+      } else {
+        params.startDate = startDate;
+        params.endDate = endDate;
+      }
+
+      const { data } = await adminAPI.getHistory(params);
+      const sessions = data.history || [];
+      setHistory(sessions);
+
+      if (sessions.length > 0) {
+        handleSelectSession(sessions[0]);
       } else {
         setSelectedSession(null);
       }
-    } catch { toast.error('Failed to load history'); }
-    finally { setLoading(false); }
-  };
-
-  const handleDeleteHistory = async () => {
-    if (!filters.employeeId) return;
-    
-    const employeeName = employees.find(e => e._id === filters.employeeId)?.name || 'this employee';
-    
-    if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE ALL history for ${employeeName}? This action cannot be undone.`)) {
-      return;
+    } catch {
+      toast.error('Failed to load KM tracking history');
+    } finally {
+      setLoading(false);
     }
+  }, [startDate, endDate, selectedEmployeeId]);
 
-    try {
-      const { data } = await trackingAPI.deleteHistory(filters.employeeId);
-      if (data.success) {
-        toast.success(data.message);
-        fetchHistory(); // Refresh the list
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete history');
-    }
-  };
+  // Fetch history when dates or employee change
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const handleSelectSession = async (session) => {
-    setSelectionTrigger(prev => prev + 1);
-    if (selectedSession?._id === session._id && selectedSession.coordinates?.length > 1) return;
-    
+    if (!session) return;
+    setSelectionTrigger((prev) => prev + 1);
+
+    // Immediately set selected session so card highlights instantly
+    setSelectedSession(session);
+
+    // If session already has coordinate(s), fly to them immediately
+    if (session.coordinates && session.coordinates.length > 0) {
+      const targetCoord = session.coordinates[session.coordinates.length - 1] || session.coordinates[0];
+      if (targetCoord?.lat && targetCoord?.lng) {
+        setFlyCenter([targetCoord.lat, targetCoord.lng]);
+        setFlyZoom(session.coordinates.length > 1 ? 15 : 16);
+      }
+    }
+
     setSessionLoading(true);
     try {
       const { data } = await trackingAPI.getSession(session._id);
-      if (data.success) {
-        setSelectedSession(data.session);
+      if (data.success && data.session) {
+        const fullSession = { ...session, ...data.session };
+        setSelectedSession(fullSession);
+        
+        const coords = fullSession.coordinates || [];
+        if (coords.length > 0) {
+          const latestCoord = coords[coords.length - 1] || coords[0];
+          if (latestCoord?.lat && latestCoord?.lng) {
+            setFlyCenter([latestCoord.lat, latestCoord.lng]);
+            setFlyZoom(coords.length > 1 ? 15 : 16);
+            setSelectionTrigger((prev) => prev + 1);
+          }
+        }
       }
     } catch {
-      toast.error('Failed to load session details');
-      setSelectedSession(session); 
+      // Fallback already set
     } finally {
       setSessionLoading(false);
     }
   };
 
-  const mapCenter = selectedSession?.coordinates?.length > 0
-    ? [selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]
-    : [26.8467, 80.9462]; // Default to Lucknow instead of India Center
+  // Summary Metrics calculation
+  const totalKmSum = useMemo(() => {
+    return history.reduce((sum, s) => sum + (Number(s.totalDistance) || 0), 0);
+  }, [history]);
 
+  const activeSessionsCount = useMemo(() => {
+    return history.filter((s) => s.isActive).length;
+  }, [history]);
+
+  const completedSessionsCount = useMemo(() => {
+    return history.filter((s) => !s.isActive).length;
+  }, [history]);
+
+  const mapCenter =
+    selectedSession?.coordinates?.length > 0
+      ? [selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]
+      : [26.8467, 80.9462];
+
+  // Export to CSV
   const exportToCSV = () => {
     if (!selectedSession || !selectedSession.coordinates) return;
-    
+
     const employee = selectedSession.employee || {};
-    const reportDate = new Date(selectedSession.date).toLocaleDateString();
-    
-    let csvContent = "data:text/csv;charset=utf-8,";
-    
-    // Professional Report Header
-    csvContent += `FIELD CRM - TRACKING HISTORY REPORT\n`;
+    const reportDate = new Date(selectedSession.date).toLocaleDateString('en-IN');
+
+    let csvContent = 'data:text/csv;charset=utf-8,';
+
+    csvContent += `FIELD CRM - KM TRACKING & CHECKOUT REPORT\n`;
     csvContent += `------------------------------------\n`;
     csvContent += `Employee Name,${employee.name || 'N/A'}\n`;
     csvContent += `Employee ID,${employee.employeeId || 'N/A'}\n`;
     csvContent += `Department,${employee.department || 'N/A'}\n`;
-    csvContent += `Date,${reportDate}\n`;
+    csvContent += `Session Date,${reportDate}\n`;
     csvContent += `Total Distance Traveled,${(selectedSession.totalDistance || 0).toFixed(2)} km\n`;
-    csvContent += `Start Address,"${(selectedSession.startAddress || 'N/A').replace(/"/g, '""')}"\n`;
-    csvContent += `End Address,"${(selectedSession.endAddress || 'N/A').replace(/"/g, '""')}"\n`;
-    csvContent += `Start Time,${new Date(selectedSession.startTime).toLocaleTimeString()}\n`;
-    csvContent += `End Time,${selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Active'}\n`;
-    csvContent += `\n`; // Empty line
-    
-    // Column Headers
-    csvContent += "S.No,Time,Latitude,Longitude,Speed (km/h),Accuracy (m),Address\n";
-    
-    // Log Data
+    csvContent += `Check-In Start Location,"${(selectedSession.startAddress || 'N/A').replace(/"/g, '""')}"\n`;
+    csvContent += `Check-Out End Location,"${(selectedSession.endAddress || 'N/A').replace(/"/g, '""')}"\n`;
+    csvContent += `Check-In Time,${new Date(selectedSession.startTime).toLocaleTimeString()}\n`;
+    csvContent += `Check-Out Time,${selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : 'Live Tracking'}\n`;
+    csvContent += `Status,${selectedSession.isActive ? 'Active (In-Progress)' : 'Checked-Out'}\n\n`;
+
+    csvContent += 'S.No,Timestamp,Latitude,Longitude,Speed (km/h),Accuracy (m),Address\n';
+
     selectedSession.coordinates.slice().reverse().forEach((c, i) => {
       const time = new Date(c.timestamp).toLocaleTimeString();
       const addr = `"${(c.address || 'N/A').replace(/"/g, '""')}"`;
@@ -323,26 +423,28 @@ export default function AdminTrackingHistory() {
     });
 
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Tracking_Report_${employee.name}_${reportDate}.csv`);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `KM_Report_${employee.name}_${reportDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success('KM Report exported as CSV! 📊');
   };
 
+  // Adjust Distance
   const handleAdjustDistance = async () => {
     if (!selectedSession) return;
-    const input = window.prompt("Enter KM to add to this session (e.g., 5.5):");
+    const input = window.prompt('Enter extra KM to add to this session (e.g., 5.5):');
     if (!input) return;
     const distanceToAdd = parseFloat(input);
     if (isNaN(distanceToAdd) || distanceToAdd <= 0) {
-      toast.error("Please enter a valid number greater than 0");
+      toast.error('Please enter a valid number greater than 0');
       return;
     }
 
     try {
-      toast.loading("Adjusting distance...", { id: 'adjust-distance' });
+      toast.loading('Adjusting distance...', { id: 'adjust-distance' });
       const { data } = await adminAPI.adjustDistance({ sessionId: selectedSession._id, distanceToAdd });
       if (data.success) {
         toast.success(`Successfully added ${distanceToAdd} km`, { id: 'adjust-distance' });
@@ -350,455 +452,468 @@ export default function AdminTrackingHistory() {
         setSelectedSession(data.session);
       }
     } catch (err) {
-      toast.error("Failed to adjust distance", { id: 'adjust-distance' });
+      toast.error(err.response?.data?.message || 'Failed to adjust distance', { id: 'adjust-distance' });
     }
   };
 
-  const exportToImage = async () => {
-    if (!selectedSession) return;
-    
-    toast.loading('Generating Image Report...', { id: 'export-image' });
-    
+  // Export Map Image Snapshot
+  const exportImage = async () => {
+    if (!reportRef.current) return;
     try {
-      // Small delay to ensure the hidden report is rendered
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2, // High resolution
+      toast.loading('Generating KM snapshot report...', { id: 'export-image' });
+      const canvas = await html2canvas(reportRef.current, {
         useCORS: true,
-        backgroundColor: '#ffffff'
+        scale: 2,
+        logging: false,
       });
-      
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      const imgData = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `Tracking_Report_${selectedSession.employee?.name}_${new Date(selectedSession.date).toLocaleDateString()}.jpg`;
-      link.href = dataUrl;
+      link.href = imgData;
+      link.download = `KM_Session_${selectedSession?.employee?.name || 'Report'}_${new Date().toISOString().slice(0, 10)}.png`;
       link.click();
-      
-      toast.success('Report downloaded as JPEG', { id: 'export-image' });
+      toast.success('KM Image snapshot saved!', { id: 'export-image' });
     } catch (err) {
-      console.error(err);
       toast.error('Failed to generate image report', { id: 'export-image' });
     }
   };
 
   return (
-    <AdminLayout>
-
-        <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <TrackProLayout>
+      <div className="p-4 lg:p-6 space-y-6 max-w-[1650px] mx-auto pb-12">
+        {/* Top Header & Presets Bar */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div>
-            <h1 className="text-[var(--text-main)] text-2xl font-black tracking-tight flex items-center gap-3">
-               <Activity className="w-6 h-6 text-primary-500" />
-               Operational Intelligence
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200 rounded-lg flex items-center gap-1.5">
+                <Route className="w-3.5 h-3.5" /> Mileage & Route Telemetry
+              </span>
+              <span className="text-xs text-slate-500 font-semibold">GPS Verified History</span>
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1 flex items-center gap-2">
+              <Gauge className="w-6 h-6 text-rose-600" />
+              KM History & Check-Out Audit
             </h1>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest mt-1">Reviewing Field Personnel Movement Logs</p>
+            <p className="text-slate-500 text-xs font-semibold mt-0.5">
+              Review daily travel distance, start-to-end GPS displacement, check-in & check-out logs.
+            </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-row items-center gap-3 bg-[var(--bg-card)] p-2 rounded-2xl border border-[var(--border-color)] shadow-xl w-full lg:w-auto">
-            <div className="relative group">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500 group-hover:scale-110 transition-transform" />
+
+          {/* Quick Date Range Buttons & Filters */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Presets: Today | Yesterday | Last 7 Days | Custom Range */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+              <button
+                onClick={() => handlePresetSelect('today')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterMode === 'today'
+                    ? 'bg-white text-rose-600 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Today
+              </button>
+
+              <button
+                onClick={() => handlePresetSelect('yesterday')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterMode === 'yesterday'
+                    ? 'bg-white text-rose-600 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Yesterday
+              </button>
+
+              <button
+                onClick={() => handlePresetSelect('last7')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterMode === 'last7'
+                    ? 'bg-white text-rose-600 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Last 7 Days
+              </button>
+
+              <button
+                onClick={() => setFilterMode('range')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  filterMode === 'range'
+                    ? 'bg-white text-rose-600 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Date Range
+              </button>
+            </div>
+
+            {/* Date Pickers */}
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+              <Calendar className="w-4 h-4 text-rose-500 flex-shrink-0" />
               <input
                 type="date"
-                value={filters.date}
-                onChange={(e) => setFilters(f => ({ ...f, date: e.target.value }))}
-                className="input-field pl-10 py-2.5 text-[10px] font-black uppercase w-full lg:w-44 tracking-widest"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setFilterMode('range');
+                }}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none"
+              />
+              <span className="text-slate-400 text-xs font-bold">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setFilterMode('range');
+                }}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none"
               />
             </div>
-            <div className="relative group">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500" />
-               <select
-                 value={filters.employeeId}
-                 onChange={(e) => setFilters(f => ({ ...f, employeeId: e.target.value }))}
-                 className="input-field pl-10 py-2.5 text-[10px] font-black uppercase w-52 tracking-widest appearance-none"
-               >
-                 <option value="" className="bg-[var(--bg-sidebar)]">Search Employees</option>
-                 {employees.map(e => <option className='bg-[var(--bg-sidebar)]' key={e._id} value={e._id}>{e.name}</option>)}
-               </select>
+
+            {/* Employee Filter */}
+            <div className="relative">
+              <select
+                value={selectedEmployeeId}
+                onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                className="px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold text-slate-800"
+              >
+                <option value="">All Field Employees ({employees.length})</option>
+                {employees.map((e) => (
+                  <option key={e._id} value={e._id}>
+                    {e.name} ({e.employeeId || 'EMP'})
+                  </option>
+                ))}
+              </select>
             </div>
-            <button onClick={fetchHistory} className="bg-primary-600 hover:bg-primary-500 text-white font-black text-[10px] uppercase tracking-[0.2em] px-6 py-2.5 rounded-xl transition-all active:scale-95 shadow-lg shadow-primary-600/20">
-               Execute Search
+
+            {/* Refresh Button */}
+            <button
+              onClick={fetchHistory}
+              className="p-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition active:scale-95"
+              title="Refresh KM History"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            
           </div>
         </div>
 
-        <div className="flex flex-col xl:flex-row gap-6 xl:h-[calc(100vh-180px)] xl:min-h-[600px]">
-          {/* 1. Left Sidebar: Sessions */}
-          <div className="w-full xl:w-80 flex flex-col gap-4 h-[250px] overflow-hidden shrink-0">
-            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
+        {/* 4 KPI Metric Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-rose-500 to-rose-700 text-white p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-black text-rose-100 uppercase tracking-wider">Total KM Traveled</span>
+              <h3 className="text-3xl font-black mt-1">
+                {totalKmSum.toFixed(1)} <span className="text-base font-bold text-rose-200">KM</span>
+              </h3>
+            </div>
+            <span className="text-[11px] font-semibold text-rose-100 mt-2 block">
+              Across {history.length} logged sessions
+            </span>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Logged Sessions</span>
+              <h3 className="text-3xl font-black text-slate-900 mt-1">{history.length}</h3>
+            </div>
+            <span className="text-xs font-bold text-slate-600 mt-2 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-blue-500" />
+              {startDate === endDate ? `Date: ${startDate}` : `${startDate} → ${endDate}`}
+            </span>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed Check-Outs</span>
+              <h3 className="text-3xl font-black text-emerald-600 mt-1">{completedSessionsCount}</h3>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 mt-2 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Finished shifts with start & end KM
+            </span>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active / In-Progress</span>
+              <h3 className="text-3xl font-black text-amber-600 mt-1">{activeSessionsCount}</h3>
+            </div>
+            <span className="text-xs font-bold text-amber-600 mt-2 flex items-center gap-1">
+              <Activity className="w-3.5 h-3.5 text-amber-500 animate-pulse" /> Currently tracking in field
+            </span>
+          </div>
+        </div>
+
+        {/* Main Workspace: Session List (Left) + Detailed Map & Checkout Audit (Right) */}
+        <div ref={reportRef} className="flex flex-col xl:flex-row gap-6 items-start">
+          {/* 1. Left Session Explorer */}
+          <div className="w-full xl:w-[400px] flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden h-[620px] xl:h-[660px] shrink-0 shadow-sm">
+            <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-slate-900 font-black text-xs uppercase tracking-wider flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-rose-500" /> KM Sessions Ledger
+                </h3>
+                <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                  {history.length} {history.length === 1 ? 'record' : 'records'} found
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar">
               {loading ? (
-                [1, 2, 3, 4].map(i => <div key={i} className="h-28 rounded-3xl bg-[var(--bg-card)] animate-pulse border border-[var(--border-color)]" />)
+                [1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-20 rounded-xl bg-slate-100 animate-pulse border border-slate-200" />
+                ))
               ) : history.length === 0 ? (
-                <div className="glass-card p-6 text-center flex flex-col items-center">
-                  <div className="w-16 h-16 rounded-2xl bg-[var(--bg-main)] flex items-center justify-center mb-4">
-                     <Clock className="w-8 h-8 text-[var(--text-muted)] opacity-20" />
-                  </div>
-                  <h3 className="text-[var(--text-main)] font-black text-sm uppercase tracking-tight">Archives Empty</h3>
-                  <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest mt-2">No operational data found for this date.</p>
+                <div className="p-8 text-center flex flex-col items-center justify-center my-auto h-full text-slate-400">
+                  <Route className="w-10 h-10 opacity-30 mb-2" />
+                  <p className="font-bold text-xs text-slate-700">No KM Sessions Found</p>
+                  <p className="text-[11px] mt-1">Try choosing a different date range or selecting "Today".</p>
                 </div>
-              ) : history.map((session) => (
-                <div
-                  key={session._id}
-                  onClick={() => handleSelectSession(session)}
-                  className={`group relative rounded-[1.75rem] p-5 cursor-pointer transition-all duration-500 border-2 ${
-                    selectedSession?._id === session._id
-                      ? 'bg-rose-500/10 border-rose-500/50 shadow-2xl shadow-rose-500/10'
-                      : 'bg-[var(--bg-card)] border-transparent hover:border-rose-500/20 hover:bg-[var(--bg-card-hover)]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg uppercase transition-all duration-500 overflow-hidden ${
-                      selectedSession?._id === session._id ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 rotate-3' : 'bg-[var(--bg-main)] text-[var(--text-muted)] group-hover:rotate-6'
-                    }`}>
-                      {session.employee?.avatar ? (
-                        <img src={session.employee.avatar} alt={session.employee.name} className="w-full h-full object-cover" />
-                      ) : (
-                        session.employee?.name?.[0]
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-[var(--text-main)] font-black text-base tracking-tight group-hover:text-rose-500 transition-colors truncate ${selectedSession?._id === session._id ? 'text-rose-500' : ''}`}>
-                        {session.employee?.name}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                         <span className={`w-2.5 h-2.5 rounded-full ring-2 ring-[var(--bg-main)] ${session.isActive ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-[var(--text-muted)]'}`} />
-                         <p className="text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest">
-                           {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — {session.isActive ? 'LIVE' : new Date(session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                         </p>
+              ) : (
+                history.map((session) => {
+                  const isSelected = selectedSession?._id === session._id;
+                  const dist = (Number(session.totalDistance) || 0).toFixed(1);
+                  return (
+                    <div
+                      key={session._id}
+                      onClick={() => handleSelectSession(session)}
+                      className={`group relative rounded-xl p-3.5 cursor-pointer transition-all duration-200 border-2 ${
+                        isSelected
+                          ? 'bg-rose-50/80 border-rose-500 shadow-sm'
+                          : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-slate-50/60'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm uppercase flex-shrink-0 overflow-hidden ${
+                            isSelected ? 'bg-rose-500 text-white shadow-xs' : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {session.employee?.avatar ? (
+                            <img
+                              src={session.employee.avatar}
+                              alt={session.employee.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            session.employee?.name?.[0] || 'E'
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <h4
+                              className={`font-black text-sm tracking-tight truncate ${
+                                isSelected ? 'text-rose-700' : 'text-slate-900 group-hover:text-rose-600'
+                              }`}
+                            >
+                              {session.employee?.name || 'Field Employee'}
+                            </h4>
+                            <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex-shrink-0">
+                              {dist} KM
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold mt-1">
+                            <span>{session.date || session.createdAt?.slice(0, 10)}</span>
+                            <span>•</span>
+                            <span>
+                              {new Date(session.startTime).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                              {' → '}
+                              {session.isActive
+                                ? 'LIVE'
+                                : new Date(session.endTime || session.updatedAt).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                            </span>
+                          </div>
+
+                          {/* Check-In / Check-Out Badges */}
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  session.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                                }`}
+                              />
+                              <span className="text-[10px] font-bold text-slate-600">
+                                {session.isActive ? 'Active Shift' : 'Checked-Out'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold text-rose-600 group-hover:underline flex items-center gap-0.5">
+                              <Navigation className="w-3 h-3" /> View on Map
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* 2. Center Panel: Map & Summary */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-[500px] xl:min-h-10 shrink-0">
-            {/* Quick Summary Bar */}
-            {selectedSession && (
-              <div className="glass-card p-5 flex flex-col gap-4 border-primary-500/20 bg-gradient-to-r from-primary-600/10 to-violet-600/5 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
-                   <Navigation className="w-32 h-32 rotate-12" />
-                </div>
-                
-                <div className="flex flex-wrap items-center justify-between gap-4 relative z-10">
-                  <div className="flex flex-wrap items-center gap-8">
-                    <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-2xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-500 shadow-inner">
-                        <Navigation className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">Total Displacement</p>
-                        <p className="text-[var(--text-main)] font-black text-xl italic tracking-tight">{(selectedSession.totalDistance || 0).toFixed(2)} <span className="text-xs font-bold not-italic text-primary-500">KM</span></p>
-                      </div>
-                    </div>
-                    <div className="w-px h-10 bg-[var(--border-color)] opacity-50 hidden sm:block" />
-                   
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                       <button onClick={handleAdjustDistance} className="bg-amber-500 hover:bg-amber-400 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-amber-500/20 flex items-center gap-2">
-                         Adjust KM
-                       </button>
-                       <button onClick={exportToImage} className="bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-primary-600/20 flex items-center gap-2">
-                         <FileImage className="w-4 h-4" /> JPEG Summary
-                       </button>
-                    </div>
-                </div>
-
-              
-              </div>
-            )}
-
-            <div className="flex-1 min-h-[400px] glass-card flex flex-col overflow-hidden relative z-0 border-[var(--border-color)]">
+          {/* 2. Center & Right Workspace: Map & Check-Out Inspection Card */}
+          <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
+            {/* Leaflet Interactive Route Map */}
+            <div className="h-[360px] sm:h-[400px] w-full bg-white rounded-2xl border border-slate-200 overflow-hidden relative shadow-sm">
               {sessionLoading && (
-                <div className="absolute inset-0 z-[1000] bg-[var(--bg-main)]/40 backdrop-blur-[2px] flex items-center justify-center">
-                  <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+                <div className="absolute inset-0 z-[1000] bg-white/60 backdrop-blur-xs flex items-center justify-center">
+                  <Loader2 className="w-10 h-10 text-rose-600 animate-spin" />
                 </div>
               )}
-              
-              <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', minHeight: '400px', width: '100%' }}>
+
+              <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
-                  attribution='&copy; Google Maps'
+                  attribution="&copy; Google Maps"
                   url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                   subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
                 />
-                
-                {!sessionLoading && history.length > 0 && <MultiMapBounds sessions={history} />}
+
+                {!sessionLoading && !selectedSession && history.length > 0 && <MultiMapBounds sessions={history} />}
                 <FlyTo center={flyCenter} zoom={flyZoom} />
 
-                {selectedSession?.coordinates?.length > 1 && (
+                {selectedSession && selectedSession.coordinates && selectedSession.coordinates.length > 0 && (
                   <>
                     <MapBounds coords={selectedSession.coordinates} trigger={selectionTrigger} />
-                    
-                    {/* Professional Path Styling */}
-                    <Polyline
-                      positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                      pathOptions={{ color: '#2563eb', weight: 8, opacity: 0.2 }}
-                    />
-                    <Polyline
-                      positions={selectedSession.coordinates.map(c => [c.lat, c.lng])}
-                      pathOptions={{ color: '#2563eb', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
-                    />
 
-                    {/* Start Marker */}
-                    <Marker position={[selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]} icon={startIcon} />
-                    
-                    {/* Stop Markers */}
-                    {processTimeline(selectedSession)
-                      .filter(e => e.type === 'Stop' && e.duration >= 15) // Only show significant stops on map
-                      .map((stop, i) => (
-                        <Marker key={`stop-${i}`} position={[stop.lat, stop.lng]} icon={stopIcon}>
+                    {/* Polyline Path if > 1 coordinate */}
+                    {selectedSession.coordinates.length > 1 && (
+                      <>
+                        <Polyline
+                          positions={selectedSession.coordinates.map((c) => [c.lat, c.lng])}
+                          pathOptions={{ color: '#e11d48', weight: 8, opacity: 0.25 }}
+                        />
+                        <Polyline
+                          positions={selectedSession.coordinates.map((c) => [c.lat, c.lng])}
+                          pathOptions={{ color: '#e11d48', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                        />
+
+                        {/* Start Marker (IN) */}
+                        <Marker
+                          position={[selectedSession.coordinates[0].lat, selectedSession.coordinates[0].lng]}
+                          icon={startIcon}
+                        >
                           <Popup>
-                            <div className="p-2">
-                              <p className="font-black text-xs text-amber-500 uppercase mb-1">Stationary ({stop.duration} min)</p>
-                              <p className="text-[10px] font-bold text-[var(--text-main)]">{stop.address || 'Unknown Stop'}</p>
-                              <p className="text-[9px] text-[var(--text-muted)] mt-1">{new Date(stop.time).toLocaleTimeString()}</p>
+                            <div className="p-1 min-w-[150px]">
+                              <p className="font-bold text-xs text-emerald-600">🟢 Check-In Point</p>
+                              <p className="text-[11px] text-slate-700 mt-0.5">{selectedSession.startAddress || 'Start Location'}</p>
+                              <p className="text-[10px] text-slate-500 mt-1 font-mono">
+                                {new Date(selectedSession.startTime).toLocaleTimeString()}
+                              </p>
                             </div>
                           </Popup>
                         </Marker>
-                      ))}
 
-                    {/* End / Avatar Marker (Shows profile picture) */}
-                    <Marker 
-                      position={[selectedSession.coordinates[selectedSession.coordinates.length - 1].lat, selectedSession.coordinates[selectedSession.coordinates.length - 1].lng]}
-                      icon={L.divIcon({
-                        className: 'custom-avatar-marker',
-                        html: `
-                          <div style="position:relative;width:40px;height:40px;">
-                            ${selectedSession.isActive ? '<div class="pulse-ring" style="position:absolute;top:-6px;left:-6px;width:52px;height:52px;border-radius:50%;background:#3b82f633;animation:trkPulse 2s infinite;"></div>' : ''}
-                            <div style="position:relative;z-index:2;width:40px;height:40px;border-radius:50%;background:${selectedSession.isActive ? '#3b82f6' : '#ef4444'};border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
-                              ${selectedSession.employee?.avatar 
-                                ? `<img src="${selectedSession.employee.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<div style=&quot;width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px;&quot;>${selectedSession.employee?.name?.[0].toUpperCase()}</div>'" />`
-                                : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px;">${selectedSession.employee?.name?.[0].toUpperCase()}</div>`
-                              }
-                              ${selectedSession.isActive 
-                                ? `<div class="inner-pulse" style="position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:-2px;right:-2px;border:2.5px solid #3b82f6;"></div>` 
-                                : `<div style="position:absolute;bottom:-6px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;padding:2px 6px;border-radius:6px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.2);">OUT</div>`
-                              }
+                        {/* Stop Markers */}
+                        {processTimeline(selectedSession)
+                          .filter((e) => e.type === 'Stop' && e.duration >= 15)
+                          .map((stop, i) => (
+                            <Marker key={`stop-${i}`} position={[stop.lat, stop.lng]} icon={stopIcon}>
+                              <Popup>
+                                <div className="p-1 min-w-[150px]">
+                                  <p className="font-bold text-xs text-amber-600">⏸️ Stationary Stop ({stop.duration} min)</p>
+                                  <p className="text-[11px] text-slate-700 mt-0.5">{stop.address || 'Halt location'}</p>
+                                  <p className="text-[10px] text-slate-500 mt-1 font-mono">{new Date(stop.time).toLocaleTimeString()}</p>
+                                </div>
+                              </Popup>
+                            </Marker>
+                          ))}
+                      </>
+                    )}
+
+                    {/* End Marker or Live Avatar Marker */}
+                    {(() => {
+                      const lastCoord = selectedSession.coordinates[selectedSession.coordinates.length - 1];
+                      const isLive = selectedSession.isActive || selectedSession.coordinates.length === 1;
+                      return (
+                        <Marker
+                          position={[lastCoord.lat, lastCoord.lng]}
+                          icon={
+                            isLive
+                              ? L.divIcon({
+                                  className: 'custom-avatar-marker',
+                                  html: `<div style="position:relative;width:42px;height:42px;cursor:pointer;">
+                                    <div class="pulse-ring" style="position:absolute;top:-6px;left:-6px;width:54px;height:54px;border-radius:50%;background:#e11d4844;animation:trkPulse 1.8s infinite;"></div>
+                                    <div style="position:relative;z-index:2;width:42px;height:42px;border-radius:50%;background:#e11d48;border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.35);color:#fff;font-weight:900;font-size:15px;">
+                                      ${selectedSession.employee?.name?.[0] || 'E'}
+                                    </div>
+                                  </div>`,
+                                  iconSize: [42, 42],
+                                  iconAnchor: [21, 21],
+                                })
+                              : endIcon
+                          }
+                        >
+                          <Popup>
+                            <div className="p-1.5 min-w-[170px]">
+                              <div className="flex items-center gap-2 mb-1.5 pb-1 border-b border-slate-100">
+                                <div className="w-6 h-6 rounded-full bg-rose-600 text-white font-black text-xs flex items-center justify-center">
+                                  {selectedSession.employee?.name?.[0] || 'E'}
+                                </div>
+                                <div>
+                                  <p className="font-black text-xs text-slate-900 leading-none">{selectedSession.employee?.name || 'Field Employee'}</p>
+                                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{selectedSession.employee?.employeeId || 'EMP'}</p>
+                                </div>
+                              </div>
+                              <p className={`font-bold text-[11px] ${selectedSession.isActive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {selectedSession.isActive ? '🟢 Active GPS Live Location' : '🔴 Check-Out Point'}
+                              </p>
+                              <p className="text-[11px] text-slate-600 mt-1">{lastCoord.address || selectedSession.endAddress || selectedSession.startAddress || 'Location point'}</p>
+                              <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                                {selectedSession.endTime ? new Date(selectedSession.endTime).toLocaleTimeString() : (lastCoord.timestamp ? new Date(lastCoord.timestamp).toLocaleTimeString() : 'Live')}
+                              </p>
                             </div>
-                          </div>`,
-                        iconSize: [40, 40],
-                        iconAnchor: [20, 20]
-                      })}
-                    />
-
+                          </Popup>
+                        </Marker>
+                      );
+                    })()}
                   </>
                 )}
               </MapContainer>
             </div>
-          </div>
 
-          {/* 3. Right Sidebar: Activity Timeline */}
-          <div className="w-full xl:w-96 flex flex-col glass-card border-[var(--border-color)] overflow-hidden min-h-[400px] xl:min-h-0 shrink-0">
-            <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)]">
-              <h3 className="text-[var(--text-main)] font-black text-sm uppercase tracking-widest flex items-center gap-2">
-                <Clock className="w-4 h-4 text-primary-500" /> Timeline
-              </h3>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {!selectedSession ? (
-                <div className="h-full flex items-center justify-center text-[var(--text-muted)] text-sm italic">
-                  Select a session to view timeline
-                </div>
-              ) : (
-                <div className="relative pl-6 space-y-8">
-                  {/* Vertical Line */}
-                  <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-[var(--border-color)]" />
-                  
-                  {processTimeline(selectedSession).map((event, idx) => (
-                    <div key={idx} className="relative group">
-                      {/* Timeline Dot/Icon */}
-                        <div className={`absolute -left-[29px] top-1 w-6 h-6 rounded-full border-4 border-[var(--bg-sidebar)] z-10 flex items-center justify-center transition-transform group-hover:scale-110 ${
-                          event.type.includes('Punch In') ? 'bg-emerald-500' :
-                          event.type.includes('Punch Out') ? (event.isPending ? 'bg-[var(--text-muted)]' : 'bg-red-500') :
-                          event.type === 'Stop' ? 'bg-amber-500' : 'bg-primary-500'
-                        }`}>
-                         {event.icon === 'target' && <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />}
-                         {event.icon === 'power' && <div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm" />}
-                         {event.icon === 'map-pin' && <div className="w-2 h-2 rounded-full bg-white shadow-sm" />}
-                         {event.icon === 'navigation' && <Navigation className="w-3.5 h-3.5 text-white fill-white drop-shadow-sm" />}
+            {/* Detailed Timeline Breakdown */}
+            {selectedSession && (
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-rose-600" />
+                  Route & Checkout Timeline Events
+                </h4>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                  {processTimeline(selectedSession).map((evt, idx) => (
+                    <div key={idx} className="flex items-start gap-3 text-xs p-2 rounded-xl hover:bg-slate-50 transition">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-700 flex-shrink-0 mt-0.5">
+                        {idx + 1}
                       </div>
-
-                      <div className="bg-[var(--bg-card)] rounded-xl p-3 border border-[var(--border-color)] group-hover:border-primary-500/30 transition-all">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className={`font-black text-xs uppercase tracking-wider ${
-                            event.type.includes('Punch In') ? 'text-emerald-500' :
-                            event.type.includes('Punch Out') ? (event.isPending ? 'text-[var(--text-muted)]' : 'text-red-500') :
-                            event.type === 'Stop' ? 'text-amber-500' : 'text-primary-500'
-                          }`}>
-                            {event.type}
-                          </p>
-                          {event.time && (
-                            <span className="text-[10px] font-mono font-bold text-[var(--text-muted)]">
-                              {new Date(event.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900">{evt.type}</span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {evt.time ? new Date(evt.time).toLocaleTimeString() : 'Pending'}
+                          </span>
                         </div>
-
-                        {event.address && (
-                          <div 
-                            className="flex flex-col gap-1 cursor-pointer group/addr"
-                            onClick={() => {
-                                setFlyCenter([event.lat, event.lng]);
-                                setFlyZoom(18);
-                                setSelectionTrigger(t => t + 1);
-                            }}
-                          >
-                            <p className="text-[var(--text-main)] text-xs font-semibold leading-tight group-hover/addr:text-primary-500 transition-colors">
-                              {event.address}
-                            </p>
-                          </div>
-                        )}
-
-                        {event.duration && (
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-[var(--text-muted)] text-[10px] font-bold uppercase">{event.duration} min</span>
-                            {event.distance && <span className="text-[var(--text-muted)] text-[10px] font-bold uppercase">• {event.distance} km</span>}
-                          </div>
+                        {evt.address && <p className="text-[11px] text-slate-500 truncate">{evt.address}</p>}
+                        {evt.distance && (
+                          <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+                            Distance: {evt.distance} km ({evt.duration} min drive)
+                          </p>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
-{/* close Main Panel */}
-        </div>{/* close Grid */}
-        
-
-        {/* Hidden JPEG Report Template */}
-        <div style={{ position: 'absolute', left: '-9999px', top: '0' }}>
-          <div ref={reportRef} className="w-[800px] bg-white p-10 text-slate-900 font-sans">
-            <div className="flex justify-between items-start border-b-4 border-primary-600 pb-6 mb-8">
-              <div>
-                <h1 className="text-4xl font-black text-primary-600 tracking-tighter uppercase">Field CRM</h1>
-                <p className="text-slate-500 font-bold tracking-widest text-xs mt-1 uppercase">Official Tracking Report</p>
-              </div>
-              <div className="text-right">
-                <p className="text-slate-400 text-[10px] font-black uppercase">Report ID</p>
-                <p className="font-bold text-sm">TRK-{selectedSession?._id?.slice(-8).toUpperCase()}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-8 mb-10">
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Employee Information</p>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold">Full Name</p>
-                    <p className="text-lg font-black text-slate-800">{selectedSession?.employee?.name}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold">Employee ID</p>
-                      <p className="font-bold">{selectedSession?.employee?.employeeId || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold">Department</p>
-                      <p className="font-bold">{selectedSession?.employee?.department || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-primary-600 p-6 rounded-2xl text-white shadow-xl shadow-primary-500/20">
-                <p className="text-[10px] font-black text-primary-200 uppercase mb-4 tracking-widest">Session Summary</p>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[10px] text-primary-200 uppercase font-bold">Total Distance</p>
-                      <p className="text-4xl font-black italic">{(selectedSession?.totalDistance || 0).toFixed(2)} <span className="text-lg">KM</span></p>
-                      {selectedSession?.manualDistanceAdded > 0 && (
-                        <p className="text-[9px] text-amber-300 font-bold tracking-wider mt-1 uppercase">
-                          (+{selectedSession.manualDistanceAdded.toFixed(2)} KM added by Admin)
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-primary-200 uppercase font-bold">Date</p>
-                      <p className="font-black">{new Date(selectedSession?.date).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <div className="h-px bg-white/20 w-full"></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] text-primary-200 uppercase font-bold">Session Start (ON)</p>
-                      <p className="font-black text-lg">{new Date(selectedSession?.startTime).toLocaleTimeString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-primary-200 uppercase font-bold">Session Stop (OFF)</p>
-                      <p className="font-black text-lg">{selectedSession?.endTime ? new Date(selectedSession?.endTime).toLocaleTimeString() : 'Active'}</p>
-                    </div>
-                      </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter border-l-4 border-primary-600 pl-3">Movement Details</h3>
-              <div className="border border-slate-100 rounded-2xl overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="p-4 text-[10px] font-black uppercase text-slate-400">Action</th>
-                      <th className="p-4 text-[10px] font-black uppercase text-slate-400">Time</th>
-                      <th className="p-4 text-[10px] font-black uppercase text-slate-400">Location / Address</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    <tr>
-                      <td className="p-4">
-                        <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Tracking ON</span>
-                      </td>
-                      <td className="p-4 font-black text-slate-700">{new Date(selectedSession?.startTime).toLocaleTimeString()}</td>
-                      <td className="p-4 text-xs font-bold text-slate-500">{selectedSession?.startAddress || 'Initial Location'}</td>
-                    </tr>
-                    {selectedSession?.coordinates?.length > 2 && (
-                      <tr>
-                        <td className="p-4" colSpan={3}>
-                          <div className="flex flex-col items-center py-6 space-y-2">
-                            <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
-                            <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
-                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest py-2 italic">Detailed movement logs recorded ({selectedSession.coordinates.length} points tracked)</p>
-                            <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
-                            <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
-                          </div>
-                          </td>
-                      </tr>
-                    )}
-                    {selectedSession?.endTime && (
-                      <tr className="bg-slate-50/50">
-                        <td className="p-4">
-                          <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Tracking OFF</span>
-                        </td>
-                        <td className="p-4 font-black text-slate-700">{new Date(selectedSession.endTime).toLocaleTimeString()}</td>
-                        <td className="p-4 text-xs font-bold text-slate-500">{selectedSession.endAddress || 'Final Location'}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center">
-              <div>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">System Generated Authentic Report</p>
-                <p className="text-[9px] text-slate-300 italic">Downloaded on: {new Date().toLocaleString()}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-black text-primary-600 tracking-tighter">FIELD CRM VERIFIED</p>
-                <div className="w-24 h-1 bg-primary-600 ml-auto mt-1"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-    </AdminLayout>
+      </div>
+    </TrackProLayout>
   );
 }

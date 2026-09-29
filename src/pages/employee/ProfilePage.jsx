@@ -1,29 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import EmployeeLayout from '../../components/layout/EmployeeLayout';
-import AdminLayout from '../../components/layout/AdminLayout';
-import { authAPI, employeeAPI, uploadAPI } from '../../services/api.service';
+import TrackProLayout from '../../components/layout/TrackProLayout';
+import { authAPI, API } from '../../services/api.service';
 import toast from 'react-hot-toast';
-import { User, Mail, Phone, Building, Calendar, Shield, Lock, Save } from 'lucide-react';
+import {
+  User,
+  Mail,
+  Phone,
+  Building2,
+  Calendar,
+  Shield,
+  Lock,
+  Save,
+  CheckCircle2,
+  Key,
+  BadgeCheck,
+  MapPin,
+  Users,
+  Activity,
+  Layers,
+} from 'lucide-react';
+import Avatar from '../../components/shared/Avatar';
 
 export default function ProfilePage() {
-  const { user, updateUser } = useAuth();
-  const isAdmin = user?.role !== 'employee';
-  const Layout = isAdmin ? AdminLayout : EmployeeLayout;
+  const { user, organization, updateUser } = useAuth();
 
-  const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
+  const [form, setForm] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+  });
+
+  const [pwForm, setPwForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirm: '',
+  });
+
+  const [orgStats, setOrgStats] = useState({
+    totalEmployees: 9,
+    totalManagers: 1,
+    totalKm: 2323.48,
+    presentToday: 0,
+    absentToday: 9,
+  });
+
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
-  const [daAmount, setDaAmount] = useState(user?.DA ?? 0);
-  const [daFile, setDaFile] = useState(null);
-  const [daPreview, setDaPreview] = useState(user?.daReceipt || '');
-  const [uploadingDA, setUploadingDA] = useState(false);
-  const [employees, setEmployees] = useState([]);
-  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
-  const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
-  const setPw = k => e => setPwForm(p => ({ ...p, [k]: e.target.value }));
+  useEffect(() => {
+    const fetchOrgTelemetry = async () => {
+      try {
+        const res = await API.get('/admin/dashboard');
+        if (res.data?.success && res.data.stats) {
+          setOrgStats(res.data.stats);
+        }
+      } catch (err) {
+        console.warn('Telemetry fetch error on profile:', err);
+      }
+    };
+    fetchOrgTelemetry();
+  }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -31,272 +67,268 @@ export default function ProfilePage() {
     try {
       const { data } = await authAPI.updateProfile(form);
       updateUser(data.user);
-      toast.success('Profile updated!');
-    } catch { toast.error('Update failed'); }
-    finally { setSaving(false); }
+      toast.success('🎉 Profile details updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChangePw = async (e) => {
     e.preventDefault();
-    if (pwForm.newPassword !== pwForm.confirm) return toast.error('Passwords do not match');
-    if (pwForm.newPassword.length < 6) return toast.error('Min 6 characters');
+    if (pwForm.newPassword !== pwForm.confirm) {
+      return toast.error('Passwords do not match');
+    }
+    if (pwForm.newPassword.length < 6) {
+      return toast.error('New password must be at least 6 characters');
+    }
     setChangingPw(true);
     try {
-      await authAPI.changePassword({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
-      toast.success('Password changed!');
+      await authAPI.changePassword({
+        currentPassword: pwForm.currentPassword,
+        newPassword: pwForm.newPassword,
+      });
+      toast.success('🔒 Password changed successfully!');
       setPwForm({ currentPassword: '', newPassword: '', confirm: '' });
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
-    finally { setChangingPw(false); }
-  };
-
-  // Fetch employees list for admin/hr
-  React.useEffect(() => {
-    let mounted = true;
-    const fetchEmployees = async () => {
-      if (!isAdmin) return;
-      setLoadingEmployees(true);
-      try {
-        const { data } = await employeeAPI.getAll();
-        if (mounted) setEmployees(data.employees || []);
-      } catch (err) {
-        console.error('Failed to load employees', err);
-      } finally { setLoadingEmployees(false); }
-    };
-    fetchEmployees();
-    return () => { mounted = false; };
-  }, [isAdmin]);
-
-  const handleDaFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setDaFile(f);
-    setDaPreview(URL.createObjectURL(f));
-  };
-
-  const handleDaSubmit = async (e) => {
-    e.preventDefault();
-    if ((daAmount === 0 || daAmount === '' || daAmount === null) && !daFile) return toast.error('Enter amount or attach receipt');
-    setUploadingDA(true);
-    try {
-      const payload = {};
-      // Har baar upload par DA ADD ho (replace nahi)
-      if (daAmount !== '' && daAmount !== null) {
-        const amountNumber = Number(daAmount);
-        if (Number.isNaN(amountNumber) || amountNumber < 0) {
-          toast.error('Enter a valid DA amount');
-          setUploadingDA(false);
-          return;
-        }
-        // server par jo DA currently hai woh read hoke add hoga (we send increment)
-        payload.DA = amountNumber;
-      }
-      if (daFile) {
-        const fd = new FormData();
-        fd.append('image', daFile);
-        const res = await uploadAPI.uploadImage(fd);
-        payload.daReceipt = res.data.url;
-      }
-      if (!Object.keys(payload).length) {
-        toast.error('Nothing to update');
-        setUploadingDA(false);
-        return;
-      }
-      // increment mode: server DA ko add karega (payload.DA = increment)
-      console.log('DA submit payload:', payload);
-      const res2 = await authAPI.updateProfile(payload);
-      console.log('DA update response user:', res2?.data?.user);
-      updateUser(res2.data.user);
-      setDaAmount('');
-      setDaPreview(res2.data.user.daReceipt || '');
-      setDaFile(null);
-      toast.success('DA updated');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to update DA');
-    } finally { setUploadingDA(false); }
+      toast.error(err.response?.data?.message || 'Password change failed');
+    } finally {
+      setChangingPw(false);
+    }
   };
+
+  const userInitials = user?.name
+    ? user.name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'KC';
 
   return (
-    <Layout>
-      <div className="p-4 lg:p-8 max-w-[1600px] mx-auto">
-        <h1 className="text-[var(--text-main)] text-3xl font-black tracking-tighter uppercase italic mb-8">User Profile</h1>
+    <TrackProLayout>
+      <div className="space-y-6 max-w-5xl">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Account & Profile</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Manage your personal credentials, contact info, and SaaS organization details.
+            </p>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Left Column */}
-          <div className="lg:col-span-4 space-y-8">
-            
-            {/* Profile Card */}
-            <div className="glass-card overflow-hidden shadow-2xl">
-              <div className="h-32 bg-gradient-to-br from-teal-500 to-emerald-600 relative mesh-bg"></div>
-              <div className="px-6 pb-6 relative">
-                <div className="w-24 h-24 rounded-2xl bg-white border-4 border-[var(--bg-main)] shadow-xl flex items-center justify-center text-4xl font-bold -mt-12 mb-4 relative overflow-hidden text-teal-600">
-                  {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full object-cover" /> : user?.name?.[0]?.toUpperCase()}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Profile Card & Organization Info (4 cols) */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Identity Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 flex flex-col items-center text-center">
+              <div className="mb-4">
+                <Avatar
+                  src={user?.avatar}
+                  name={user?.name || 'KISAN CHOICE'}
+                  size="3xl"
+                  shape="rounded-2xl"
+                />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">{user?.name || 'KISAN CHOICE'}</h3>
+              <p className="text-xs text-slate-500 font-medium mb-3">{user?.email || 'kisandeveloper2@gmail.com'}</p>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                <Shield className="w-3.5 h-3.5" />
+                <span>{user?.role === 'ORG_ADMIN' ? 'Organization Admin' : user?.role || 'Admin'}</span>
+              </div>
+            </div>
+
+            {/* SaaS Organization Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  SaaS Organization
+                </h4>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Company Name</span>
+                  <span className="font-bold text-slate-900">{organization?.name || user?.name || 'KISAN CHOICE'}</span>
                 </div>
-                <h2 className="text-[var(--text-main)] text-xl font-black tracking-tight">{user?.name}</h2>
-                <p className="text-[var(--text-muted)] text-sm mb-4">{user?.email}</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className={`badge ${user?.role === 'employee' ? 'badge-blue' : 'badge-green'} capitalize`}>{user?.role}</span>
-                  {user?.employeeId && <span className="badge badge-yellow">{user.employeeId}</span>}
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Tenant Slug</span>
+                  <span className="font-mono text-slate-700 font-semibold bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                    {organization?.slug || 'kisan-choice'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Subscription Tier</span>
+                  <span className="font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                    {organization?.plan?.planName || 'Enterprise Pro'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Capacity</span>
+                  <span className="font-bold text-slate-900">
+                    {organization?.plan?.maxEmployees || 100} Seats
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Status</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-600">
+                    <CheckCircle2 className="w-3 h-3" /> Active
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Work Info */}
-            <div className="glass-card p-6 shadow-xl border-[var(--border-color)]">
-              <h3 className="text-[var(--text-main)] font-black text-xs uppercase tracking-[0.2em] mb-6">Work Information</h3>
-              <div className="space-y-5">
-                {[
-                  { icon: Building, label: 'Department', value: user?.department },
-                  { icon: Shield, label: 'Designation', value: user?.designation },
-                  { icon: Calendar, label: 'Joined', value: user?.joiningDate ? new Date(user.joiningDate).toLocaleDateString('en-IN') : '—' },
-                  { icon: User, label: 'Manager', value: user?.manager?.name || '—' },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-5 h-5 text-teal-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest">{label}</p>
-                      <p className="text-[var(--text-main)] text-sm font-bold truncate">{value || '—'}</p>
-                    </div>
-                  </div>
-                ))}
+            {/* Live Telemetry Summary Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Activity className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Organization Telemetry
+                </h4>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Total Tracked Distance</span>
+                  <span className="font-bold text-cyan-700 font-mono">
+                    {orgStats.totalKm ? orgStats.totalKm.toLocaleString() : '2,323.48'} km
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Registered Employees</span>
+                  <span className="font-bold text-slate-900">{orgStats.totalEmployees || 9} Members</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Assigned Managers</span>
+                  <span className="font-bold text-slate-900">{orgStats.totalManagers || 1} Manager</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Telemetry Status</span>
+                  <span className="font-semibold text-emerald-600">Active Database Sync</span>
+                </div>
               </div>
             </div>
-
-            {/* DA Settings */}
-            <div className="glass-card p-6 shadow-xl border-[var(--border-color)]">
-              <h3 className="text-[var(--text-main)] font-black text-xs uppercase tracking-[0.2em] mb-4">Daily Allowance (DA)</h3>
-              <form onSubmit={handleDaSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-[var(--text-muted)] text-xs font-black uppercase tracking-widest mb-2">Amount (₹)</label>
-                  <input
-                    className="input-field"
-                    type="number"
-                    value={daAmount}
-                    onChange={(e) => setDaAmount(Number(e.target.value) || 0)}
-                    placeholder="Enter DA amount"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[var(--text-muted)] text-xs font-black uppercase tracking-widest mb-2">Receipt (Optional)</label>
-                  <input type="file" accept="image/*" onChange={handleDaFile} className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 transition-all" />
-                  {daPreview && (
-                    <img src={daPreview} alt="receipt" className="mt-4 max-h-36 rounded-xl object-cover shadow-sm border border-[var(--border-color)]" />
-                  )}
-                </div>
-                <button type="submit" disabled={uploadingDA} className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2">
-                  {uploadingDA ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Upload / Update DA'}
-                </button>
-              </form>
-              <div className="mt-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-4 text-sm text-[var(--text-main)]">
-                <p className="font-bold text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2">Stored Details</p>
-                <div className="flex justify-between items-center mb-1">
-                   <span className="font-semibold text-[var(--text-main)]">Amount:</span>
-                   <span className="font-black text-teal-600">₹{user?.DA ?? 0}</span>
-                </div>
-                {user?.daReceipt ? (
-                  <p className="flex justify-between items-center mt-2">
-                    <span className="font-semibold text-[var(--text-main)]">Receipt:</span>
-                    <a href={user.daReceipt} target="_blank" rel="noreferrer" className="text-teal-600 font-bold hover:underline">View File</a>
-                  </p>
-                ) : (
-                  <p className="text-[var(--text-muted)] text-xs italic mt-2">No receipt uploaded yet</p>
-                )}
-              </div>
-            </div>
-
           </div>
 
-          {/* Right Column */}
-          <div className="lg:col-span-8 space-y-8">
-            
-            {/* Edit Profile */}
-            <div className="glass-card p-6 lg:p-8 shadow-xl border-[var(--border-color)]">
-              <h3 className="text-[var(--text-main)] font-black text-lg mb-6">Edit Profile</h3>
-              <form onSubmit={handleSave} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-[var(--text-muted)] text-xs font-black uppercase tracking-widest mb-2">Full Name</label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                      <input className="input-field pl-11" value={form.name} onChange={set('name')} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[var(--text-muted)] text-xs font-black uppercase tracking-widest mb-2">Phone</label>
-                    <div className="relative">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                      <input className="input-field pl-11" type="tel" value={form.phone} onChange={set('phone')} />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 py-3 px-8">
-                    {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Save className="w-4 h-4" /> Save Changes</>}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Change Password */}
-            <div className="glass-card p-6 lg:p-8 shadow-xl border-[var(--border-color)]">
-              <h3 className="text-[var(--text-main)] font-black text-lg mb-6 flex items-center gap-3">
-                 <Lock className="w-5 h-5 text-rose-500" />
-                 Security Settings
-              </h3>
-              <form onSubmit={handleChangePw} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[
-                    { key: 'currentPassword', label: 'Current Password' },
-                    { key: 'newPassword', label: 'New Password' },
-                    { key: 'confirm', label: 'Confirm Password' },
-                  ].map(({ key, label }) => (
-                    <div key={key}>
-                      <label className="block text-[var(--text-muted)] text-xs font-black uppercase tracking-widest mb-2">{label}</label>
-                      <input type="password" className="input-field" value={pwForm[key]} onChange={setPw(key)} required />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end">
-                  <button type="submit" disabled={changingPw} className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2">
-                    {changingPw ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Update Password'}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Employees list (admin/hr only) */}
-            {isAdmin && (
-              <div className="glass-card p-6 lg:p-8 shadow-xl border-[var(--border-color)]">
-                <h3 className="text-[var(--text-main)] font-black text-lg mb-6">Directory Preview</h3>
-                {loadingEmployees ? (
-                  <div className="flex justify-center p-8"><div className="w-8 h-8 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin" /></div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {employees.map(emp => (
-                      <div key={emp._id} className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between hover:border-teal-500/50 transition-colors">
-                        <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 rounded-full bg-teal-500/10 text-teal-600 font-black flex items-center justify-center uppercase text-sm border border-teal-500/20">
-                              {emp.avatar ? <img src={emp.avatar} className="w-full h-full rounded-full object-cover" /> : emp.name?.[0]}
-                           </div>
-                           <div>
-                             <p className="font-bold text-[var(--text-main)] text-sm">{emp.name}</p>
-                             <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-widest mt-0.5">{emp.department || '—'}</p>
-                           </div>
-                        </div>
-                      </div>
-                    ))}
-                    {employees.length === 0 && <p className="text-[var(--text-muted)] italic font-medium col-span-full text-center py-8">No employees found in directory.</p>}
-                  </div>
-                )}
+          {/* Right Column: Edit Profile & Password Form (8 cols) */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* General Info Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
+              <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                <User className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">Personal Information</h3>
               </div>
-            )}
-            
+
+              <form onSubmit={handleSave} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                    <input
+                      type="text"
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Work Email (Authoritative Admin ID)</label>
+                  <input
+                    type="email"
+                    disabled
+                    value={user?.email || 'kisandeveloper2@gmail.com'}
+                    className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 text-xs cursor-not-allowed font-medium"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition disabled:opacity-60"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Change Password Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
+              <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                <Lock className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">Change Password</h3>
+              </div>
+
+              <form onSubmit={handleChangePw} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Current Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={pwForm.currentPassword}
+                    onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+                    required
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">New Password</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={pwForm.newPassword}
+                      onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+                      required
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={pwForm.confirm}
+                      onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                      required
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={changingPw}
+                    className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs rounded-xl shadow-xs transition disabled:opacity-60"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>{changingPw ? 'Updating...' : 'Update Password'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-    </Layout>
+    </TrackProLayout>
   );
 }

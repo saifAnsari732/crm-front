@@ -5,45 +5,62 @@ import toast from 'react-hot-toast';
 
 const AuthContext = createContext();
 
-const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000; // Refresh token every 5 minutes
+const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000;
 let tokenRefreshInterval = null;
-// SBDDBCKSVBBSV
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [organization, setOrganization] = useState(() => {
+    try {
+      const saved = localStorage.getItem('organization');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('token')));
   const [authError, setAuthError] = useState(null);
 
-  /**
-   * Refresh token before expiry
-   */
   const refreshTokenIfNeeded = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) return;
 
     try {
-      const { data } = await authAPI.refreshToken?.() || Promise.reject(new Error('Refresh not available'));
+      const { data } = await authAPI.refreshToken(refreshToken);
       if (data.token) {
         localStorage.setItem('token', data.token);
-        if (data.user) setUser(data.user);
+        if (data.refreshToken) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        }
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        if (data.organization) {
+          setOrganization(data.organization);
+          localStorage.setItem('organization', JSON.stringify(data.organization));
+        }
       }
     } catch (err) {
-      console.warn('Token refresh failed:', err.message);
-      // Will be handled by API interceptor on next request
+      console.warn('Silent token refresh failed:', err.message);
     }
   }, []);
 
-  /**
-   * Setup token refresh interval
-   */
   const setupTokenRefresh = useCallback(() => {
     if (tokenRefreshInterval) clearInterval(tokenRefreshInterval);
     tokenRefreshInterval = setInterval(refreshTokenIfNeeded, TOKEN_REFRESH_INTERVAL);
   }, [refreshTokenIfNeeded]);
 
-  /**
-   * Clear token refresh interval
-   */
   const clearTokenRefresh = useCallback(() => {
     if (tokenRefreshInterval) {
       clearInterval(tokenRefreshInterval);
@@ -51,13 +68,8 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  /**
-   * Load user from localStorage and verify token
-   */
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-
     if (!token) {
       setLoading(false);
       return;
@@ -66,6 +78,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await authAPI.getMe();
       setUser(data.user);
+      if (data.organization) {
+        setOrganization(data.organization);
+        localStorage.setItem('organization', JSON.stringify(data.organization));
+      }
       setIsAuthenticated(true);
       localStorage.setItem('user', JSON.stringify(data.user));
       initSocket(token);
@@ -73,9 +89,33 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
     } catch (err) {
       console.error('Auth error:', err);
+      // Attempt silent refresh before logging out
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        try {
+          const { data: refreshData } = await authAPI.refreshToken(refreshToken);
+          if (refreshData.token) {
+            localStorage.setItem('token', refreshData.token);
+            if (refreshData.refreshToken) localStorage.setItem('refreshToken', refreshData.refreshToken);
+            setUser(refreshData.user);
+            setIsAuthenticated(true);
+            initSocket(refreshData.token);
+            setupTokenRefresh();
+            setAuthError(null);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          // Token refresh failed
+        }
+      }
+
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      localStorage.removeItem('organization');
       setUser(null);
+      setOrganization(null);
       setIsAuthenticated(false);
       setAuthError(err.response?.data?.message || 'Auth failed');
     } finally {
@@ -83,27 +123,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, [setupTokenRefresh]);
 
-  /**
-   * Initialize on mount
-   */
   useEffect(() => {
     loadUser();
     return () => clearTokenRefresh();
   }, [loadUser, clearTokenRefresh]);
 
-  /**
-   * Login
-   */
   const login = async (email, password) => {
     try {
       setAuthError(null);
       const { data } = await authAPI.login({ email, password });
-
-      if (!data.user.isApproved && data.user.role === 'employee') {
-        setAuthError('Account pending admin approval');
-        toast.error('❌ Account pending admin approval');
-        return { success: false };
-      }
 
       if (data.user.isBlocked) {
         setAuthError('Account has been blocked');
@@ -112,8 +140,15 @@ export const AuthProvider = ({ children }) => {
       }
 
       localStorage.setItem('token', data.token);
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken);
+      }
       localStorage.setItem('user', JSON.stringify(data.user));
       setUser(data.user);
+      if (data.organization) {
+        setOrganization(data.organization);
+        localStorage.setItem('organization', JSON.stringify(data.organization));
+      }
       setIsAuthenticated(true);
       initSocket(data.token);
       setupTokenRefresh();
@@ -123,14 +158,11 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       const message = err.response?.data?.message || 'Login failed';
       setAuthError(message);
-      toast.error(message);
+      toast.error(`❌ ${message}`);
       return { success: false };
     }
   };
 
-  /**
-   * Logout
-   */
   const logout = async () => {
     try {
       await authAPI.logout();
@@ -139,37 +171,78 @@ export const AuthProvider = ({ children }) => {
     }
 
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('organization');
     localStorage.removeItem('isTracking');
     localStorage.removeItem('sessionId');
     disconnectSocket();
     clearTokenRefresh();
     setUser(null);
+    setOrganization(null);
     setIsAuthenticated(false);
     setAuthError(null);
     toast.success('Logged out successfully');
   };
 
-  /**
-   * Update user locally
-   */
   const updateUser = (updates) => {
     const updatedUser = { ...user, ...updates };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
+  const updateOrganization = (updates) => {
+    setOrganization((prev) => {
+      const updated = { ...(prev || {}), ...updates };
+      localStorage.setItem('organization', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const registerOrganization = async (formData) => {
+    try {
+      setAuthError(null);
+      const { data } = await authAPI.registerOrganization(formData);
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+        if (data.refreshToken) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        }
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setUser(data.user);
+        if (data.organization) {
+          setOrganization(data.organization);
+          localStorage.setItem('organization', JSON.stringify(data.organization));
+        }
+        setIsAuthenticated(true);
+        initSocket(data.token);
+        setupTokenRefresh();
+        toast.success(`Welcome to TrackPro! ${data.organization.name} registered 🎉`);
+        return { success: true };
+      }
+    } catch (err) {
+      const message = err.response?.data?.message || 'Organization registration failed';
+      setAuthError(message);
+      toast.error(`❌ ${message}`);
+      return { success: false, message };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        organization,
         loading,
         isAuthenticated,
         authError,
         login,
         logout,
+        registerOrganization,
         updateUser,
+        updateOrganization,
         loadUser,
+        refreshUser: loadUser,
       }}
     >
       {children}
@@ -177,8 +250,8 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => {
+export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
-};
+}

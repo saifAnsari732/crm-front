@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import AdminLayout from '../../components/layout/AdminLayout';
+import TrackProLayout from '../../components/layout/TrackProLayout';
 import { leaveAPI } from '../../services/api.service';
 import { Calendar, CheckCircle, XCircle, Clock, User, FileText, ChevronRight, Search, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Avatar from '../../components/shared/Avatar';
 
 export default function AdminLeaves() {
   const [leaves, setLeaves] = useState([]);
@@ -55,7 +56,7 @@ export default function AdminLeaves() {
   };
 
   return (
-    <AdminLayout>
+    <TrackProLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -103,9 +104,7 @@ export default function AdminLeaves() {
                     }`}
                   >
                     <div className="flex items-center gap-4 mb-5">
-                      <div className="w-12 h-12 rounded-2xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-xl font-black text-primary-500 shadow-inner uppercase">
-                        {leave.employee?.name?.[0]}
-                      </div>
+                      <Avatar src={leave.employee?.avatar} name={leave.employee?.name} size="md" shape="rounded-2xl" />
                       <div className="flex-1 min-w-0">
                         <h3 className="text-[var(--text-main)] font-black text-sm truncate group-hover:text-primary-400 transition-colors">{leave.employee?.name}</h3>
                         <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest truncate">{leave.employee?.department || 'Field Staff'}</p>
@@ -167,9 +166,7 @@ export default function AdminLeaves() {
 
                 <div className="space-y-8 relative z-10">
                   <div className="flex items-center gap-5 p-5 rounded-[1.5rem] bg-[var(--bg-main)]/50 border border-[var(--border-color)]">
-                    <div className="w-16 h-16 rounded-[1.25rem] bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-2xl font-black text-primary-500 shadow-inner uppercase">
-                      {selectedLeave.employee?.name?.[0]}
-                    </div>
+                    <Avatar src={selectedLeave.employee?.avatar} name={selectedLeave.employee?.name} size="xl" shape="rounded-2xl" />
                     <div className="min-w-0">
                       <p className="text-[var(--text-main)] font-black text-xl tracking-tight">{selectedLeave.employee?.name}</p>
                       <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.2em]">{selectedLeave.employee?.department || 'Field Staff'}</p>
@@ -236,6 +233,6 @@ export default function AdminLeaves() {
           )}
         </div>
       </div>
-    </AdminLayout>
+    </TrackProLayout>
   );
 }

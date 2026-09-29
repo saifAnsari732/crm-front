@@ -1,379 +1,687 @@
-import React, { useEffect, useState } from 'react';
-import AdminLayout from '../../components/layout/AdminLayout';
-import { adminAPI } from '../../services/api.service';
-import { getSocket } from '../../services/socket.service';
-import { Users, MapPin, TrendingUp, Receipt, CheckCircle, Activity, Clock, AlertCircle, ClipboardList, Calendar, Navigation } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import TrackProLayout from '../../components/layout/TrackProLayout';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  Users,
+  UserCheck,
+  CalendarCheck,
+  UserX,
+  Wifi,
+  MapPin,
+  TrendingUp,
+  Calendar,
+  Building2,
+  ChevronDown,
+  ArrowRight,
+  MoreVertical,
+  CheckCircle2,
+  Clock,
+  Briefcase,
+  Plus,
+  Compass,
+  ClipboardList,
+  Receipt,
+  BarChart3,
+  Loader2,
+  Sparkles,
+  CreditCard,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import { API } from '../../services/api.service';
+import Avatar from '../../components/shared/Avatar';
 import toast from 'react-hot-toast';
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const PIE_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ef4444'];
-
 export default function AdminDashboard() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [liveEmployees, setLiveEmployees] = useState([]);
+  const { user, organization } = useAuth();
+  const navigate = useNavigate();
+
+  const userRole = user?.role ? user.role.toUpperCase() : 'EMPLOYEE';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'SUPERADMIN';
+  const isOrgAdmin = userRole === 'ORG_ADMIN' || userRole === 'ADMIN';
+  const isPlanActive = isSuperAdmin || (
+    organization?.status === 'active' &&
+    Boolean(organization?.plan?.expiresAt) &&
+    new Date(organization.plan.expiresAt) > new Date()
+  );
 
   useEffect(() => {
-    fetchStats();
-    const socket = getSocket();
-    if (socket) {
-      socket.on('employee_tracking_started', ({ name }) => {
-        toast.success(`📍 ${name} started tracking`);
-        fetchStats();
-      });
-      socket.on('employee_tracking_stopped', ({ name }) => {
-        toast(`⏹ ${name} stopped tracking`);
-        fetchStats();
-      });
-      socket.on('new_expense', ({ employeeName }) => toast(`💰 New expense from ${employeeName}`));
-      socket.on('new_meeting', ({ employeeName }) => toast(`🤝 New meeting from ${employeeName}`));
+    if (isSuperAdmin) {
+      navigate('/super-admin', { replace: true });
     }
-    return () => {
-      if (socket) {
-        socket.off('employee_tracking_started');
-        socket.off('employee_tracking_stopped');
-        socket.off('new_expense');
-        socket.off('new_meeting');
+  }, [isSuperAdmin, navigate]);
+
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalEmployees: 0,
+    totalManagers: 0,
+    presentToday: 0,
+    absentToday: 0,
+    currentlyOnline: 0,
+    currentlyTracking: 0,
+    totalKm: 0,
+  });
+
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [deptData, setDeptData] = useState([]);
+  const [recentEmployees, setRecentEmployees] = useState([]);
+  const [upcomingLeaves, setUpcomingLeaves] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [liveLocations, setLiveLocations] = useState([]);
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        setLoading(true);
+        const res = await API.get('/admin/dashboard');
+        if (res.data?.success) {
+          const {
+            stats: dbStats,
+            attendanceOverview,
+            departmentWise,
+            recentEmployees: dbRecent,
+            upcomingLeaves: dbLeaves,
+            liveLocations: dbLive,
+            recentActivities: dbAct,
+          } = res.data;
+
+          if (dbStats) setStats(dbStats);
+          if (attendanceOverview) setAttendanceData(attendanceOverview);
+          if (departmentWise) setDeptData(departmentWise);
+          if (dbRecent && dbRecent.length > 0) {
+            const mappedRecent = dbRecent.map((e) => ({
+              id: e._id,
+              name: e.name,
+              avatar: e.avatar,
+              empId: e.employeeId || 'EMP-' + e._id.slice(-6).toUpperCase(),
+              dept: e.department || 'Field Services',
+              manager: e.manager?.name || e.managerName || 'Admin Assigned',
+              status: e.isTracking ? 'Tracking' : e.isOnline ? 'Online' : 'Offline',
+              isTracking: e.isTracking,
+              lastActive: e.lastSeen
+                ? new Date(e.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Recently',
+            }));
+            setRecentEmployees(mappedRecent);
+          }
+          if (dbLeaves) setUpcomingLeaves(dbLeaves);
+          if (dbLive) setLiveLocations(dbLive);
+          if (dbAct) setRecentActivities(dbAct);
+
+        }
+      } catch (e) {
+        console.warn('Dashboard fetch error:', e);
+      } finally {
+        setLoading(false);
       }
     };
+    fetchDashboard();
   }, []);
 
-  const fetchStats = async () => {
-    try {
-      const { data } = await adminAPI.getDashboard();
-      setStats(data.stats);
-    } catch { toast.error('Failed to load dashboard'); }
-    finally { setLoading(false); }
-  };
-
-  const monthlyData = stats?.monthlyMeetings?.map(m => ({
-    month: MONTHS[m._id - 1], meetings: m.count
-  })) || [];
-
-  const pieData = stats?.expenseByCategory?.map(e => ({
-    name: e._id, value: e.total
-  })) || [];
-
-  const statCards = stats ? [
-    { label: 'Attendance', value: stats.todayAttendance, icon: CheckCircle, color: 'text-blue-500', bg: 'bg-blue-500/10', total: stats.totalEmployees, chartData: [
-        { name: 'Present', value: stats.todayAttendance, color: '#3b82f6' },
-        { name: 'Absent', value: stats.totalEmployees - stats.todayAttendance, color: '#e2e8f0' }
-    ]},
-    { label: 'Visits', value: stats.totalMeetings, icon: MapPin, color: 'text-emerald-500', bg: 'bg-emerald-500/10', total: stats.totalMeetings + 2, chartData: [
-        { name: 'Completed', value: stats.totalMeetings, color: '#10b981' },
-        { name: 'Pending', value: 2, color: '#e2e8f0' }
-    ]},
-    { label: 'Tasks', value: stats.totalTasks || 0, icon: ClipboardList, color: 'text-rose-500', bg: 'bg-rose-500/10', total: (stats.totalTasks || 0) + 3, chartData: [
-          { name: 'Completed', value: stats.totalTasks || 0, color: '#f43f5e' },
-          { name: 'Pending', value: 3, color: '#e2e8f0' }
-      ] },
-    { label: 'Leads', value: stats.totalLeads || 0, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10', total: (stats.totalLeads || 0) + 1, chartData: [
-          { name: 'Converted', value: stats.totalLeads || 0, color: '#f59e0b' },
-          { name: 'Cold', value: 1, color: '#e2e8f0' }
-      ] },
-  ] : [];
-
-  const monitorStats = stats ? [
-    { label: 'Total Distance Today', value: `${stats.totalKm.toFixed(1)} km`, icon: Navigation, color: 'text-teal-500', bg: 'bg-teal-500/10' },
-    { label: 'Active Field Agents', value: stats.trackingNow || 0, icon: Users, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { label: 'Pending Expenses', value: stats.pendingExpenses || 0, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { label: 'Online Personnel', value: stats.activeEmployees || 0, icon: Activity, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  ] : [];
-
-  const recentVisits = stats?.recentMeetings || [];
-  const recentTasks = stats?.recentTasks || [];
-
   return (
-    <AdminLayout>
-      <div className="p-4 lg:p-6 space-y-8 max-w-[1600px] mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <TrackProLayout>
+      <div className="space-y-6">
+        {/* Top Welcome & Context Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-[var(--text-main)] text-3xl font-black tracking-tighter uppercase italic">Operational <span className='bg-gray-400 text-rose-700 rounded-sm'>Pannel</span></h1>
-            <p className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Real-time Field Analytics & Vector Intelligence
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Welcome back, <span className="font-semibold text-slate-800">{user?.name || 'Administrator'}</span>! Real-time telemetry and team performance.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
-              <a href="/admin/tasks" className="w-full sm:w-auto justify-center bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] text-[var(--text-main)] border border-[var(--border-color)] py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95">
-              <ClipboardList className="w-4 h-4 text-violet-500" /> Dispatch Tasks
-            </a>
-            <a href="/admin/leaves" className="w-full sm:w-auto justify-center bg-primary-600 hover:bg-primary-500 text-white py-2.5 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary-600/20">
-              <Calendar className="w-4 h-4" /> Workforce Leave
-            </a>
-          </div>
-        </div>
 
-        {/* Stats row with Charts */}
-        {loading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {[...Array(4)].map((_, i) => <div key={i} className="h-48 rounded-3xl bg-[var(--bg-card)] animate-pulse" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {statCards.map((c, i) => (
-              <div key={i} className="glass-card p-4 sm:p-6 border-[var(--border-color)] flex flex-col gap-4 sm:gap-6 group hover:border-primary-500/30 transition-all duration-500 overflow-hidden relative">
-                 <div className="absolute top-0 right-0 p-4 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
-                    <c.icon className="w-24 h-24 rotate-12" />
-                 </div>
-                 <div className="flex items-center justify-between relative z-10">
-                    <div className="flex items-center gap-3">
-                       <div className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl ${c.bg} border border-[var(--border-color)] flex items-center justify-center shadow-inner`}>
-                          <c.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${c.color}`} />
-                       </div>
-                       <span className="text-[var(--text-main)] font-black text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em]">{c.label}</span>
-                    </div>
-                    {/* <span className="text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest bg-[var(--bg-main)] px-2 py-1 rounded-md">{c.value} {c.total ? `/ ${c.total}` : ''}</span> */}
-                 </div>
-                 
-                 {c.chartData ? (
-                   <div className="h-24 sm:h-36 relative z-10">
-                      <ResponsiveContainer width="100%" height="100%">
-                         <PieChart>
-                            <Pie data={c.chartData} innerRadius="65%" outerRadius="90%" paddingAngle={4} dataKey="value" stroke="none">
-                               {c.chartData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                            </Pie>
-                         </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                         <div className="text-center">
-                            <p className="text-[var(--text-main)] font-black text-2xl tracking-tighter leading-none">{c.value}</p>
-
-                         </div>
-                      </div>
-                   </div>
-                 ) : (
-                   <div className="h-36 flex flex-col items-center justify-center relative z-10">
-                      <p className={`text-3xl font-black italic tracking-tighter ${c.color}`}>{c.value}</p>
-                      <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-[0.2em] mt-3 opacity-40">System Neutral</p>
-                   </div>
-                 )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Monitoring Section */}
-        {!loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {monitorStats.map((s, i) => (
-              <div key={i} className={`p-4 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-card)] flex items-center gap-4 hover:border-${s.color.split('-')[1]}-400/50 transition-colors`}>
-                <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center shadow-inner`}>
-                  <s.icon className={`w-5 h-5 ${s.color}`} />
-                </div>
-                <div>
-                  <p className="text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest">{s.label}</p>
-                  <p className="text-[var(--text-main)] font-bold text-lg mt-0.5">{s.value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Detailed Tables Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recent Visits */}
-          {/* Recent Visits */}
-          <div className="glass-card border-[var(--border-color)] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-5 border-b border-[var(--border-color)] bg-[var(--bg-main)] flex items-center justify-between">
-               <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-emerald-500" />
-                  </div>
-                  <h3 className="text-[var(--text-main)] font-black text-[10px] uppercase tracking-[0.2em]">Field Engagement Log</h3>
-               </div>
-               <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest bg-[var(--bg-card)] px-2 py-1 rounded-md">Real-time Feed</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 shadow-xs">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span>{organization?.name || user?.name || 'KISAN CHOICE'}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </div>
-            <div className="overflow-x-auto custom-scrollbar">
-               <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-[0.2em] text-[9px] border-b border-[var(--border-color)]">
-                     <tr>
-                        <th className="px-6 py-5">Timestamp</th>
-                        <th className="px-6 py-5">Personnel</th>
-                        <th className="px-6 py-5">Objective</th>
-                        <th className="px-6 py-5">Subject</th>
-                        <th className="px-6 py-5">Engagement</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
-                     {recentVisits.length === 0 ? (
-                       <tr><td colSpan={5} className="p-12 text-center text-[var(--text-muted)] font-black uppercase text-[10px] tracking-widest italic opacity-30">Archive Synchronization Pending...</td></tr>
-                     ) : recentVisits.map((v, i) => (
-                       <tr key={i} className="hover:bg-[var(--bg-card-hover)] transition-all group">
-                          <td className="px-6 py-5 font-black text-primary-500 italic uppercase text-[10px]">{new Date(v.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                          <td className="px-6 py-5">
-                             <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-[11px] font-black text-primary-400 shadow-inner group-hover:rotate-6 transition-transform">
-                                   {v.employee?.name?.[0]}
-                                </div>
-                                <span className="font-black text-[var(--text-main)] tracking-tight">{v.employee?.name}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-5"><span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 font-black uppercase text-[8px] border border-blue-500/20">Follow-up</span></td>
-                          <td className="px-6 py-5">
-                             <div className="flex flex-col">
-                                <span className="font-black text-[var(--text-main)] text-[11px] tracking-tight">{v.clientName}</span>
-                                <span className="text-[var(--text-muted)] text-[8px] uppercase font-black tracking-widest mt-0.5">{v.companyName || 'Private Unit'}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-5">
-                             <span className="flex items-center gap-2 text-emerald-500 font-black uppercase text-[8px] tracking-widest">
-                                <span className="flex h-1.5 w-1.5 relative">
-                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                                </span>
-                                Secured
-                             </span>
-                          </td>
-                       </tr>
-                     ))}
-                  </tbody>
-               </table>
-            </div>
-          </div>
 
-          {/* Tasks Table */}
-          <div className="glass-card border-[var(--border-color)] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-5 border-b border-[var(--border-color)] bg-[var(--bg-main)] flex items-center justify-between">
-               <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                    <ClipboardList className="w-4 h-4 text-violet-500" />
-                  </div>
-                  <h3 className="text-[var(--text-main)] font-black text-[10px] uppercase tracking-[0.2em]">Deployment Queue</h3>
-               </div>
-               <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest bg-[var(--bg-card)] px-2 py-1 rounded-md">Live Status</span>
-            </div>
-            <div className="overflow-x-auto custom-scrollbar">
-               <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[var(--bg-main)] text-[var(--text-muted)] font-black uppercase tracking-[0.2em] text-[9px] border-b border-[var(--border-color)]">
-                     <tr>
-                        <th className="px-6 py-5">Deadline</th>
-                        <th className="px-6 py-5">Personnel</th>
-                        <th className="px-6 py-5">Vector</th>
-                        <th className="px-6 py-5">Directive</th>
-                        <th className="px-6 py-5">Progress</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-color)] bg-[var(--bg-card)]">
-                     {recentTasks.length === 0 ? (
-                        <tr><td colSpan={5} className="p-12 text-center text-[var(--text-muted)] font-black uppercase text-[10px] tracking-widest italic opacity-30">No Active Directives...</td></tr>
-                     ) : recentTasks.map((t, i) => (
-                        <tr key={i} className="hover:bg-[var(--bg-card-hover)] transition-all group">
-                           <td className="px-6 py-5 font-black text-[var(--text-main)] text-[10px] uppercase tracking-tighter">{new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
-                           <td className="px-6 py-5 font-black text-[var(--text-main)] tracking-tight">{t.employee?.name}</td>
-                           <td className="px-6 py-5">
-                              <span className={`px-3 py-1 rounded-full font-black uppercase text-[8px] tracking-widest border ${
-                                 t.priority === 'high' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                              }`}>{t.priority}</span>
-                           </td>
-                           <td className="px-6 py-5 font-black text-[var(--text-main)] text-[11px] tracking-tight">{t.title}</td>
-                           <td className="px-6 py-5">
-                              <span className="text-amber-500 font-black uppercase text-[8px] tracking-[0.2em] flex items-center gap-2">
-                                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                 {t.status}
-                              </span>
-                           </td>
-                        </tr>
-                     ))}
-                  </tbody>
-               </table>
+            <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 shadow-xs">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <span>
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Monthly meetings bar chart */}
-          <div className="lg:col-span-8 glass-card p-6 border-[var(--border-color)]">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[var(--text-main)] font-bold text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-400" />
-                Performance Trends
+
+
+        {/* 6 TrackPro KPI Cards (Real DB Analytics) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {/* Total Employees */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Total Employees</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">{stats.totalEmployees}</h3>
+              <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5 mt-1">
+                <TrendingUp className="w-3 h-3" /> Live from DB
+              </span>
+            </div>
+          </div>
+
+          {/* Total Managers */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold mb-3">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Total Managers</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">{stats.totalManagers}</h3>
+              <span className="text-[11px] font-semibold text-indigo-600 flex items-center gap-0.5 mt-1">
+                <CheckCircle2 className="w-3 h-3" /> Active Leaders
+              </span>
+            </div>
+          </div>
+
+          {/* Present Today */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3">
+              <CalendarCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Present Today</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">{stats.presentToday}</h3>
+              <span className="text-[11px] font-medium text-slate-500 mt-1 block">
+                {stats.totalEmployees > 0 ? ((stats.presentToday / stats.totalEmployees) * 100).toFixed(0) : 0}% of total
+              </span>
+            </div>
+          </div>
+
+          {/* Absent Today */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold mb-3">
+              <UserX className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Absent Today</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">{stats.absentToday}</h3>
+              <span className="text-[11px] font-medium text-slate-500 mt-1 block">
+                {stats.totalEmployees > 0 ? ((stats.absentToday / stats.totalEmployees) * 100).toFixed(0) : 0}% of total
+              </span>
+            </div>
+          </div>
+
+          {/* Currently Online */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold mb-3">
+              <Wifi className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Currently Online</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">{stats.currentlyOnline}</h3>
+              <span className="text-[11px] font-medium text-purple-600 mt-1 block font-semibold">Active Session</span>
+            </div>
+          </div>
+
+          {/* Real Tracked Distance (KM) */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold mb-3">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500">Tracked Distance</p>
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+                {stats.totalKm ? stats.totalKm.toLocaleString() : '0'} <span className="text-sm font-semibold text-slate-500">km</span>
               </h3>
-              <select className="bg-transparent text-[var(--text-muted)] text-xs font-bold border-none focus:ring-0">
-                <option>Last 6 Months</option>
-                <option>Last Year</option>
+              <span className="text-[11px] font-medium text-cyan-600 mt-1 block font-semibold">
+                {stats.currentlyTracking} active GPS
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Middle Section: Attendance Overview + Live Tracking Mini Map + Recent Activities */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Attendance Overview Bar Chart (5 cols) */}
+          <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Attendance Overview</h3>
+                <div className="flex items-center gap-3 text-[11px] font-medium text-slate-500 mt-1">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Present</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Absent</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Late</span>
+                </div>
+              </div>
+
+              <select className="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none">
+                <option>Last 7 Days</option>
               </select>
             </div>
-            <div className="h-[300px]">
-              {monthlyData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-[var(--text-muted)] text-sm italic">No activity data available for the selected period</div>
-              ) : (
+
+            <div className="h-56 w-full">
+              {attendanceData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData} barSize={32}>
-                    <defs>
-                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.3} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{fill: 'var(--bg-main)', opacity: 0.1}} contentStyle={{ background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '11px', fontWeight: 700 }} />
-                    <Bar dataKey="meetings" fill="url(#barGradient)" radius={[8, 8, 0, 0]} />
+                  <BarChart data={attendanceData} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Bar dataKey="Present" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Absent" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Late" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  {loading ? 'Loading attendance trend...' : 'No attendance data recorded in the last 7 days.'}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Expense by category pie */}
-          <div className="lg:col-span-4 glass-card p-6 border-[var(--border-color)]">
-            <h3 className="text-[var(--text-main)] font-bold text-lg mb-6 flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-red-400" />
-              Expenditure
-            </h3>
-            {pieData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-[var(--text-muted)] text-sm italic">No expense records found</div>
-            ) : (
-              <div className="space-y-8">
-                <div className="h-[200px] relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
-                        {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', borderRadius: '12px', color: 'var(--text-main)', fontSize: '11px', fontWeight: 700 }} formatter={v => `₹${v.toLocaleString()}`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest">Total</p>
-                    <p className="text-[var(--text-main)] text-xl font-black">₹{pieData.reduce((a,b)=>a+b.value, 0).toLocaleString()}</p>
+          {/* Live Tracking Mini Map (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-slate-900">Live Tracking</h3>
+              <button
+                onClick={() => navigate('/admin/live-map')}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                View Full Map <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div
+              onClick={() => navigate('/admin/live-map')}
+              className="relative h-56 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer group"
+            >
+              {/* Map Canvas Background */}
+              <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] bg-slate-50 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition shadow-sm">
+                    <Compass className="w-6 h-6 animate-pulse" />
                   </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {pieData.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-main)]/30 border border-[var(--border-color)]/30">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                        <span className="text-[var(--text-muted)] text-[11px] font-bold uppercase tracking-wider capitalize">{item.name}</span>
-                      </div>
-                      <span className="text-[var(--text-main)] text-xs font-black">₹{item.value.toLocaleString()}</span>
-                    </div>
-                  ))}
+                  <span className="text-xs font-bold text-slate-700 block">
+                    {liveLocations.length > 0 ? `${liveLocations.length} Active Tracking Sessions` : 'Telemetry & Live GPS Ready'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">Click to view real-time locations</span>
                 </div>
               </div>
-            )}
+
+              {/* Real Active Employee Badge if any */}
+              {recentEmployees.length > 0 && (
+                <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-2.5 rounded-xl border border-slate-200 shadow-md text-xs z-10 max-w-[210px]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
+                      {recentEmployees[0].name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 truncate">{recentEmployees[0].name}</div>
+                      <div className="text-[10px] text-slate-500">{recentEmployees[0].dept}</div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <span>Status: <span className="font-semibold text-emerald-600">{recentEmployees[0].status}</span></span>
+                    <span>{recentEmployees[0].lastActive}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Activities (3 cols) */}
+          <div className="lg:col-span-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-slate-900">Recent Activities</h3>
+              <button onClick={() => navigate('/admin/tracking-history')} className="text-xs font-semibold text-blue-600 hover:text-blue-700">View History</button>
+            </div>
+
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+              {recentActivities.length > 0 ? (
+                recentActivities.map((act) => (
+                  <div key={act._id} className="flex items-start gap-3 text-xs">
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 font-bold text-[11px]">
+                      {act.employee?.name ? act.employee.name.slice(0, 1).toUpperCase() : 'A'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-800 truncate">
+                        <span className="font-bold text-slate-900">{act.employee?.name || 'User'}</span> {act.description || act.action}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {act.employee?.department || 'Field Services'}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : recentEmployees.length > 0 ? (
+                recentEmployees.slice(0, 4).map((emp) => (
+                  <div key={emp.id} className="flex items-start gap-3 text-xs">
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 font-bold text-[11px]">
+                      {emp.name.slice(0, 1)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-800 truncate">
+                        <span className="font-bold text-slate-900">{emp.name}</span> active on field
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {emp.lastActive} • {emp.dept}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No recent activities recorded yet.
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 
-        {/* Live tracking indicator */}
-        {stats?.trackingNow > 0 && (
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
-            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <p className="text-emerald-300 font-semibold text-sm">
-              {stats.trackingNow} employee{stats.trackingNow > 1 ? 's are' : ' is'} currently tracking in the field
-            </p>
-            <a href="/admin/live-map" className="ml-auto text-emerald-400 text-xs font-semibold hover:text-emerald-300 flex items-center gap-1">
-              View Map →
-            </a>
+        {/* Lower Row: Team Performance + Department Donut + Upcoming Leave */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Team Performance Gauges (5 cols) */}
+          <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900">Team Performance</h3>
+              <span onClick={() => navigate('/admin/reports')} className="text-xs font-semibold text-blue-600 cursor-pointer">View Report ▾</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-100 flex flex-col items-center">
+                <div className="w-14 h-14 rounded-full border-4 border-emerald-500 flex items-center justify-center text-sm font-bold text-slate-900 mb-2">
+                  100%
+                </div>
+                <span className="text-[11px] font-bold text-slate-700 leading-tight">GPS Accuracy</span>
+                <span className="text-[10px] text-emerald-600 font-semibold mt-1">High Precision</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-100 flex flex-col items-center">
+                <div className="w-14 h-14 rounded-full border-4 border-blue-500 flex items-center justify-center text-sm font-bold text-slate-900 mb-2">
+                  {stats.totalEmployees > 0 ? Math.round((stats.presentToday / stats.totalEmployees) * 100) : 0}%
+                </div>
+                <span className="text-[11px] font-bold text-slate-700 leading-tight">Attendance</span>
+                <span className="text-[10px] text-blue-600 font-semibold mt-1">Today</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-100 flex flex-col items-center">
+                <div className="w-14 h-14 rounded-full border-4 border-teal-500 flex items-center justify-center text-sm font-bold text-slate-900 mb-2">
+                  {stats.totalEmployees}
+                </div>
+                <span className="text-[11px] font-bold text-slate-700 leading-tight">Field Force</span>
+                <span className="text-[10px] text-teal-600 font-semibold mt-1">Active Accounts</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-100 flex flex-col items-center">
+                <div className="w-14 h-14 rounded-full border-4 border-indigo-500 flex items-center justify-center text-sm font-bold text-slate-900 mb-2">
+                  {stats.totalManagers}
+                </div>
+                <span className="text-[11px] font-bold text-slate-700 leading-tight">Managers</span>
+                <span className="text-[10px] text-indigo-600 font-semibold mt-1">Assigned</span>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Department Wise Donut (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-slate-900">Department Wise Employees</h3>
+              <button onClick={() => navigate('/admin/departments')} className="text-xs font-semibold text-blue-600">View All</button>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="w-36 h-36 relative flex-shrink-0">
+                {deptData.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={deptData} innerRadius={42} outerRadius={60} paddingAngle={4} dataKey="value">
+                          {deptData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-base font-bold text-slate-900">{stats.totalEmployees}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Total</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
+                    No Departments
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 grid grid-cols-1 gap-y-1.5 text-xs">
+                {deptData.map((d) => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-slate-600 truncate">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }}></span>
+                      <span className="truncate">{d.name}</span>
+                    </span>
+                    <span className="font-bold text-slate-900">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Upcoming Leave Requests (3 cols) */}
+          <div className="lg:col-span-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-slate-900">Upcoming Leave Requests</h3>
+              <button onClick={() => navigate('/admin/leaves')} className="text-xs font-semibold text-blue-600">View All</button>
+            </div>
+
+            <div className="space-y-3 text-xs max-h-56 overflow-y-auto pr-1">
+              {upcomingLeaves.length > 0 ? (
+                upcomingLeaves.map((l) => (
+                  <div key={l._id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar
+                        src={l.employee?.avatar}
+                        name={l.employee?.name}
+                        size="xs"
+                      />
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">{l.employee?.name || 'Employee'}</div>
+                        <div className="text-[10px] text-slate-500 truncate capitalize">
+                          {l.type} Leave • {new Date(l.startDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize flex-shrink-0 ${
+                      l.status === 'approved'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        : l.status === 'rejected'
+                        ? 'bg-rose-50 text-rose-600 border-rose-200'
+                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                    }`}>
+                      {l.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-xs text-slate-400">
+                  No upcoming leaves submitted.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Section: Recent Employees Table (8 cols) + Quick Actions (4 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Recent Employees Table (8 cols) */}
+          <div className="lg:col-span-8 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900">Recent Employees</h3>
+              <button onClick={() => navigate('/admin/employees')} className="text-xs font-semibold text-blue-600">View All</button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase">
+                    <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Employee ID</th>
+                    <th className="py-2.5 px-3">Department</th>
+                    <th className="py-2.5 px-3">Manager</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Last Active</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {recentEmployees.length > 0 ? (
+                    recentEmployees.map((emp) => (
+                      <tr key={emp.id} className="hover:bg-slate-50/70">
+                        <td className="py-3 px-3 font-semibold text-slate-900 flex items-center gap-2.5">
+                          <Avatar
+                            src={emp.avatar}
+                            name={emp.name}
+                            size="xs"
+                            status={emp.status === 'Online'}
+                          />
+                          <span>{emp.name}</span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-500">{emp.empId}</td>
+                        <td className="py-3 px-3">{emp.dept}</td>
+                        <td className="py-3 px-3">{emp.manager}</td>
+                        <td className="py-3 px-3">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            emp.status === 'Online' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Online' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                            {emp.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-500">{emp.lastActive}</td>
+                        <td className="py-3 px-3 text-right">
+                          <button onClick={() => navigate('/admin/employees')} className="text-slate-400 hover:text-slate-600 p-1">
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="7" className="py-8 text-center text-xs text-slate-400">
+                        {loading ? 'Loading team records from database...' : 'No employees found.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Quick Actions (4 cols) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 mb-3">Quick Actions</h3>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  onClick={() => {
+                    if (!isPlanActive) {
+                      toast.error('❌ Subscription Plan Not Active! Billing enable first to add employees.', { id: 'dash-plan-check' });
+                      navigate('/admin/billing');
+                      return;
+                    }
+                    navigate('/admin/employees');
+                  }}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition active:scale-95"
+                >
+                  <Users className="w-4 h-4 text-blue-600" /> Add Employee
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/attendance')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <CalendarCheck className="w-4 h-4 text-emerald-600" /> Attendance
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/managers')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <UserCheck className="w-4 h-4 text-indigo-600" /> Managers
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/tasks')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <ClipboardList className="w-4 h-4 text-purple-600" /> Tasks
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/managers')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <UserCheck className="w-4 h-4 text-cyan-600" /> Assign Team
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/expenses')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <Receipt className="w-4 h-4 text-amber-600" /> Expenses
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/reports')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <BarChart3 className="w-4 h-4 text-blue-600" /> Reports
+                </button>
+
+                <button
+                  onClick={() => navigate('/admin/leaves')}
+                  className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl font-semibold flex items-center gap-2 border border-slate-100 transition"
+                >
+                  <Calendar className="w-4 h-4 text-rose-600" /> Leaves
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Banner Card */}
+            <div className="mt-4 p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5">
+                <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-slate-700 font-medium">Keep your team productive with live tracking.</span>
+              </div>
+              <button
+                onClick={() => navigate('/admin/live-map')}
+                className="text-blue-600 font-bold hover:underline flex-shrink-0 text-[11px]"
+              >
+                Go to Live Tracking →
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </AdminLayout>
+    </TrackProLayout>
   );
 }

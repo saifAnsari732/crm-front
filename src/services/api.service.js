@@ -1,10 +1,33 @@
 import axios from 'axios';
 
+// ==========================================
+// BACKEND API BASE CONFIGURATION (DUAL ENV)
+// ==========================================
+// export const PROD_API_URL = 'https://kisanteamapp.online/api';
+export const DEV_API_URL = 'http://localhost:5001/api';
+
+const resolveApiBase = () => {
+  if (import.meta.env?.VITE_API_URL) return import.meta.env.VITE_API_URL.trim();
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.trim();
+  
+  // Auto-detect Production vs Development
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+      return DEV_API_URL;
+    }
+  }
+  return DEV_API_URL;
+};
+ 
+const API_BASE = resolveApiBase();
+
 const API = axios.create({
-  baseURL: 'https://field-backend-monitor-web-ym7d.onrender.com/api',
-  // baseURL: 'http://localhost:5000/api',
+  baseURL: API_BASE,
   withCredentials: true,
 });
+
+export { API, API_BASE };
 
 let refreshTokenPromise = null;
 
@@ -23,23 +46,41 @@ API.interceptors.request.use((config) => {
 });
 
 /**
- * Response interceptor: Handle 401 with token refresh
+ * Response interceptor: Handle 401 with silent dual-token refresh
  */
 API.interceptors.response.use(
   (res) => res,
   async (err) => {
     const originalRequest = err.config;
 
-    // Handle 401 (Unauthorized)
-    const isAuthRequest = originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh-token');
-    
+    // Handle 401 (Unauthorized - Access Token Expired)
+    const isAuthRequest =
+      originalRequest.url.includes('/auth/login') ||
+      originalRequest.url.includes('/auth/refresh-token') ||
+      originalRequest.url.includes('/auth/register');
+
     if (err.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
 
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+      if (!storedRefreshToken) {
+        // No refresh token available, force clean logout
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        localStorage.removeItem('organization');
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+        return Promise.reject(err);
+      }
+
       try {
-        // Only refresh token once (prevent multiple refresh requests)
+        // Only refresh token once across concurrent requests
         if (!refreshTokenPromise) {
-          refreshTokenPromise = API.post('/auth/refresh-token');
+          refreshTokenPromise = axios.post(`${API_BASE}/auth/refresh-token`, {
+            refreshToken: storedRefreshToken,
+          });
         }
 
         const { data } = await refreshTokenPromise;
@@ -47,16 +88,34 @@ API.interceptors.response.use(
 
         if (data.token) {
           localStorage.setItem('token', data.token);
+          if (data.refreshToken) {
+            localStorage.setItem('refreshToken', data.refreshToken);
+          }
+
+          // Re-issue failed request with new access token
           originalRequest.headers.Authorization = `Bearer ${data.token}`;
           return API(originalRequest);
         }
       } catch (refreshErr) {
         refreshTokenPromise = null;
-        // Refresh failed - clear auth and redirect to login
+        // Refresh token itself expired or invalid
         localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        localStorage.removeItem('organization');
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshErr);
+      }
+    }
+
+    // Handle 402 (Payment Required / Plan Inactive)
+    if (err.response?.status === 402) {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/admin/billing')) {
+        setTimeout(() => {
+          window.location.href = '/admin/billing';
+        }, 1200);
       }
     }
 
@@ -68,8 +127,12 @@ API.interceptors.response.use(
 export const authAPI = {
   login: (data) => API.post('/auth/login', data),
   register: (data) => API.post('/auth/register', data),
+  registerOrganization: (data) => API.post('/auth/register-organization', data),
   logout: () => API.post('/auth/logout'),
-  refreshToken: () => API.post('/auth/refresh-token'),
+  refreshToken: (refreshToken) =>
+    axios.post(`${API_BASE}/auth/refresh-token`, {
+      refreshToken: refreshToken || localStorage.getItem('refreshToken'),
+    }),
   getMe: () => API.get('/auth/me'),
   updateProfile: (data) => API.put('/auth/profile', data),
   changePassword: (data) => API.put('/auth/change-password', data),
@@ -112,6 +175,7 @@ export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
   getEmployees: (params) => API.get('/admin/employees', { params }),
   getManagers: () => API.get('/admin/managers'),
+  createManager: (data) => API.post('/admin/managers', data),
   approveEmployee: (id) => API.put(`/admin/employees/${id}/approve`),
   toggleBlock: (id) => API.put(`/admin/employees/${id}/block`),
   updateEmployee: (id, data) => API.put(`/admin/employees/${id}`, data),
@@ -119,7 +183,8 @@ export const adminAPI = {
   getHistory: (params) => API.get('/admin/tracking-history', { params }),
   adjustDistance: (data) => API.put('/admin/tracking/adjust-distance', data),
   getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
-  getManagers: () => API.get('/admin/managers'),
+  getOrganization: () => API.get('/admin/organization'),
+  updateOrganization: (data) => API.put('/admin/organization', data),
 };
 
 // ─── Manager ──────────────────────────────────────────────────────────────
@@ -137,6 +202,7 @@ export const employeeAPI = {
   getAll: () => API.get('/employees'),
   getById: (id) => API.get(`/employees/${id}`),
   update: (id, data) => API.put(`/employees/${id}`, data),
+  block: (id) => API.put(`/employees/${id}/block`),
   delete: (id) => API.delete(`/employees/${id}`),
 };
 
@@ -155,7 +221,7 @@ export const notificationAPI = {
 // ─── Upload ───────────────────────────────────────────────────────────────
 export const uploadAPI = {
   getAuth: () => API.get('/upload/auth'),
-  uploadImage: (data) => API.post('/upload/image', data),
+  uploadImage: (formData) => API.post('/upload/image', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 // ─── Leaves ───────────────────────────────────────────────────────────────
@@ -172,6 +238,7 @@ export const taskAPI = {
   create: (data) => API.post('/tasks', data),
   getAll: (params) => API.get('/tasks/all', { params }),
   getMy: (params) => API.get('/tasks/my', { params }),
+  update: (id, data) => API.put(`/tasks/${id}`, data),
   updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
   delete: (id) => API.delete(`/tasks/${id}`),
 };

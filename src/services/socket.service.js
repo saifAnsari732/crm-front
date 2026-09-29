@@ -117,9 +117,9 @@ const playAlertSound = () => {
 export const initSocket = (token) => {
   if (socket?.connected) return socket;
 
+  const socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
   socket = io(
-    'https://field-moniter-back.onrender.com',
-    // 'http://localhost:5000/api',
+    socketUrl,
     {
       auth: { token },
       reconnection: true,
