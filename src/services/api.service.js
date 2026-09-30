@@ -3,23 +3,27 @@ import axios from 'axios';
 // ==========================================
 // BACKEND API BASE CONFIGURATION (DUAL ENV)
 // ==========================================
-export const DEV_API_URL= 'https://field-backend-monitor-web-ym7d.onrender.com/api';
-// export const DEV_API_URL = 'http://localhost:5001/api';
+export const DEV_API_URL = 'https://field-backend-monitor-web-ym7d.onrender.com/api';
 
 const resolveApiBase = () => {
-  if (import.meta.env?.VITE_API_URL) return import.meta.env.VITE_API_URL.trim();
-  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL.trim();
-  
-  // Auto-detect Production vs Development
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
-      return DEV_API_URL;
-    }
+  let url = (import.meta.env?.VITE_API_URL || process.env.REACT_APP_API_URL || '').trim();
+
+  // If environment variable has the old/dead Render service URL or empty, override with active backend
+  if (!url || url.includes('crm-b-y8rv') || url === 'undefined') {
+    url = DEV_API_URL;
   }
-  return DEV_API_URL;
+
+  // Remove trailing slash if present
+  url = url.replace(/\/+$/, '');
+
+  // Ensure /api suffix exists
+  if (!url.endsWith('/api')) {
+    url = `${url}/api`;
+  }
+
+  return url;
 };
- 
+
 const API_BASE = resolveApiBase();
 
 const API = axios.create({

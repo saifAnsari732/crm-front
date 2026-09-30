@@ -117,7 +117,9 @@ const playAlertSound = () => {
 export const initSocket = (token) => {
   if (socket?.connected) return socket;
 
-  const socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+  const socketUrl = process.env.REACT_APP_SOCKET_URL?.includes('crm-b-y8rv') 
+    ? 'https://field-backend-monitor-web-ym7d.onrender.com' 
+    : (process.env.REACT_APP_SOCKET_URL || 'https://field-backend-monitor-web-ym7d.onrender.com');
   socket = io(
     socketUrl,
     {
