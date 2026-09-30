@@ -1,6 +1,6 @@
 import axios from 'axios';
+import { API_BASE } from '../services/api.service';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 const RAZORPAY_KEY_ID =
   process.env.REACT_APP_RAZORPAY_KEY_ID ||
   process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
@@ -53,7 +53,7 @@ export const initiateRazorpayCheckout = async ({
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
     const response = await axios.post(
-      `${API_URL}/payment/create-order`,
+      `${API_BASE}/payment/create-order`,
       {
         plan,
         billingCycle,
