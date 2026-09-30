@@ -101,7 +101,7 @@ export default function TrackProLayout({ children }) {
 
       {/* TrackPro Sidebar */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 w-72 bg-white border-r-2 border-rose-200/90 shadow-sm shadow-rose-100/40 z-50 flex flex-col justify-between transition-transform duration-200 ease-in-out ${
+        className={`fixed top-0 left-0 bottom-0 w-72 bg-white border-r-2 border-rose-200/90 shadow-sm shadow-rose-100/40 z-50 flex flex-col justify-between transition-transform duration-200 ease-in-out print:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
@@ -306,10 +306,10 @@ export default function TrackProLayout({ children }) {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-72 print:pl-0">
         {/* Full-Width Red Header Alert Bar: Plan Not Active */}
         {!isPlanActive && isOrgAdmin && (
-          <div className="w-full bg-red-600 border-b border-red-700 text-white px-4 sm:px-6 py-2.5 shadow-md flex items-center justify-between gap-3 text-xs sm:text-sm font-bold sticky top-0 z-50 animate-pulse">
+          <div className="w-full bg-red-600 border-b border-red-700 text-white px-4 sm:px-6 py-2.5 shadow-md flex items-center justify-between gap-3 text-xs sm:text-sm font-bold sticky top-0 z-50 animate-pulse print:hidden">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping flex-shrink-0" />
               <AlertTriangle className="w-5 h-5 flex-shrink-0 text-white" />
@@ -336,7 +336,7 @@ export default function TrackProLayout({ children }) {
         )}
 
         {/* TrackPro Topbar */}
-        <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 px-6 flex items-center justify-between">
+        <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 px-6 flex items-center justify-between print:hidden">
           <div className="flex items-center gap-3 flex-1 max-w-xl">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -385,7 +385,7 @@ export default function TrackProLayout({ children }) {
         </header>
 
         {/* Screen Content Outlet */}
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto w-full min-w-0">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto w-full min-w-0 print:p-0 print:m-0 print:overflow-visible">{children}</main>
       </div>
     </div>
   );

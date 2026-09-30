@@ -417,13 +417,13 @@ export default function AdminBilling() {
               </div>
 
               <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                {currentPlanName}
+                {isPlanActive ? currentPlanName : 'No Active Plan'}
               </h2>
 
               <p className="text-sm text-slate-600 font-medium max-w-2xl">
                 {isPlanActive
-                  ? `Your organization subscription is active and in good standing. All field telemetry, GPS tracking, and CRUD operations are fully unlocked.`
-                  : `Your organization currently has no active subscription plan. Feature access, live GPS tracking, and employee additions are locked until a plan is purchased.`}
+                  ? 'Your subscription is active with full platform, telemetry, and tracking access.'
+                  : 'Choose a subscription plan below to activate your organization workspace.'}
               </p>
             </div>
 
@@ -481,15 +481,15 @@ export default function AdminBilling() {
         >
           {/* Active / Inactive Plan Context Banner */}
           {!isPlanActive ? (
-            <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-900 shadow-xs">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-950">
-                    Active Base Plan Required for Seat Add-Ons
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-900 shadow-xs">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                    Active Base Plan Required
                   </h4>
                   <p className="text-xs text-amber-800 font-medium">
-                    Seat top-ups aapke <strong>existing active plan</strong> me add hote hain. Aapka plan currently inactive ya expire hai, isliye individual seat purchase blocked hai. <strong>Pehle niche diye gaye plans me se apna base plan active karein!</strong>
+                    Seat add-ons attach to an active base plan. Please select a plan below.
                   </p>
                 </div>
               </div>
@@ -500,36 +500,36 @@ export default function AdminBilling() {
                   const sec = document.getElementById('subscription-plans-section');
                   if (sec) sec.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
               >
-                <span>Activate Plan Below</span>
+                <span>View Plans</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black uppercase tracking-wider">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Will be added directly to your Active Plan: <strong>{currentPlanName}</strong></span>
+                <span>Base Plan: <strong>{currentPlanName}</strong></span>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-bold">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Validity: <strong>Till {expiresAt?.toLocaleDateString()} ({daysRemaining} Days Left)</strong></span>
+                <span>Valid until <strong>{expiresAt?.toLocaleDateString()}</strong> ({daysRemaining}d left)</span>
               </div>
             </div>
           )}
 
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 pb-6 border-b border-indigo-100/80">
             <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-600 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-600 text-white text-[11px] font-bold uppercase tracking-wider shadow-xs">
                 <Zap className="w-3.5 h-3.5 text-amber-300" />
-                Capacity Top-Up (Add-On)
+                Seat Add-Ons
               </div>
-              <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                Need More Seats? Buy Individual Staff Quota
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                Buy Individual Staff Quota
               </h3>
               <p className="text-xs text-slate-600 font-medium max-w-2xl">
-                Ye extra seats aapke <strong>existing active plan</strong> me add ho jayengi aur <strong>jab tak aapka base plan active rahega tab tak hi valid rahengi</strong> (Base plan expire hone par ye extra seats bhi expire ho jayengi). Individual employee seats cost <strong>₹200/seat</strong> aur manager accounts cost <strong>₹300/seat</strong>.
+                Add extra employee (₹200/seat) or manager (₹300/seat) quota to your active subscription.
               </p>
             </div>
 
@@ -727,8 +727,8 @@ export default function AdminBilling() {
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
                 {isPlanActive
-                  ? `Purchased seats will be immediately added to your active "${currentPlanName}" quota and remain valid till plan expiry (${expiresAt?.toLocaleDateString()}).`
-                  : 'Cannot purchase add-on seats while base plan is inactive. Please activate a base plan first.'}
+                  ? `Seats are added immediately to your plan and remain valid until ${expiresAt?.toLocaleDateString()}.`
+                  : 'Add-on purchases require an active subscription plan.'}
               </span>
             </div>
 
@@ -736,14 +736,14 @@ export default function AdminBilling() {
               <button
                 type="button"
                 onClick={() => {
-                  toast.error('⚠️ Please choose and activate a subscription plan first!');
+                  toast.error('Please choose and activate a subscription plan first.');
                   const sec = document.getElementById('subscription-plans-section');
                   if (sec) sec.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <AlertTriangle className="w-4 h-4 text-amber-200" />
-                <span>ACTIVATE BASE PLAN FIRST (TOP-UP DISABLED)</span>
+                <span>Activate Base Plan First</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -751,15 +751,15 @@ export default function AdminBilling() {
                 type="button"
                 onClick={handleAddonCheckout}
                 disabled={addonCheckoutLoading || totalAddonAmount <= 0}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-lg shadow-indigo-600/25 transition active:scale-98 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {addonCheckoutLoading ? (
-                  <span>Processing Razorpay Checkout...</span>
+                  <span>Processing Checkout...</span>
                 ) : (
                   <>
                     <CreditCard className="w-4 h-4 text-amber-300" />
                     <span>
-                      BUY {addonEmployeeSeats + addonManagerSeats} EXTRA SEAT(S) FOR ₹{totalAddonAmount} NOW
+                      Add {addonEmployeeSeats + addonManagerSeats} Seat(s) • ₹{totalAddonAmount}
                     </span>
                     <ArrowRight className="w-4 h-4" />
                   </>

@@ -3,7 +3,7 @@ import axios from 'axios';
 // ==========================================
 // BACKEND API BASE CONFIGURATION (DUAL ENV)
 // ==========================================
-// export const PROD_API_URL = 'https://kisanteamapp.online/api';
+// export const PROD_API_URL = 'https://field-backend-monitor-web-ym7d.onrender.com/api';
 export const DEV_API_URL = 'http://localhost:5001/api';
 
 const resolveApiBase = () => {

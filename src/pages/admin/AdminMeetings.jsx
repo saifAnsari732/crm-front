@@ -138,7 +138,7 @@ export function AdminMeetings() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200 shadow-2xs">
+            <span className="px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200 shadow-xs">
               {total} Total Visits in DB
             </span>
           </div>
@@ -320,7 +320,7 @@ export function AdminMeetings() {
                                   notes: m.meetingNotes,
                                 })
                               }
-                              className="group relative w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shadow-2xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
+                              className="group relative w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shadow-xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
                               title="Click to view visit selfie"
                             >
                               <img
