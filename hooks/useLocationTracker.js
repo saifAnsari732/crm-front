@@ -7,9 +7,9 @@ import { showCustomAlert } from '../components/GlobalAlert';
 import { storage } from '../services/storage';
 import { trackingApi } from '../services/api';
 import socketService from '../services/socket';
-import { BACKGROUND_TRACKING_TASK } from '../services/locationTask';
+import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat } from '../services/locationTask';
 import { enqueueCoordinate, enqueueStop } from '../services/offlineSync';
-import { cancelNoMovementNotification, scheduleNoMovementNotification } from '../services/trackingNotification';
+import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification } from '../services/trackingNotification';
 import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
 
 /* =========================================================================
@@ -92,6 +92,13 @@ export default function useLocationTracker() {
           await storage.removeItem('tracking_accumulated_distance');
           await storage.removeItem('last_recorded_location');
           await cancelNoMovementNotification();
+          await sendAutoClosedNotification();
+          
+          // Show alert to employee when session was auto-closed due to inactivity
+          Alert.alert(
+            "Shift Auto-Closed",
+            "Aapki shift lambi Inactivity ki wajah se server dwara band ho gayi hai. Kripya naye safar ke liye dobara 'Punch In' karein."
+          );
         }
       } catch (serverError) {
         console.log('📍 useLocationTracker: Server session check deferred:', serverError.message);
@@ -391,6 +398,8 @@ export default function useLocationTracker() {
 
       setIsTracking(true);
       DeviceEventEmitter.emit('TrackingStateChanged', true);
+      // Start heartbeat to keep server session alive even when stationary
+      startHeartbeat(sessionId);
       console.log('📍 useLocationTracker: Background tracking started successfully!');
 
       /* === NATIVE PUSH NOTIFICATIONS FOR APK === */
@@ -529,6 +538,8 @@ export default function useLocationTracker() {
       await storage.removeItem('tracking_accumulated_session_id');
       await storage.removeItem('last_recorded_location');
       await cancelNoMovementNotification();
+      // Stop heartbeat timer
+      stopHeartbeat();
 
       setIsTracking(false);
       DeviceEventEmitter.emit('TrackingStateChanged', false);
