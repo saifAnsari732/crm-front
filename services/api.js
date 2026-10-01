@@ -2,6 +2,7 @@ import axios from 'axios';
 import { storage } from './storage';
 import { Platform } from 'react-native';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
+import Constants from 'expo-constants';
 
 let unauthorizedCallback = null;
 export const setUnauthorizedCallback = (callback) => {
@@ -10,14 +11,14 @@ export const setUnauthorizedCallback = (callback) => {
 
 // =========================================================================
 // BACKEND API CONFIGURATION
-// ─────────────────────────────────────────────────────────────────────────
-// PRODUCTION URL — always used in APK builds
 // =========================================================================
 export const PROD_URL = 'https://kisanteamapp.online/api';
 
 const getBaseUrl = () => {
-  // APK / EAS Production build → always use production server
-  if (process.env.NODE_ENV === 'production') return PROD_URL;
+  // Production / Release Build (EAS Production / Release APK / AAB) -> Always use production server!
+  if (!__DEV__ || process.env.NODE_ENV === 'production' || Constants.executionEnvironment === 'standalone') {
+    return PROD_URL;
+  }
 
   // Web (admin panel) → use same hostname so it works on any machine
   if (Platform.OS === 'web') {
@@ -27,11 +28,22 @@ const getBaseUrl = () => {
     return 'http://localhost:5000/api';
   }
 
-  // ─── DEVELOPER TOGGLE ───────────────────────────────────────────────────────
-  // Comment the line below and uncomment PROD_URL to switch to production.
-  // return `http://192.168.0.108:5000/api`;   // Local dev
-  return PROD_URL;                              // ← PRODUCTION (APK mode)
-  // ───────────────────────────────────────────────────────────────────────────
+  // Mobile Local Dev (Expo Go / Physical Device / Emulator)
+  // Automatically extract current computer's LAN IP address from Expo Constants
+  try {
+    const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.debuggerHost || Constants?.manifest2?.extra?.expoGo?.developer?.tool;
+    if (hostUri) {
+      const ip = hostUri.split(':')[0];
+      if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+        return `http://${ip}:5000/api`;
+      }
+    }
+  } catch (e) {
+    console.log('Expo host IP auto-detect error:', e);
+  }
+
+  // Fallback to local dev IP
+  return 'http://192.168.0.108:5000/api';
 };
 
 export const BASE_URL = getBaseUrl();

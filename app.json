@@ -3,7 +3,7 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.20",
+    "version": "1.0.21",
     "orientation": "portrait",
     "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       "googleMapsApiKey": "AIzaSyCgmGEomqsMzK3Fcx5Q4eVj8yWLkBBrbbA",
       "router": {},
       "eas": {
-        "projectId": "51919d79-bd08-4843-885f-0fb69e0a9882"
+        "projectId": "515d20bf-fa02-4283-ac04-1f2baa1cfedc"
       }
     },
     "ios": {
@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 40,
+      "versionCode": 41,
       "package": "com.kisanteam.crm",
       "splash": {
         "image": "./assets/splash.png",
@@ -122,6 +122,6 @@
       ],
       "expo-status-bar"
     ],
-    "owner": "saifuddinansari"
+    "owner": "saifalis"
   }
 }

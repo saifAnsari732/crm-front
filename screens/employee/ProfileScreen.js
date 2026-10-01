@@ -226,8 +226,8 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = () => {
-    const confirmationText = language === 'en' ? 'Are you sure you want to exit StaffSync?' : 'क्या आप सच में StaffSync से बाहर निकलना चाहते हैं?';
+  const handleLogout = async () => {
+    const confirmationText = language === 'en' ? 'Are you sure you want to exit KisanConnect?' : 'क्या आप सच में KisanConnect से बाहर निकलना चाहते हैं?';
     const titleText = language === 'en' ? 'Confirm Logout' : 'लॉगआउट की पुष्टि करें';
     const logoutBtnText = language === 'en' ? 'Logout' : 'लॉगआउट';
     const cancelBtnText = language === 'en' ? 'Cancel' : 'रद्द करें';
@@ -235,7 +235,8 @@ export default function ProfileScreen() {
     if (Platform.OS === 'web') {
       const confirmLogout = window.confirm(confirmationText);
       if (confirmLogout) {
-        logout();
+        await logout();
+        router.replace('/(auth)/login');
       }
     } else {
       Alert.alert(
@@ -243,7 +244,14 @@ export default function ProfileScreen() {
         confirmationText,
         [
           { text: cancelBtnText, style: 'cancel' },
-          { text: logoutBtnText, style: 'destructive', onPress: logout }
+          {
+            text: logoutBtnText,
+            style: 'destructive',
+            onPress: async () => {
+              await logout();
+              router.replace('/(auth)/login');
+            },
+          },
         ]
       );
     }

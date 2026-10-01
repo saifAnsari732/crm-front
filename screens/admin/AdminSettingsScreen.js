@@ -1,46 +1,556 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity, Switch,
-  Platform, RefreshControl, StatusBar, TextInput, Image, ActivityIndicator, Alert
+  Platform, RefreshControl, StatusBar, TextInput, Image,
+  ActivityIndicator, Alert, Dimensions, Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Settings, Shield, Navigation, Building2, Upload, CheckCircle2, Save, Image as ImageIcon, ArrowLeft, LogOut } from 'lucide-react-native';
+import {
+  Settings, Shield, Navigation, Building2, Upload, CheckCircle2,
+  Save, Image as ImageIcon, ArrowLeft, LogOut, MapPin, Clock,
+  Briefcase, Receipt, Users, Smartphone, Zap, Bell, Lock,
+  Compass, ChevronDown, ChevronUp, Globe, Mail, Phone,
+  Fuel, Target, ClipboardList, Camera, Eye, Layers, UserRound, FileText
+} from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { stopHeartbeat } from '../../services/locationTask';
-import { adminAPI, uploadAPI, getAvatarUrl } from '../../services/api';
+import { adminAPI, uploadAPI, getAvatarUrl, authAPI } from '../../services/api';
+
+// ── UI/UX Pro Max Design Tokens (No Black Colors) ──
+const COLORS = {
+  primary: '#2563EB',
+  primaryDark: '#1D4ED8',
+  primaryLight: '#DBEAFE',
+  primaryMuted: '#EFF6FF',
+  secondary: '#3B82F6',
+  accent: '#EA580C',
+  background: '#F8FAFC',
+  card: '#FFFFFF',
+  surface: '#F1F5F9',
+  border: '#E2E8F0',
+  borderLight: '#F1F5F9',
+  text: '#1E293B',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
+  success: '#059669',
+  successLight: '#ECFDF5',
+  successBorder: '#A7F3D0',
+  danger: '#DC2626',
+  dangerLight: '#FEF2F2',
+  dangerBorder: '#FECACA',
+  warning: '#D97706',
+  warningLight: '#FFFBEB',
+  purple: '#7C3AED',
+  purpleLight: '#F5F3FF',
+  indigo: '#4F46E5',
+  indigoLight: '#EEF2FF',
+  rose: '#E11D48',
+  roseLight: '#FFF1F2',
+  amber: '#D97706',
+  amberLight: '#FFFBEB',
+  white: '#FFFFFF',
+  headerGradientStart: '#2563EB',
+  headerGradientEnd: '#4F46E5',
+};
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
-const NAVY_DARK = '#0f172a';
-const NAVY_MID = '#1e293b';
-const BG_COLOR = '#f8fafc';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const cardShadow = Platform.OS === 'web'
-  ? { boxShadow: '0px 4px 14px rgba(15, 23, 42, 0.08)' }
-  : { elevation: 3, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } };
+  ? { boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05)' }
+  : { elevation: 2, shadowColor: '#64748B', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } };
+
+// ── Collapsible Section Component ──
+function CollapsibleSection({ icon: Icon, iconColor, title, subtitle, children, defaultOpen = true, badge }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
+      <TouchableOpacity
+        style={styles.sectionHeader}
+        onPress={() => setIsOpen(!isOpen)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.sectionIconWrap, { backgroundColor: (iconColor || COLORS.primary) + '14' }]}>
+          <Icon size={18} color={iconColor || COLORS.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            {badge && (
+              <View style={[styles.badge, { backgroundColor: COLORS.successLight, borderColor: COLORS.successBorder }]}>
+                <Text style={[styles.badgeText, { color: COLORS.success }]}>{badge}</Text>
+              </View>
+            )}
+          </View>
+          {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+        </View>
+        {isOpen ? (
+          <ChevronUp size={18} color={COLORS.textMuted} />
+        ) : (
+          <ChevronDown size={18} color={COLORS.textMuted} />
+        )}
+      </TouchableOpacity>
+      {isOpen && <View style={styles.sectionBody}>{children}</View>}
+    </Surface>
+  );
+}
+
+// ── Toggle Row Component ──
+function ToggleRow({ icon: Icon, iconColor, label, subtitle, value, onValueChange, trackColors }) {
+  return (
+    <View style={styles.settingRow}>
+      <View style={[styles.toggleIconWrap, { backgroundColor: (iconColor || COLORS.primary) + '12' }]}>
+        <Icon size={15} color={iconColor || COLORS.primary} />
+      </View>
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        {subtitle && <Text style={styles.settingSub}>{subtitle}</Text>}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{
+          false: '#E2E8F0',
+          true: trackColors?.true || COLORS.primaryLight,
+        }}
+        thumbColor={value ? (trackColors?.thumb || COLORS.primary) : '#F1F5F9'}
+        style={{ transform: [{ scale: 0.85 }] }}
+      />
+    </View>
+  );
+}
+
+// ── Feature Card Component ──
+function FeatureCard({ icon: Icon, iconColor, bgColor, title, description }) {
+  return (
+    <View style={[styles.featureCard, { borderLeftColor: iconColor }]}>
+      <View style={[styles.featureIconWrap, { backgroundColor: bgColor }]}>
+        <Icon size={16} color={iconColor} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.featureTitle}>{title}</Text>
+        <Text style={styles.featureDesc}>{description}</Text>
+      </View>
+      <View style={styles.featureActiveBadge}>
+        <CheckCircle2 size={12} color={COLORS.success} />
+        <Text style={styles.featureActiveText}>Active</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── DEDICATED MANAGER SETTINGS & PROFILE CONSOLE ──
+function ManagerSettingsConsole({ user, authOrg, logout, router }) {
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [email] = useState(user?.email || '');
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [passLoading, setPassLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+  const [passError, setPassError] = useState('');
+
+  // Preferences
+  const [geofenceAlerts, setGeofenceAlerts] = useState(true);
+  const [punchAlerts, setPunchAlerts] = useState(true);
+
+  const orgName = authOrg?.name || user?.organizationId?.name || user?.organization?.name || 'KISAN CHOICE';
+
+  const handleGoBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(admin)/dashboard');
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setSaveLoading(true);
+      setSaveSuccess('');
+      await authAPI.updateProfile({ name, phone });
+      setSaveSuccess('Manager profile updated successfully!');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } catch (e) {
+      const msg = e.response?.data?.message || e.message;
+      if (Platform.OS === 'web') alert('Failed to update profile: ' + msg);
+      else Alert.alert('Error', msg);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword) {
+      setPassError('Please enter current and new password');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError('New passwords do not match');
+      return;
+    }
+    try {
+      setPassLoading(true);
+      setPassError('');
+      setPassSuccess('');
+      await authAPI.changePassword({ oldPassword, newPassword });
+      setPassSuccess('Password changed successfully!');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPassSuccess(''), 3000);
+    } catch (e) {
+      setPassError(e.response?.data?.message || 'Failed to change password');
+    } finally {
+      setPassLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out of your Manager Console?')) {
+        try { stopHeartbeat(); } catch (_) {}
+        await logout();
+        router.replace('/(auth)/login');
+      }
+    } else {
+      Alert.alert(
+        'Logout Confirm',
+        'Are you sure you want to log out of your Manager Console?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: async () => {
+              try { stopHeartbeat(); } catch (_) {}
+              await logout();
+              router.replace('/(auth)/login');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const getUserInitials = (n) => {
+    if (!n) return 'M';
+    const p = n.trim().split(' ');
+    if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase();
+    return p[0].substring(0, 2).toUpperCase();
+  };
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      
+      {/* Blue/Indigo Gradient Top Bar */}
+      <LinearGradient
+        colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+        style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top', 'left', 'right']}>
+          <View style={styles.topNavRow}>
+            <TouchableOpacity style={styles.headerBtn} onPress={handleGoBack} activeOpacity={0.7}>
+              <ArrowLeft size={20} color="#fff" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.brandTitle}>Manager Settings</Text>
+              <Text style={styles.brandSub}>Profile & Account Preferences</Text>
+            </View>
+          </View>
+
+          {/* Manager Profile Header Card */}
+          <View style={styles.managerProfileCard}>
+            <View style={styles.managerAvatarBox}>
+              {getAvatarUrl(user?.avatar) ? (
+                <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.managerAvatarImg} />
+              ) : (
+                <View style={styles.managerAvatarFallback}>
+                  <Text style={styles.managerAvatarText}>{getUserInitials(user?.name)}</Text>
+                </View>
+              )}
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.managerProfileName}>{user?.name || 'Manager'}</Text>
+              <Text style={styles.managerProfileEmail}>{user?.email || ''}</Text>
+              <View style={styles.roleBadgeRow}>
+                <View style={styles.managerRoleBadge}>
+                  <Text style={styles.managerRoleBadgeText}>👔 FIELD MANAGER</Text>
+                </View>
+                <Text style={styles.managerOrgText}>• {orgName}</Text>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* Main Content Body */}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: COLORS.background }}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Success Alert Banner */}
+        {saveSuccess ? (
+          <View style={styles.successBanner}>
+            <CheckCircle2 size={16} color={COLORS.success} />
+            <Text style={styles.successBannerText}>{saveSuccess}</Text>
+          </View>
+        ) : null}
+
+        {/* 1. PERSONAL PROFILE & CONTACT DETAILS */}
+        <CollapsibleSection
+          icon={UserRound}
+          iconColor={COLORS.primary}
+          title="My Profile Details"
+          subtitle="Update your name, phone number, and contact info"
+          defaultOpen={true}
+        >
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>FULL NAME</Text>
+            <View style={styles.inputWrap}>
+              <Users size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your full name"
+                placeholderTextColor={COLORS.textMuted}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>PHONE NUMBER</Text>
+            <View style={styles.inputWrap}>
+              <Phone size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Enter phone number"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>EMAIL ADDRESS (Account ID)</Text>
+            <View style={[styles.inputWrap, { backgroundColor: COLORS.surface }]}>
+              <Mail size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.textInput, { color: COLORS.textMuted }]}
+                value={email}
+                editable={false}
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, saveLoading && { opacity: 0.7 }]}
+            onPress={handleSaveProfile}
+            disabled={saveLoading}
+            activeOpacity={0.8}
+          >
+            {saveLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Save size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.saveBtnText}>Save Profile Changes</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </CollapsibleSection>
+
+        {/* 2. SECURITY & PASSWORD CHANGE */}
+        <CollapsibleSection
+          icon={Lock}
+          iconColor={COLORS.indigo}
+          title="Security & Password"
+          subtitle="Change account password and login security"
+          defaultOpen={false}
+        >
+          {passError ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{passError}</Text>
+            </View>
+          ) : null}
+          {passSuccess ? (
+            <View style={styles.successBanner}>
+              <CheckCircle2 size={16} color={COLORS.success} />
+              <Text style={styles.successBannerText}>{passSuccess}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>CURRENT PASSWORD</Text>
+            <View style={styles.inputWrap}>
+              <Lock size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={oldPassword}
+                onChangeText={setOldPassword}
+                placeholder="Enter current password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>NEW PASSWORD</Text>
+            <View style={styles.inputWrap}>
+              <Lock size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="Enter new password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>CONFIRM NEW PASSWORD</Text>
+            <View style={styles.inputWrap}>
+              <Lock size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Confirm new password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: COLORS.indigo }, passLoading && { opacity: 0.7 }]}
+            onPress={handleChangePassword}
+            disabled={passLoading}
+            activeOpacity={0.8}
+          >
+            {passLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Lock size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.saveBtnText}>Update Password</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </CollapsibleSection>
+
+        {/* 3. MANAGER NOTIFICATIONS & PREFERENCES */}
+        <CollapsibleSection
+          icon={Bell}
+          iconColor={COLORS.amber}
+          title="Notification Preferences"
+          subtitle="Alerts for field staff check-ins and geofence breaches"
+          defaultOpen={true}
+        >
+          <ToggleRow
+            icon={MapPin}
+            iconColor={COLORS.primary}
+            label="Geofence Breach Alerts"
+            subtitle="Get notified when field staff leaves designated work area"
+            value={geofenceAlerts}
+            onValueChange={setGeofenceAlerts}
+          />
+          <ToggleRow
+            icon={Bell}
+            iconColor={COLORS.amber}
+            label="Staff Punch-in Notifications"
+            subtitle="Receive alert when an employee starts active field tracking"
+            value={punchAlerts}
+            onValueChange={setPunchAlerts}
+          />
+        </CollapsibleSection>
+
+        {/* 4. QUICK SHORTCUTS & TEAM SCOPE */}
+        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
+          <Text style={styles.sectionTitle}>Manager Quick Shortcuts</Text>
+          <Text style={styles.sectionSubtitle}>Jump to core team management console</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+            <TouchableOpacity
+              style={styles.shortcutTile}
+              onPress={() => router.push('/(admin)/team')}
+              activeOpacity={0.7}
+            >
+              <Users size={18} color={COLORS.primary} />
+              <Text style={styles.shortcutTileText}>Team Directory</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.shortcutTile}
+              onPress={() => router.push('/(admin)/reports')}
+              activeOpacity={0.7}
+            >
+              <FileText size={18} color={COLORS.purple} />
+              <Text style={styles.shortcutTileText}>Field Reports</Text>
+            </TouchableOpacity>
+          </View>
+        </Surface>
+
+        {/* 5. LOGOUT BUTTON */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <LogOut size={18} color={COLORS.danger} />
+          <Text style={styles.logoutBtnText}>Logout from Manager Console</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+}
 
 export default function AdminSettingsScreen() {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, organization: authOrg, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Check if current user is Manager -> Render Manager Console!
+  const userRole = (user?.role || '').toUpperCase();
+  const isManager = userRole === 'MANAGER' || userRole === 'FIELD_MANAGER';
+
   // Organization fields
-  const [orgName, setOrgName] = useState('Kisan Choice Pvt Ltd');
+  const [orgName, setOrgName] = useState('');
   const [orgLogo, setOrgLogo] = useState('');
   const [orgEmail, setOrgEmail] = useState('');
   const [orgPhone, setOrgPhone] = useState('');
+  const [orgSlug, setOrgSlug] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Org settings from backend
+  const [orgSettings, setOrgSettings] = useState({});
 
   // System controls
   const [highAccuracy, setHighAccuracy] = useState(true);
   const [geofenceAlerts, setGeofenceAlerts] = useState(true);
   const [requireOTP, setRequireOTP] = useState(true);
   const [emailNotify, setEmailNotify] = useState(true);
+  const [strictGeofence, setStrictGeofence] = useState(true);
+  const [requireSelfie, setRequireSelfie] = useState(true);
+  const [requireSignature, setRequireSignature] = useState(true);
+  const [requireMeetingSelfie, setRequireMeetingSelfie] = useState(true);
 
   const fetchOrg = async () => {
     try {
@@ -52,6 +562,16 @@ export default function AdminSettingsScreen() {
         if (org.logo) setOrgLogo(org.logo);
         if (org.email) setOrgEmail(org.email);
         if (org.phone) setOrgPhone(org.phone);
+        if (org.slug) setOrgSlug(org.slug);
+        if (org.settings) {
+          setOrgSettings(org.settings);
+          setHighAccuracy(org.settings.trackingIntervalSeconds <= 30);
+          setGeofenceAlerts(org.settings.strictGeofence !== false);
+          setStrictGeofence(org.settings.strictGeofence !== false);
+          setRequireSelfie(org.settings.requireSelfieAttendance !== false);
+          setRequireSignature(org.settings.requireClientSignature !== false);
+          setRequireMeetingSelfie(org.settings.requireMeetingSelfie !== false);
+        }
       }
     } catch (err) {
       console.log('Fetch org settings error:', err.message);
@@ -61,8 +581,16 @@ export default function AdminSettingsScreen() {
   };
 
   useEffect(() => {
-    fetchOrg();
-  }, []);
+    if (!isManager) {
+      fetchOrg();
+    } else {
+      setLoading(false);
+    }
+  }, [isManager]);
+
+  if (isManager) {
+    return <ManagerSettingsConsole user={user} authOrg={authOrg} logout={logout} router={router} />;
+  }
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -70,22 +598,39 @@ export default function AdminSettingsScreen() {
     setRefreshing(false);
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout Confirm',
-      'Are you sure you want to log out of KisanConnect?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try { stopHeartbeat(); } catch (_) {}
-            logout();
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(admin)/dashboard');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out of your KisanConnect account?')) {
+        try { stopHeartbeat(); } catch (_) {}
+        await logout();
+        router.replace('/(auth)/login');
+      }
+    } else {
+      Alert.alert(
+        'Logout Confirm',
+        'Are you sure you want to log out of your KisanConnect account?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: async () => {
+              try { stopHeartbeat(); } catch (_) {}
+              await logout();
+              router.replace('/(auth)/login');
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handlePickLogo = async () => {
@@ -106,7 +651,7 @@ export default function AdminSettingsScreen() {
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
         setUploadingLogo(true);
         const imageUri = result.assets[0].uri;
-        
+
         let formData = new FormData();
         if (Platform.OS === 'web') {
           const response = await fetch(imageUri);
@@ -122,7 +667,7 @@ export default function AdminSettingsScreen() {
         if (uploadRes.data?.url || uploadRes.data?.imageUrl) {
           const newUrl = uploadRes.data.url || uploadRes.data.imageUrl;
           setOrgLogo(newUrl);
-          Alert.alert('Success', 'Organization Logo uploaded! Click Save below to apply changes.');
+          Alert.alert('Success', 'Logo uploaded! Click Save to apply changes.');
         } else {
           Alert.alert('Upload Status', 'Logo uploaded locally. Please save settings.');
         }
@@ -135,260 +680,955 @@ export default function AdminSettingsScreen() {
 
   const handleSaveSettings = async () => {
     try {
-      setLoading(true);
+      setSaving(true);
       const res = await adminAPI.updateOrganization({
         name: orgName,
         logo: orgLogo,
         email: orgEmail,
         phone: orgPhone,
+        slug: orgSlug,
+        settings: {
+          ...orgSettings,
+          trackingIntervalSeconds: highAccuracy ? 15 : 60,
+          strictGeofence: strictGeofence,
+          requireSelfieAttendance: requireSelfie,
+          requireClientSignature: requireSignature,
+          requireMeetingSelfie: requireMeetingSelfie,
+        }
       });
 
+      setSaving(false);
       if (res.data?.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
-        Alert.alert('Success', 'Organization Logo & Settings updated successfully!');
+        Alert.alert('Settings Saved', 'Organization profile & policies updated successfully!');
       } else {
-        Alert.alert('Notice', res.data?.message || 'Settings saved');
+        Alert.alert('Error', res.data?.message || 'Failed to update organization');
       }
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to save organization settings');
-    } finally {
-      setLoading(false);
+      setSaving(false);
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Server error while saving settings');
     }
   };
 
-  const currentLogoUrl = getAvatarUrl(orgLogo);
-
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY_DARK} />
-
-      {/* HEADER */}
-      <LinearGradient colors={[NAVY_DARK, NAVY_MID]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
-        <SafeAreaView edges={['top']}>
-          <View style={styles.headerTitleRow}>
-            <TouchableOpacity style={styles.headerBackBtn} onPress={() => router.back()} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      
+      {/* Blue/Indigo Gradient Top Bar */}
+      <LinearGradient
+        colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+        style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top', 'left', 'right']}>
+          <View style={styles.topNavRow}>
+            <TouchableOpacity style={styles.headerBtn} onPress={handleGoBack} activeOpacity={0.7}>
               <ArrowLeft size={20} color="#fff" />
             </TouchableOpacity>
-            <View style={{ flex: 1, marginLeft: 6 }}>
-              <Text style={styles.headerTitle}>Organization & Security Settings</Text>
-              <Text style={styles.headerSub}>Manage organization logo, profile & policies</Text>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.brandTitle}>Organization Settings</Text>
+              <Text style={styles.brandSub}>Manage branding, policies & features</Text>
             </View>
-            <TouchableOpacity style={styles.headerLogoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-              <LogOut size={18} color="#fca5a5" />
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={handleSaveSettings}
+              activeOpacity={0.7}
+              disabled={saving}
+            >
+              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={18} color="#fff" />}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* BODY */}
       <ScrollView
-        style={{ backgroundColor: BG_COLOR }}
+        style={{ flex: 1, backgroundColor: COLORS.background }}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563eb" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {/* SECTION 1: ORGANIZATION LOGO & PROFILE */}
-        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <Building2 size={18} color="#059669" />
-            <Text style={styles.sectionTitle}>Organization Branding & Logo</Text>
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading Organization Policies...</Text>
           </View>
+        ) : (
+          <>
+            {saveSuccess && (
+              <View style={styles.saveSuccessBanner}>
+                <CheckCircle2 size={18} color={COLORS.success} />
+                <Text style={styles.saveSuccessText}>Organization Settings Saved Successfully!</Text>
+              </View>
+            )}
 
-          {/* Logo Upload Box */}
-          <View style={styles.logoSectionRow}>
-            <View style={styles.logoPreviewBox}>
-              {currentLogoUrl ? (
-                <Image source={{ uri: currentLogoUrl }} style={styles.logoImage} resizeMode="contain" />
-              ) : (
-                <Building2 size={32} color="#059669" />
-              )}
+            {/* Overview Metric Row */}
+            <View style={styles.overviewGrid}>
+              <View style={styles.overviewMetric}>
+                <Text style={styles.overviewVal}>{authOrg?.plan?.maxEmployees || 50}</Text>
+                <Text style={styles.overviewLbl}>Max Staff</Text>
+              </View>
+              <View style={styles.overviewMetric}>
+                <Text style={styles.overviewVal}>{highAccuracy ? '15s' : '60s'}</Text>
+                <Text style={styles.overviewLbl}>GPS Ping</Text>
+              </View>
+              <View style={styles.overviewMetric}>
+                <Text style={styles.overviewVal}>150m</Text>
+                <Text style={styles.overviewLbl}>Geofence</Text>
+              </View>
+              <View style={styles.overviewMetric}>
+                <Text style={[styles.overviewVal, { color: COLORS.success }]}>Active</Text>
+                <Text style={styles.overviewLbl}>Status</Text>
+              </View>
             </View>
 
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={styles.inputLabel}>Organization Logo</Text>
-              <TouchableOpacity
-                style={styles.uploadBtn}
-                onPress={handlePickLogo}
-                disabled={uploadingLogo}
-                activeOpacity={0.8}
+            {/* 1. ORGANIZATION BRANDING */}
+            <CollapsibleSection
+              icon={Building2}
+              iconColor={COLORS.primary}
+              title="Organization Branding & Logo"
+              subtitle="Company identity, logo & contact details"
+              badge="VERIFIED"
+            >
+              <View style={styles.logoSection}>
+                <Text style={styles.inputLabel}>Organization Logo</Text>
+                <View style={styles.logoPreviewRow}>
+                  <View style={styles.logoBox}>
+                    {orgLogo ? (
+                      <Image source={{ uri: orgLogo }} style={styles.logoImage} resizeMode="contain" />
+                    ) : (
+                      <Building2 size={32} color={COLORS.primary} />
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.uploadLogoBtn, uploadingLogo && { opacity: 0.6 }]}
+                    onPress={handlePickLogo}
+                    disabled={uploadingLogo}
+                    activeOpacity={0.8}
+                  >
+                    {uploadingLogo ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Camera size={16} color="#fff" />
+                        <Text style={styles.uploadLogoText}>Upload New Logo</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.logoHelpText}>PNG or JPG, square aspect ratio (250x250 recommended)</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Organization Name</Text>
+                <View style={styles.inputWrap}>
+                  <Building2 size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={orgName}
+                    onChangeText={setOrgName}
+                    placeholder="Company Name"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Support Email</Text>
+                <View style={styles.inputWrap}>
+                  <Mail size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={orgEmail}
+                    onChangeText={setOrgEmail}
+                    placeholder="support@company.com"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="email-address"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Contact Phone</Text>
+                <View style={styles.inputWrap}>
+                  <Phone size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={orgPhone}
+                    onChangeText={setOrgPhone}
+                    placeholder="+91 9876543210"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Tenant Slug</Text>
+                <View style={styles.inputWrap}>
+                  <Globe size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={orgSlug}
+                    onChangeText={setOrgSlug}
+                    placeholder="kisan-choice"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+            </CollapsibleSection>
+
+            {/* 2. TRACKING & GEOFENCING */}
+            <CollapsibleSection
+              icon={Navigation}
+              iconColor={COLORS.secondary}
+              title="Tracking Engine & Geofencing"
+              subtitle="GPS intervals, accuracy & breach alerts"
+            >
+              <ToggleRow
+                icon={Compass}
+                iconColor={COLORS.primary}
+                label="High-Precision GPS Interval"
+                subtitle="Capture location every 15 seconds on field"
+                value={highAccuracy}
+                onValueChange={setHighAccuracy}
+              />
+              <ToggleRow
+                icon={Bell}
+                iconColor={COLORS.amber}
+                label="Automated Geofence Breach Alerts"
+                subtitle="Notify manager when employee leaves site radius"
+                value={geofenceAlerts}
+                onValueChange={setGeofenceAlerts}
+              />
+              <ToggleRow
+                icon={MapPin}
+                iconColor={COLORS.success}
+                label="Strict Geofence Check-in"
+                subtitle="Block attendance if user is outside designated perimeter"
+                value={strictGeofence}
+                onValueChange={setStrictGeofence}
+              />
+
+              <View style={styles.geoPillRow}>
+                <View style={styles.geoPill}>
+                  <Text style={styles.geoPillVal}>10m</Text>
+                  <Text style={styles.geoPillLbl}>Min Distance</Text>
+                </View>
+                <View style={styles.geoPill}>
+                  <Text style={styles.geoPillVal}>500m</Text>
+                  <Text style={styles.geoPillLbl}>Max Accuracy</Text>
+                </View>
+                <View style={styles.geoPill}>
+                  <Text style={styles.geoPillVal}>150m</Text>
+                  <Text style={styles.geoPillLbl}>Geofence Radius</Text>
+                </View>
+              </View>
+            </CollapsibleSection>
+
+            {/* 3. SHIFT & ATTENDANCE POLICIES */}
+            <CollapsibleSection
+              icon={Clock}
+              iconColor={COLORS.purple}
+              title="Shift & Attendance Policies"
+              subtitle="Shift timings, grace period & selfie rules"
+              defaultOpen={false}
+            >
+              <ToggleRow
+                icon={Camera}
+                iconColor={COLORS.rose}
+                label="Mandatory Selfie Punch-in"
+                subtitle="Require live photo verification during check-in"
+                value={requireSelfie}
+                onValueChange={setRequireSelfie}
+              />
+            </CollapsibleSection>
+
+            {/* 4. SECURITY & AUTHENTICATION */}
+            <CollapsibleSection
+              icon={Shield}
+              iconColor={COLORS.rose}
+              title="Security & Authentication"
+              subtitle="OTP verification, email digests & access control"
+            >
+              <ToggleRow
+                icon={Lock}
+                iconColor={COLORS.rose}
+                label="Require OTP / Email Verification"
+                subtitle="Enforce verification on password resets"
+                value={requireOTP}
+                onValueChange={setRequireOTP}
+              />
+              <ToggleRow
+                icon={Mail}
+                iconColor={COLORS.purple}
+                label="Email Activity Digest"
+                subtitle="Daily summary of team check-ins & reports"
+                value={emailNotify}
+                onValueChange={setEmailNotify}
+              />
+            </CollapsibleSection>
+
+            {/* 5. EXPENSE RULES & TA/DA */}
+            <CollapsibleSection
+              icon={Fuel}
+              iconColor={COLORS.amber}
+              title="Expense Rules & TA/DA"
+              subtitle="Fuel rates, auto-approve limits & receipt policy"
+              defaultOpen={false}
+            >
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Fuel Travel Rate (per KM)</Text>
+                <View style={styles.inputWrap}>
+                  <Text style={{ fontWeight: 'bold', color: COLORS.textMuted, marginRight: 4 }}>₹</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value="2.50"
+                    editable={false}
+                  />
+                  <Text style={{ fontSize: 11, color: COLORS.textMuted }}>/ km</Text>
+                </View>
+              </View>
+            </CollapsibleSection>
+
+            {/* 6. VISITS & CLIENT RULES */}
+            <CollapsibleSection
+              icon={Briefcase}
+              iconColor={COLORS.indigo}
+              title="Visits & Client Rules"
+              subtitle="Meeting duration, signatures & geo-selfies"
+              defaultOpen={false}
+            >
+              <ToggleRow
+                icon={CheckCircle2}
+                iconColor={COLORS.indigo}
+                label="Require Client Signature"
+                subtitle="Collect digital signature upon visit completion"
+                value={requireSignature}
+                onValueChange={setRequireSignature}
+              />
+              <ToggleRow
+                icon={Camera}
+                iconColor={COLORS.primary}
+                label="Require Visit Photo"
+                subtitle="Capture client site photo before marking complete"
+                value={requireMeetingSelfie}
+                onValueChange={setRequireMeetingSelfie}
+              />
+            </CollapsibleSection>
+
+            {/* 7. FEATURE MATRIX */}
+            <CollapsibleSection
+              icon={Zap}
+              iconColor={COLORS.accent}
+              title="Organization Feature Matrix"
+              subtitle="Active modules & service capabilities"
+              defaultOpen={false}
+            >
+              <FeatureCard
+                icon={MapPin}
+                iconColor={COLORS.primary}
+                bgColor={COLORS.primaryMuted}
+                title="Realtime GPS Telemetry"
+                description="Live background location tracking with battery optimization"
+              />
+              <FeatureCard
+                icon={Receipt}
+                iconColor={COLORS.purple}
+                bgColor={COLORS.purpleLight}
+                title="Automated TA/DA Expense Calculator"
+                description="Instant distance-to-allowance payout calculations"
+              />
+              <FeatureCard
+                icon={Users}
+                iconColor={COLORS.success}
+                bgColor={COLORS.successLight}
+                title="Multi-Level Hierarchy & Teams"
+                description="Manager and Super-Admin role scoping for staff governance"
+              />
+            </CollapsibleSection>
+
+            {/* SAVE BUTTON */}
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleSaveSettings}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+                style={styles.saveBtnGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
               >
-                {uploadingLogo ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <>
-                    <Upload size={14} color="#fff" />
-                    <Text style={styles.uploadBtnText}>Upload New Logo</Text>
+                    <Save size={18} color="#fff" />
+                    <Text style={styles.saveBtnText}>Save Organization Settings</Text>
                   </>
                 )}
-              </TouchableOpacity>
-              <Text style={styles.helpText}>PNG or JPG format, square aspect ratio recommended</Text>
-            </View>
-          </View>
+              </LinearGradient>
+            </TouchableOpacity>
 
-          {/* Logo URL Direct Input */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.inputLabel}>Logo Image URL (Direct Link)</Text>
-            <View style={styles.inputWrap}>
-              <ImageIcon size={16} color="#64748b" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.textInput}
-                value={orgLogo}
-                onChangeText={setOrgLogo}
-                placeholder="https://example.com/logo.png"
-                placeholderTextColor="#94a3b8"
-                autoCapitalize="none"
-              />
-            </View>
-          </View>
-
-          {/* Organization Name Input */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.inputLabel}>Organization Name</Text>
-            <View style={styles.inputWrap}>
-              <Building2 size={16} color="#64748b" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.textInput}
-                value={orgName}
-                onChangeText={setOrgName}
-                placeholder="Enter Organization Name"
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-          </View>
-
-          {/* Organization Contact Email */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.inputLabel}>Support Email</Text>
-            <TextInput
-              style={styles.textInputFull}
-              value={orgEmail}
-              onChangeText={setOrgEmail}
-              placeholder="contact@organization.com"
-              placeholderTextColor="#94a3b8"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-        </Surface>
-
-        {/* SECTION 2: TRACKING ENGINE */}
-        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <Navigation size={18} color="#2563eb" />
-            <Text style={styles.sectionTitle}>Tracking Engine & Geofencing</Text>
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>High-Precision GPS Interval</Text>
-              <Text style={styles.settingSub}>Capture location every 15 seconds on field</Text>
-            </View>
-            <Switch value={highAccuracy} onValueChange={setHighAccuracy} trackColor={{ false: '#cbd5e1', true: '#93c5fd' }} thumbColor={highAccuracy ? '#2563eb' : '#f1f5f9'} />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>Automated Geofence Breach Alerts</Text>
-              <Text style={styles.settingSub}>Notify manager when employee leaves site radius</Text>
-            </View>
-            <Switch value={geofenceAlerts} onValueChange={setGeofenceAlerts} trackColor={{ false: '#cbd5e1', true: '#93c5fd' }} thumbColor={geofenceAlerts ? '#2563eb' : '#f1f5f9'} />
-          </View>
-        </Surface>
-
-        {/* SECTION 3: SECURITY & AUTH */}
-        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <Shield size={18} color="#e11d48" />
-            <Text style={styles.sectionTitle}>Security & Authentication</Text>
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>Require OTP / Email Verification</Text>
-              <Text style={styles.settingSub}>Enforce verification on password resets</Text>
-            </View>
-            <Switch value={requireOTP} onValueChange={setRequireOTP} trackColor={{ false: '#cbd5e1', true: '#fda4af' }} thumbColor={requireOTP ? '#e11d48' : '#f1f5f9'} />
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.settingLabel}>Email Activity Digest</Text>
-              <Text style={styles.settingSub}>Daily summary of team check-ins & reports</Text>
-            </View>
-            <Switch value={emailNotify} onValueChange={setEmailNotify} trackColor={{ false: '#cbd5e1', true: '#fda4af' }} thumbColor={emailNotify ? '#e11d48' : '#f1f5f9'} />
-          </View>
-        </Surface>
-
-        {/* SAVE BUTTON */}
-        <TouchableOpacity
-          style={[styles.saveBtn, saveSuccess && { backgroundColor: '#10b981' }]}
-          onPress={handleSaveSettings}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : saveSuccess ? (
-            <>
-              <CheckCircle2 size={18} color="#fff" />
-              <Text style={styles.saveBtnText}>Organization Logo & Settings Saved!</Text>
-            </>
-          ) : (
-            <>
-              <Save size={18} color="#fff" />
-              <Text style={styles.saveBtnText}>Save Organization Logo & Settings</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* LOGOUT BUTTON */}
-        <TouchableOpacity
-          style={styles.logoutFullBtn}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <LogOut size={18} color="#ef4444" />
-          <Text style={styles.logoutFullBtnText}>Logout from KisanConnect Account</Text>
-        </TouchableOpacity>
+            {/* LOGOUT BUTTON */}
+            <TouchableOpacity
+              style={styles.logoutFullBtn}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <LogOut size={16} color={COLORS.danger} />
+              <Text style={styles.logoutFullBtnText}>Logout from KisanConnect Account</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG_COLOR },
-  header: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: Platform.OS === 'android' ? 10 : 0 },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerBackBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  headerLogoutBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)' },
-  headerTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', fontFamily: FONT },
-  headerSub: { color: '#94a3b8', fontSize: 10, marginTop: 1 },
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  headerGradient: {
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: Platform.OS === 'android' ? 14 : 10,
+  },
+  topNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  headerBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  brandTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  brandSub: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 11,
+    fontWeight: '500',
+    fontFamily: FONT,
+  },
 
-  body: { padding: 14, gap: 14, maxWidth: 720, width: '100%', alignSelf: 'center' },
-  sectionCard: { backgroundColor: '#fff', borderRadius: 18, padding: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#0f172a', fontFamily: FONT },
+  // Manager Profile Header Card
+  managerProfileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...cardShadow,
+  },
+  managerAvatarBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  managerAvatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  managerAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  managerAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  managerProfileName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  managerProfileEmail: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    fontFamily: FONT,
+  },
+  roleBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  managerRoleBadge: {
+    backgroundColor: COLORS.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+  },
+  managerRoleBadgeText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  managerOrgText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    fontFamily: FONT,
+  },
 
-  logoSectionRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14, backgroundColor: '#f8fafc', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#f1f5f9' },
-  logoPreviewBox: { width: 64, height: 64, borderRadius: 14, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#d1fae5', overflow: 'hidden' },
-  logoImage: { width: 56, height: 56, borderRadius: 10 },
-  uploadBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6, alignSelf: 'flex-start' },
-  uploadBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  helpText: { fontSize: 9, color: '#94a3b8' },
+  body: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 40,
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+    gap: 12,
+  },
 
-  fieldGroup: { marginTop: 10 },
-  inputLabel: { fontSize: 11, fontWeight: 'bold', color: '#334155', marginBottom: 4 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10 },
-  textInput: { flex: 1, height: 42, fontSize: 13, color: '#0f172a', fontFamily: FONT },
-  textInputFull: { backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 42, fontSize: 13, color: '#0f172a', fontFamily: FONT },
+  saveSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.successLight,
+    borderColor: COLORS.successBorder,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  saveSuccessText: {
+    color: COLORS.success,
+    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: FONT,
+  },
 
-  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  settingLabel: { fontSize: 13, fontWeight: 'bold', color: '#0f172a' },
-  settingSub: { fontSize: 10, color: '#64748b', marginTop: 2 },
+  // Overview grid
+  overviewGrid: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: 'space-around',
+    ...cardShadow,
+  },
+  overviewMetric: {
+    alignItems: 'center',
+  },
+  overviewVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  overviewLbl: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    marginTop: 2,
+    fontFamily: FONT,
+  },
 
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 14, gap: 8, marginTop: 10 },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  logoutFullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff5f5', borderMinHeight: 48, paddingVertical: 14, borderRadius: 14, gap: 8, borderWidth: 1, borderColor: '#fecaca', marginBottom: 30 },
-  logoutFullBtnText: { color: '#ef4444', fontWeight: 'bold', fontSize: 14 },
+  // Section Card
+  sectionCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sectionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    fontFamily: FONT,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  sectionBody: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    paddingTop: 14,
+    gap: 14,
+  },
+
+  // Inputs
+  inputGroup: {
+    marginBottom: 4,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+    letterSpacing: 0.5,
+    fontFamily: FONT,
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    backgroundColor: COLORS.card,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text,
+    fontFamily: FONT,
+    paddingVertical: 0,
+  },
+
+  // Save Btn
+  saveBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+    fontFamily: FONT,
+  },
+
+  // Success & Error Banners
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.successLight,
+    borderColor: COLORS.successBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+    marginBottom: 10,
+  },
+  successBannerText: {
+    color: COLORS.success,
+    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: FONT,
+  },
+  errorBanner: {
+    backgroundColor: COLORS.dangerLight,
+    borderColor: COLORS.dangerBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  errorBannerText: {
+    color: COLORS.danger,
+    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: FONT,
+  },
+
+  // Shortcuts
+  shortcutTile: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    ...cardShadow,
+  },
+  shortcutTileText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+
+  // Logout Btn
+  logoutBtn: {
+    backgroundColor: COLORS.dangerLight,
+    borderColor: COLORS.dangerBorder,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 30,
+  },
+  logoutBtnText: {
+    color: COLORS.danger,
+    fontWeight: '800',
+    fontSize: 13,
+    fontFamily: FONT,
+  },
+
+  // Logo upload section
+  logoSection: {
+    marginBottom: 12,
+  },
+  logoPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 4,
+  },
+  logoBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: COLORS.primaryMuted,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 54,
+    height: 54,
+  },
+  uploadLogoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  uploadLogoText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: FONT,
+  },
+  logoHelpText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 6,
+    fontFamily: FONT,
+  },
+
+  // Toggle Row
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  toggleIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  settingSub: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 1,
+    fontFamily: FONT,
+  },
+
+  // Geo Pills
+  geoPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  geoPill: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    padding: 8,
+    alignItems: 'center',
+  },
+  geoPillVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  geoPillLbl: {
+    fontSize: 8,
+    color: COLORS.textMuted,
+    fontWeight: '700',
+    marginTop: 2,
+    fontFamily: FONT,
+  },
+
+  // Feature cards
+  featureCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 10,
+    borderLeftWidth: 3,
+    gap: 10,
+  },
+  featureIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  featureDesc: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 1,
+    fontFamily: FONT,
+    lineHeight: 14,
+  },
+  featureActiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.successLight,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.successBorder,
+  },
+  featureActiveText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: COLORS.success,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Buttons
+  saveBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+    borderRadius: 16,
+  },
+  logoutFullBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.dangerLight,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+  },
+  logoutFullBtnText: {
+    color: COLORS.danger,
+    fontWeight: '700',
+    fontSize: 13,
+    fontFamily: FONT,
+  },
+
+  // Loading
+  loadingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+    fontFamily: FONT,
+  },
 });

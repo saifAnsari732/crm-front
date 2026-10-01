@@ -33,6 +33,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  ArrowLeft,
   Calendar as CalendarIcon,
   Play,
   RotateCcw
@@ -106,6 +107,7 @@ export default function AdminMonitoringScreen() {
   const [routeCoords, setRouteCoords] = useState([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [showDirectory, setShowDirectory] = useState(true); // Default auto-opened for immediate staff list access!
+  const [isExpanded, setIsExpanded] = useState(false); // Expanded full height view for complete employee directory access!
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -436,42 +438,21 @@ export default function AdminMonitoringScreen() {
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
       {/* ── Scrollable Tab Bar ──────────────────────────────────── */}
-      {/* ── TAB 1: LIVE MAP SYSTEM (Maximum Screen Height!) ─────── */}
+      {/* ── TAB 1: LIVE MAP SYSTEM (Maximum Screen Height & Back Button) ─────── */}
       {activeTab === 'telemetry' && (
-        <View style={{ flex: 1 }}>
-          {/* Status Filter Chips */}
-          <View style={styles.filterChipsRow}>
+        <View style={{ flex: 1, position: 'relative' }}>
+          {/* Floating Back Button Overlay */}
+          <View style={styles.mapTopOverlay} pointerEvents="box-none">
             <TouchableOpacity
-              style={[styles.chip, mapFilter === 'ALL' && styles.chipActive]}
-              onPress={() => setMapFilter('ALL')}
+              style={styles.floatingBackBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.chipText, mapFilter === 'ALL' && styles.chipTextActive]}>ALL ({totalEmpCount})</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.chip, mapFilter === 'ACTIVE' && styles.chipActive]}
-              onPress={() => setMapFilter('ACTIVE')}
-            >
-              <Text style={[styles.chipText, mapFilter === 'ACTIVE' && styles.chipTextActive]}>ACTIVE ({activeCount})</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.chip, mapFilter === 'PUNCHED_OUT' && styles.chipActive]}
-              onPress={() => setMapFilter('PUNCHED_OUT')}
-            >
-              <Text style={[styles.chipText, mapFilter === 'PUNCHED_OUT' && styles.chipTextActive]}>PUNCHED OUT ({punchedOutCount})</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.historyBtn}
-              onPress={() => router.push('/(employee)/admin/history')}
-            >
-              <FileText size={13} color="#fff" />
-              <Text style={styles.historyBtnText}>KM HISTORY</Text>
+              <ArrowLeft size={20} color="#0f172a" />
             </TouchableOpacity>
           </View>
 
-          {/* Interactive Map View (EXPANDED HEIGHT) */}
+          {/* Interactive Map View (FULL MAP SECTION) */}
           <View style={styles.mapContainerLarge}>
             <MapViewComponent
               ref={mapRef}
@@ -490,69 +471,121 @@ export default function AdminMonitoringScreen() {
             )}
           </View>
 
-          {/* Collapsable Bottom Directory */}
-          <View style={[styles.directoryContainerCompact, { backgroundColor: C.surface }]}>
-            <TouchableOpacity style={styles.directoryHeader} onPress={() => setShowDirectory(!showDirectory)}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Users size={16} color="#008080" />
-                <Text style={[styles.directoryTitle, { color: C.text }]}>TEAM DIRECTORY ({filteredDirectory.length})</Text>
+          {/* Collapsable & Expandable Bottom Directory (Increased Height & Full Upper Scroll) */}
+          <View style={[styles.directoryContainerCompact, { backgroundColor: C.surface, maxHeight: isExpanded ? '85%' : '60%' }]}>
+            <TouchableOpacity
+              style={styles.directoryHeader}
+              onPress={() => setIsExpanded(!isExpanded)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.dragHandleIndicator} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Users size={16} color="#008080" />
+                  <Text style={[styles.directoryTitle, { color: C.text }]}>TEAM DIRECTORY ({directoryStaff.length})</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#008080' }}>
+                    {isExpanded ? 'Full Height' : 'Expand'}
+                  </Text>
+                  {isExpanded ? <ChevronDown size={18} color="#008080" /> : <ChevronUp size={18} color="#008080" />}
+                </View>
               </View>
-              {showDirectory ? <ChevronDown size={20} color={C.sub} /> : <ChevronUp size={20} color={C.sub} />}
             </TouchableOpacity>
 
             {showDirectory && (
               <>
-                <View style={[styles.searchBox, { backgroundColor: C.bg, borderColor: C.border, marginHorizontal: 0, marginBottom: 8 }]}>
-                  <Search size={16} color={C.sub} style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.searchInput, { color: C.text }]}
-                    placeholder="Search staff..."
-                    placeholderTextColor={C.sub}
-                    value={search}
-                    onChangeText={setSearch}
-                  />
-                </View>
-
-                <FlatList
-                  data={filteredDirectory}
-                  keyExtractor={(item, idx) => item._id || String(idx)}
-                  style={{ maxHeight: 180 }}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.staffRow,
-                        { borderColor: C.border },
-                        selectedEmployee?._id === item._id && { backgroundColor: isDark ? '#334155' : '#e0f2fe' }
-                      ]}
-                      onPress={() => handleSelectEmployee(item)}
-                    >
-                      <View style={{ position: 'relative' }}>
-                        {getAvatarUrl(item.avatar) ? (
-                          <Avatar.Image size={36} source={{ uri: getAvatarUrl(item.avatar) }} />
+                {/* ── Selected Employee Detail Banner with Today Total KM ── */}
+                {selectedEmployee && (
+                  <View style={styles.selectedEmpCard}>
+                    <View style={styles.selectedEmpHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                        {getAvatarUrl(selectedEmployee.avatar) ? (
+                          <Avatar.Image size={42} source={{ uri: getAvatarUrl(selectedEmployee.avatar) }} />
                         ) : (
-                          <Avatar.Text size={36} label={(item.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                          <Avatar.Text size={42} label={(selectedEmployee.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
                         )}
-                        <View style={[styles.listStatusDot, { backgroundColor: item.isTracking ? '#16a34a' : '#94a3b8' }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.selectedEmpName}>{selectedEmployee.name}</Text>
+                          <Text style={styles.selectedEmpSub}>{selectedEmployee.department || 'Field Agent'}</Text>
+                        </View>
                       </View>
+                      <TouchableOpacity onPress={() => setSelectedEmployee(null)} style={styles.closeEmpBtn}>
+                        <X size={16} color="#64748b" />
+                      </TouchableOpacity>
+                    </View>
 
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={[styles.empName, { color: C.text }]}>{item.name}</Text>
-                        <Text style={[styles.empSub, { color: C.sub }]} numberOfLines={1}>
-                          {item.isTracking ? item.address : 'Not Punched In'}
+                    {/* Today's Distance KM Highlight Box */}
+                    <View style={styles.kmHighlightBox}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.kmHighlightLabel}>TODAY'S TOTAL DISTANCE</Text>
+                        <Text style={styles.kmHighlightValue}>
+                          {(parseFloat(selectedEmployee.totalDistance) || 0).toFixed(1)} <Text style={{ fontSize: 13, fontWeight: '700' }}>KM</Text>
                         </Text>
                       </View>
-
-                      <View style={{ alignItems: 'flex-end' }}>
-                        {item.isTracking ? (
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#008080' }}>
-                            {(parseFloat(item.totalDistance) || 0).toFixed(1)} km
-                          </Text>
-                        ) : (
-                          <Text style={{ fontSize: 11, color: C.sub }}>Offline</Text>
-                        )}
+                      <View style={styles.statusPillBadge}>
+                        <Text style={styles.statusPillText}>
+                          {selectedEmployee.isTracking ? '🟢 ACTIVE ON FIELD' : '⚪ NOT PUNCHED IN'}
+                        </Text>
                       </View>
-                    </TouchableOpacity>
-                  )}
+                    </View>
+
+                    {/* Location Address */}
+                    <View style={styles.empDetailsRow}>
+                      <MapPin size={14} color="#008080" />
+                      <Text style={styles.empAddressText} numberOfLines={2}>
+                        {selectedEmployee.address || 'No location data'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* FlatList with Expanded Full Height (420px - 580px) */}
+                <FlatList
+                  data={directoryStaff}
+                  keyExtractor={(item, idx) => item._id || String(idx)}
+                  style={{ maxHeight: isExpanded ? 580 : 420 }}
+                  contentContainerStyle={{ paddingBottom: 30 }}
+                  showsVerticalScrollIndicator={true}
+                  renderItem={({ item }) => {
+                    const isSelected = selectedEmployee?._id === item._id;
+                    const kmVal = (parseFloat(item.totalDistance) || 0).toFixed(1);
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.staffRow,
+                          { borderColor: C.border },
+                          isSelected && { backgroundColor: isDark ? '#334155' : '#e0f2fe', borderColor: '#008080' }
+                        ]}
+                        onPress={() => handleSelectEmployee(item)}
+                      >
+                        <View style={{ position: 'relative' }}>
+                          {getAvatarUrl(item.avatar) ? (
+                            <Avatar.Image size={38} source={{ uri: getAvatarUrl(item.avatar) }} />
+                          ) : (
+                            <Avatar.Text size={38} label={(item.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />
+                          )}
+                          <View style={[styles.listStatusDot, { backgroundColor: item.isTracking ? '#16a34a' : '#94a3b8' }]} />
+                        </View>
+
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[styles.empName, { color: C.text }]}>{item.name}</Text>
+                          <Text style={[styles.empSub, { color: C.sub }]} numberOfLines={1}>
+                            {item.isTracking ? (item.address || 'Active On Field') : 'Not Punched In'}
+                          </Text>
+                        </View>
+
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                          <View style={[styles.kmBadge, item.isTracking ? styles.kmBadgeActive : styles.kmBadgeInactive]}>
+                            <Text style={styles.kmBadgeText}>{kmVal} KM</Text>
+                          </View>
+                          <Text style={{ fontSize: 10, color: item.isTracking ? '#16a34a' : C.sub, fontWeight: '600' }}>
+                            {item.isTracking ? 'Active' : 'Offline'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }}
                 />
               </>
             )}
@@ -934,17 +967,33 @@ export default function AdminMonitoringScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  filterChipsRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1' },
-  chipActive: { backgroundColor: '#008080' },
-  chipText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: '#64748b' },
-  chipTextActive: { color: '#ffffff' },
-  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14, backgroundColor: '#283b96' },
-  historyBtnText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: '#ffffff' },
+  mapTopOverlay: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 14 : 14,
+    left: 14,
+    zIndex: 9999,
+    elevation: 10,
+  },
+  floatingBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   mapContainerLarge: { flex: 1, position: 'relative', minHeight: 380 },
   mapLoader: { position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.9)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
-  directoryContainerCompact: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 12, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-  directoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  directoryContainerCompact: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 12, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.12, shadowRadius: 5 },
+  dragHandleIndicator: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#cbd5e1', alignSelf: 'center', marginBottom: 8 },
+  directoryHeader: { flexDirection: 'column', alignItems: 'center', paddingVertical: 4 },
   directoryTitle: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', letterSpacing: 0.5 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, height: 36 },
   searchInput: { fontFamily: FONT, flex: 1, fontSize: 12, paddingVertical: 0 },
@@ -978,6 +1027,109 @@ const styles = StyleSheet.create({
   reportSummary: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   reportRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1 },
   reportLabel: { fontFamily: FONT, fontSize: 11 },
-  reportVal: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold' },
+  selectedEmpCard: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    padding: 12,
+    marginBottom: 10,
+  },
+  selectedEmpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  selectedEmpName: {
+    fontFamily: FONT,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  selectedEmpSub: {
+    fontFamily: FONT,
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  closeEmpBtn: {
+    padding: 5,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  kmHighlightBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#dcfce7',
+    marginBottom: 8,
+  },
+  kmHighlightLabel: {
+    fontFamily: FONT,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#15803d',
+    letterSpacing: 0.5,
+  },
+  kmHighlightValue: {
+    fontFamily: FONT,
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#16a34a',
+    marginTop: 2,
+  },
+  statusPillBadge: {
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  statusPillText: {
+    fontFamily: FONT,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  empDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  empAddressText: {
+    fontFamily: FONT,
+    fontSize: 11,
+    color: '#334155',
+    flex: 1,
+  },
+  kmBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  kmBadgeActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  kmBadgeInactive: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+  },
+  kmBadgeText: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#059669',
+  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
 });

@@ -182,24 +182,33 @@ export default function OrgAdminDashboardScreen() {
     router.push(path);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setProfileMenuVisible(false);
     setSideMenuVisible(false);
-    Alert.alert(
-      'Logout Confirm Karein',
-      'Kya aap sach mein KisanConnect se logout karna chahte hain?',
-      [
-        { text: 'Ruk Jao', style: 'cancel' },
-        {
-          text: 'Haan, Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try { stopHeartbeat(); } catch (_) {}
-            logout();
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out of KisanConnect?')) {
+        try { stopHeartbeat(); } catch (_) {}
+        await logout();
+        router.replace('/(auth)/login');
+      }
+    } else {
+      Alert.alert(
+        'Logout Confirm',
+        'Are you sure you want to log out of KisanConnect?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: async () => {
+              try { stopHeartbeat(); } catch (_) {}
+              await logout();
+              router.replace('/(auth)/login');
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleCall = (phone) => {
@@ -316,10 +325,10 @@ export default function OrgAdminDashboardScreen() {
 
               <TouchableOpacity onPress={() => setProfileMenuVisible(true)} activeOpacity={0.8}>
                 {getAvatarUrl(user?.avatar) ? (
-                  <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.profileAvatarImg} resizeMode="cover" />
+                  <Image source={{ uri: orgLogoUrl }} style={styles.profileAvatarImg} resizeMode="contain" />
                 ) : (
                   <View style={styles.profileAvatar}>
-                    <Text style={styles.profileAvatarText}>{getUserInitials(user?.name || 'KC')}</Text>
+                    <Text style={styles.profileAvatarText}>{getUserInitials(user?.name)}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1118,23 +1127,25 @@ const styles = StyleSheet.create({
   emptyWrap: { padding: 20, alignItems: 'center' },
   emptyText: { color: '#94a3b8', fontSize: 12 },
 
-  /* FLOATING BOTTOM TAB BAR STYLES */
-  bottomTabBarContainer: { position: 'absolute', bottom: Platform.OS === 'ios' ? 28 : 20, left: 16, right: 16, zIndex: 999 },
+  /* FIXED BOTTOM TAB BAR STYLES (NO FLOATING) */
+  bottomTabBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 999 },
   bottomTabBarSurface: {
     backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingVertical: 8,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 54,
     paddingHorizontal: 12,
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(15, 23, 42, 0.08)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15, 23, 42, 0.08)',
     shadowColor: '#0f172a',
     shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 16,
   },
   tabBarItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },

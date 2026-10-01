@@ -29,7 +29,7 @@ export default function AdminLayout() {
     <View style={{ flex: 1, backgroundColor: '#f4f8fb' }}>
       <Stack
         screenOptions={{
-          headerShown: true,
+          headerShown: false,
           headerBackTitleVisible: false,
           headerTintColor: '#ffffff',
           headerTitleAlign: 'center',
