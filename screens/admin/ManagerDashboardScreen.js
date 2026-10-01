@@ -463,7 +463,7 @@ export default function ManagerDashboardScreen() {
             <TouchableOpacity
               style={[
                 styles.punchBtn,
-                isTracking ? styles.punchBtnStop : styles.punchBtnStartPink
+                isTracking ? styles.punchBtnStop : styles.punchBtnStartTeal
               ]}
               onPress={handleClockToggle}
               disabled={isUploadingSelfie}
@@ -1178,8 +1178,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     ...cardShadow,
   },
-  punchBtnStartPink: {
-    backgroundColor: '#E11D48',
+  punchBtnStartTeal: {
+    backgroundColor: '#00C6A9',
   },
   punchBtnStop: {
     backgroundColor: '#DC2626',
