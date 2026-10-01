@@ -453,11 +453,6 @@ export default function ManagerDashboardScreen() {
               <Text style={[styles.trackingMainTitle, { color: '#000000' }]}>
                 {isTracking ? 'Your Field Duty Shift Is Active' : 'Start Your Field Shift (Punch In)'}
               </Text>
-              <Text style={[styles.trackingSubTitle, { color: '#1E293B' }]}>
-                {isTracking
-                  ? 'GPS location & distance telemetry are active. End shift when duty completes.'
-                  : 'Take mandatory selfie verification to start tracking field visits, distance & route.'}
-              </Text>
             </View>
 
             <TouchableOpacity
@@ -526,21 +521,21 @@ export default function ManagerDashboardScreen() {
               <Text style={styles.actionPillLabel}>Visits</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/tasks')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/tasks')} activeOpacity={0.7}>
               <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
                 <CheckSquare size={18} color={COLORS.purple} />
               </View>
               <Text style={styles.actionPillLabel}>Tasks Plan</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/leaves')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/leaves')} activeOpacity={0.7}>
               <View style={[styles.actionIconCircle, { backgroundColor: COLORS.warningLight }]}>
                 <Calendar size={18} color={COLORS.warning} />
               </View>
               <Text style={styles.actionPillLabel}>Leaves</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/expenses')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/expenses')} activeOpacity={0.7}>
               <View style={[styles.actionIconCircle, { backgroundColor: COLORS.successLight }]}>
                 <Wallet size={18} color={COLORS.success} />
               </View>
@@ -550,7 +545,7 @@ export default function ManagerDashboardScreen() {
 
           {/* Row 2: Sales & Team Telemetry */}
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/leads')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/leads')} activeOpacity={0.7}>
               <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
                 <UserPlus size={18} color={COLORS.primary} />
               </View>
@@ -868,22 +863,22 @@ export default function ManagerDashboardScreen() {
                   <Text style={styles.drawerMenuText}>Meetings & Client Visits</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/tasks')}>
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tasks')}>
                   <CheckSquare size={18} color={COLORS.purple} />
                   <Text style={styles.drawerMenuText}>Action Plan & Tasks</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/leaves')}>
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/leaves')}>
                   <Calendar size={18} color={COLORS.warning} />
                   <Text style={styles.drawerMenuText}>Leave Requests & Apply</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/expenses')}>
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/expenses')}>
                   <Wallet size={18} color={COLORS.success} />
                   <Text style={styles.drawerMenuText}>My Expense Claims</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/leads')}>
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/leads')}>
                   <UserPlus size={18} color={COLORS.primary} />
                   <Text style={styles.drawerMenuText}>Field Leads & Customers</Text>
                 </TouchableOpacity>

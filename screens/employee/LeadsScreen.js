@@ -386,7 +386,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-    paddingTop: Platform.OS === 'ios' ? 48 : 40,
+    paddingTop: Platform.OS === 'ios' ? 48 : 20,
+    marginTop: 30,
   },
   scrollContent: {
     padding: 16,
