@@ -19,7 +19,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import { storage } from './storage';
 import axios from 'axios';
-import { BASE_URL } from './api';
+import { BASE_URL, trackingAPI } from './api';
 import { enqueueCoordinate, flushOfflineQueue, haversineKm } from './offlineSync';
 import { scheduleNoMovementNotification } from './trackingNotification';
 
@@ -114,31 +114,17 @@ function startHeartbeat(sessionId) {
   stopHeartbeat();
   _heartbeatTimer = setInterval(async () => {
     try {
-      const token = await storage.getItem('userToken');
-      if (!token || !sessionId) return;
-      // Send last known location as heartbeat (no new distance added because
-      // coordinates will be the same — server's $max write ensures no KM loss)
-      const lastStr = await storage.getItem('last_recorded_location');
-      if (!lastStr) return;
-      const last = JSON.parse(lastStr);
-      const heartbeatCoord = {
-        eventId: `hb:${sessionId}:${Date.now()}`,
-        lat: last.lat,
-        lng: last.lng,
-        speed: 0,
-        accuracy: last.accuracy || 50,
-        heading: 0,
-        timestamp: new Date().toISOString(),
-        isHeartbeat: true, // backend ignores distance for heartbeats
-      };
-      await axios.post(
-        `${BASE_URL}/tracking/heartbeat`,
-        { sessionId, coord: heartbeatCoord },
-        { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 }
-      ).catch(() => {}); // silent — heartbeat is best-effort
-      console.log(`💓 Heartbeat sent for session ${sessionId}`);
-    } catch (e) {
-      // Ignore heartbeat errors — they're non-critical
+      if (!sessionId) return;
+      const response = await trackingAPI.heartbeat({ sessionId });
+      if (response.data?.sessionClosed) {
+        // Server auto-closed session — stop beating and let UI know on next AppState change
+        console.log('💓 Heartbeat: session closed on server, stopping heartbeat.');
+        stopHeartbeat();
+      } else {
+        console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
+      }
+    } catch (_) {
+      // Heartbeat is best-effort — network error is OK, next interval will retry
     }
   }, HEARTBEAT_INTERVAL_MS);
 }

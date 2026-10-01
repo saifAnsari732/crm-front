@@ -8,39 +8,44 @@ export const setUnauthorizedCallback = (callback) => {
   unauthorizedCallback = callback;
 };
 
-// ==========================================
-// GROUP 1: WEB & EXPO GO (LOCAL TESTING)
-// ==========================================
-// Web par localhost chalega, aur Expo Go par aapka WiFi IP
-const DEV_URL = Platform.OS === 'web' ? 'http://localhost:5000/api' : 'http://192.168.0.110:5000/api';
+// =========================================================================
+// BACKEND API CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────
+// PRODUCTION URL — always used in APK builds
+// =========================================================================
+export const PROD_URL = 'https://kisanteamapp.online/api';
 
-// ==========================================
-// GROUP 2: PRODUCTION (LIVE SERVER)
-// ==========================================
-const PROD_URL = 'https://kisanteamapp.online/api';
+const getBaseUrl = () => {
+  // APK / EAS Production build → always use production server
+  if (process.env.NODE_ENV === 'production') return PROD_URL;
 
-const resolveBaseUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl && envUrl.trim()) return envUrl.trim();
+  // Web (admin panel) → use same hostname so it works on any machine
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
+    }
+    return 'http://localhost:5000/api';
+  }
 
-  // Abhi testing ke liye DEV_URL return kar rahe hain
-  // Agar production live karna ho, toh PROD_URL ko uncomment karein aur DEV_URL ko comment karein.
-  
-  return DEV_URL;
-  // return PROD_URL;
+  // ─── DEVELOPER TOGGLE ───────────────────────────────────────────────────────
+  // Comment the line below and uncomment PROD_URL to switch to production.
+  // return `http://192.168.0.108:5000/api`;   // Local dev
+  return PROD_URL;                              // ← PRODUCTION (APK mode)
+  // ───────────────────────────────────────────────────────────────────────────
 };
 
-export const BASE_URL = resolveBaseUrl();
+export const BASE_URL = getBaseUrl();
+export const DEV_URL  = BASE_URL; // backward compat alias
 
 export const getAvatarUrl = (avatar) => {
   if (!avatar || typeof avatar !== 'string') return null;
   const clean = avatar.trim();
   if (clean === '' || clean === 'null' || clean === 'undefined') return null;
-  
+
   if (clean.startsWith('http://') || clean.startsWith('https://')) {
     return clean;
   }
-  
+
   const baseUrlWithoutApi = BASE_URL.replace('/api', '');
   if (clean.startsWith('/')) {
     return `${baseUrlWithoutApi}${clean}`;
@@ -130,21 +135,31 @@ export const authAPI = {
   getMe: () => API.get('/auth/me'),
   updateProfile: (data) => API.put('/auth/profile', data),
   changePassword: (data) => API.put('/auth/change-password', data),
+  verifyResetEmail: (email) => API.post('/auth/verify-reset-email', { email }),
+  resetPasswordDirect: (email, newPassword) => API.post('/auth/reset-password-direct', { email, newPassword }),
 };
+
 
 // ─── Tracking ──────────────────────────────────────────────────────────────
 export const trackingAPI = {
-  start: (data) => API.post('/tracking/start', data),
-  update: (data) => API.post('/tracking/update', data),
-  stop: (data) => API.post('/tracking/stop', data),
-  getToday: () => API.get('/tracking/today'),
-  getLive: () => API.get('/tracking/live'),
-  getLiveLocations: () => API.get('/tracking/live-locations'),
-  getSession: (id) => API.get(`/tracking/session/${id}`),
-  geocode: (lat, lng) => API.get(`/tracking/geocode?lat=${lat}&lng=${lng}`),
-  getEmployeeReport: (employeeId, params) => API.get(`/tracking/report/employee/${employeeId}`, { params }),
-  deleteHistory: (employeeId) => API.delete(`/tracking/history/employee/${employeeId}`),
+  start:             (data)           => API.post('/tracking/start', data),
+  update:            (data)           => API.post('/tracking/update', data),
+  stop:              (data)           => API.post('/tracking/stop', data),
+  heartbeat:         (data)           => API.post('/tracking/heartbeat', data),   // keepalive
+  getToday:          ()               => API.get('/tracking/today'),
+  getTodaySessions:  ()               => API.get('/tracking/today'),              // alias
+  getLive:           ()               => API.get('/tracking/live'),
+  getLiveLocations:  ()               => API.get('/tracking/live-locations'),
+  getSession:        (id)             => API.get(`/tracking/session/${id}`),
+  geocode:           (lat, lng)       => API.get(`/tracking/geocode?lat=${lat}&lng=${lng}`),
+  getEmployeeReport: (empId, params)  => API.get(`/tracking/report/employee/${empId}`, { params }),
+  deleteHistory:     (empId)          => API.delete(`/tracking/history/employee/${empId}`),
+  startTracking:     (_, __, lat, lng, ___, selfieUrl) =>
+                                         API.post('/tracking/start', { lat, lng, selfieUrl }),
 };
+
+// Backward-compat alias (useLocationTracker uses trackingApi lowercase)
+export const trackingApi = trackingAPI;
 
 // ─── Meetings ─────────────────────────────────────────────────────────────
 export const meetingAPI = {
@@ -173,6 +188,8 @@ export const adminAPI = {
   getAttendance: (params) => API.get('/admin/attendance', { params }),
   getHistory: (params) => API.get('/admin/tracking-history', { params }),
   getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
+  getOrganization: () => API.get('/admin/organization'),
+  updateOrganization: (data) => API.put('/admin/organization', data),
 };
 
 // ─── Employees ────────────────────────────────────────────────────────────
@@ -328,11 +345,13 @@ export const dashboardAPI = {
 
 // ─── BACKWARD COMPATIBILITY MAPPINGS FOR SCREEN IMPORTS ────────────────────
 export const authApi = {
-  login: (email, password) => authAPI.login({ email, password }),
+  login: (email, password) => (typeof email === 'object' && email !== null ? authAPI.login(email) : authAPI.login({ email, password })),
   register: (data) => authAPI.register(data),
   getMe: () => authAPI.getMe(),
   updateProfile: (data) => authAPI.updateProfile(data),
   changePassword: (data) => authAPI.changePassword(data),
+  verifyResetEmail: (email) => authAPI.verifyResetEmail(email),
+  resetPasswordDirect: (email, newPassword) => authAPI.resetPasswordDirect(email, newPassword),
 };
 
 export const trackingApi = {
