@@ -1,27 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, View, FlatList, TouchableOpacity, ActivityIndicator,
-  Platform, RefreshControl, TextInput, Modal, ScrollView,
+  Platform, RefreshControl, TextInput, Modal, ScrollView, Image, StatusBar, Dimensions
 } from 'react-native';
-import { Text, Surface, Avatar } from 'react-native-paper';
-import { Users, Search, UserCheck, Ban, Pencil, X, Check } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, Surface } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  Users, Search, UserCheck, Ban, Pencil, X, Check, ShieldCheck,
+  ArrowLeft, Filter, Phone, Mail, CheckCircle2, ChevronRight,
+  LayoutDashboard, MapPin, FileText, Settings, UserPlus, UserX, Building2
+} from 'lucide-react-native';
 import { adminAPI, getAvatarUrl } from '../../services/api';
-import { useSettings } from '../../context/SettingsContext';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const { width, height } = Dimensions.get('window');
+
+const NAVY_DARK = '#0f172a';
+const CARD_BG = '#1e293b';
+const BG_COLOR = '#0f172a';
+
+const cardShadow = Platform.OS === 'web'
+  ? { boxShadow: '0px 6px 20px rgba(15, 26, 46, 0.12)' }
+  : { elevation: 3, shadowColor: '#0f172a', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } };
 
 const getEmployeeId = (e) => e?._id || e?.employeeId || e?.id || '';
 
 export default function AdminTeamScreen() {
-  const { theme } = useSettings();
-  const isDark = theme === 'dark';
-  const C = {
-    bg: isDark ? '#0f172a' : '#f8fafc',
-    surface: isDark ? '#1e293b' : '#ffffff',
-    text: isDark ? '#f8fafc' : '#0f172a',
-    sub: isDark ? '#94a3b8' : '#64748b',
-    border: isDark ? '#334155' : '#e2e8f0',
-  };
+  const router = useRouter();
+  const { user } = useAuth();
 
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
@@ -41,27 +49,59 @@ export default function AdminTeamScreen() {
     try {
       const res = await adminAPI.getEmployees({ limit: 200, role: filterRole === 'all' ? 'all' : filterRole });
       if (res.data?.success) setEmployees(res.data.employees || []);
-    } catch (e) { console.log('Team fetch error:', e.message); setEmployees([]); }
-    finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      console.log('Team fetch error:', e.message);
+      setEmployees([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [filterRole]);
 
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
 
-  const onRefresh = async () => { setRefreshing(true); await fetchEmployees(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchEmployees();
+    setRefreshing(false);
+  };
 
-  const filtered = employees.filter((e) => (e.name || '').toLowerCase().includes(search.toLowerCase()));
+  const filtered = employees.filter((e) => {
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    const nameMatch = (e.name || '').toLowerCase().includes(q);
+    const phoneMatch = (e.phone || '').toLowerCase().includes(q);
+    const deptMatch = (e.department || '').toLowerCase().includes(q);
+    const emailMatch = (e.email || '').toLowerCase().includes(q);
+    return nameMatch || phoneMatch || deptMatch || emailMatch;
+  });
 
   const openEdit = (emp) => {
-    setEditEmp(emp); setEditName(emp.name || ''); setEditPhone(emp.phone || '');
-    setEditDepartment(emp.department || ''); setEditRole(emp.role || '');
+    setEditEmp(emp);
+    setEditName(emp.name || '');
+    setEditPhone(emp.phone || '');
+    setEditDepartment(emp.department || '');
+    setEditRole(emp.role || 'EMPLOYEE');
   };
 
   const handleApprove = async (id) => {
-    try { await adminAPI.approveEmployee(id); fetchEmployees(); } catch (e) { console.log(e); }
+    try {
+      await adminAPI.approveEmployee(id);
+      fetchEmployees();
+    } catch (e) {
+      console.log(e);
+    }
   };
 
   const handleToggleBlock = async (id) => {
-    try { await adminAPI.toggleBlock(id); fetchEmployees(); } catch (e) { console.log(e); }
+    try {
+      await adminAPI.toggleBlock(id);
+      fetchEmployees();
+    } catch (e) {
+      console.log(e);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -69,172 +109,596 @@ export default function AdminTeamScreen() {
     setEditSaving(true);
     try {
       await adminAPI.updateEmployee(getEmployeeId(editEmp), {
-        name: editName, phone: editPhone, department: editDepartment, role: editRole,
+        name: editName,
+        phone: editPhone,
+        department: editDepartment,
+        role: editRole,
       });
-      setEditEmp(null); fetchEmployees();
-    } catch (e) { console.log('Edit employee error:', e.message); }
-    finally { setEditSaving(false); }
+      setEditEmp(null);
+      fetchEmployees();
+    } catch (e) {
+      console.log('Edit employee error:', e.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const getUserInitials = (name) => {
+    if (!name) return 'KC';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
+  const goTo = (path) => {
+    router.push(path);
+  };
+
+  const roleCounts = {
+    all: employees.length,
+    admin: employees.filter(e => ['SUPER_ADMIN', 'SUPERADMIN', 'ORG_ADMIN', 'ORGADMIN', 'ADMIN'].includes((e.role || '').toUpperCase())).length,
+    manager: employees.filter(e => (e.role || '').toUpperCase() === 'MANAGER').length,
+    employee: employees.filter(e => (e.role || '').toUpperCase() === 'EMPLOYEE').length,
   };
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: C.bg }]}>
-        <ActivityIndicator size="large" color="#283b96" />
-        <Text style={[styles.emptyText, { color: C.sub }]}>Loading team…</Text>
+      <View style={[styles.center, { backgroundColor: BG_COLOR }]}>
+        <ActivityIndicator size="large" color="#10b981" />
+        <Text style={styles.loadingText}>Loading KisanConnect Team Roster…</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: C.bg }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View>
-          <Text style={[styles.eyebrow, { color: C.sub }]}>ADMIN</Text>
-          <Text style={[styles.title, { color: C.text }]}>Team</Text>
-          <Text style={[styles.subtitle, { color: C.sub }]}>{employees.length} employees</Text>
-        </View>
-        <Users size={22} color="#283b96" />
-      </View>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
 
-      {/* Search + Role filter */}
-      <View style={[styles.filterBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View style={[styles.searchBox, { borderColor: C.border, backgroundColor: C.bg }]}>
-          <Search size={15} color={C.sub} />
-          <TextInput style={[styles.searchInput, { color: C.text }]} placeholder="Search by name..." placeholderTextColor={C.sub} value={search} onChangeText={setSearch} />
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleScroller}>
-          {['all', 'admin', 'manager', 'employee'].map((role) => (
-            <TouchableOpacity key={role} style={[styles.roleChip, filterRole === role && styles.roleChipActive]} onPress={() => setFilterRole(role)}>
-              <Text style={[styles.roleChipText, filterRole === role && styles.roleChipTextActive]}>{role.toUpperCase()}</Text>
+      {/* TOP HEADER */}
+      <LinearGradient
+        colors={['#074e26', '#065a29']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.topNav}>
+            <TouchableOpacity style={styles.navCircleBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <ArrowLeft size={20} color="#f8fafc" />
             </TouchableOpacity>
-          ))}
+
+            <View style={styles.brandContainer}>
+              <View style={styles.logoBadge}>
+                <Image
+                  source={require('../../assets/splash.png')}
+                  style={styles.navbarAppIcon}
+                  resizeMode="contain"
+                />
+              </View>
+              <View>
+                <Text style={styles.appName}>KisanConnect</Text>
+                <Text style={styles.appTag}>WORKFORCE & TEAM ROSTER</Text>
+              </View>
+            </View>
+
+            <View style={styles.topNavRight}>
+              <View style={styles.countBadgeHeader}>
+                <Users size={14} color="#34d399" />
+                <Text style={styles.countBadgeTextHeader}>{employees.length}</Text>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* SEARCH BAR & ROLE FILTER TABS */}
+      <View style={styles.filterSection}>
+        <View style={styles.searchBox}>
+          <Search size={17} color="#94a3b8" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name, phone, dept..."
+            placeholderTextColor="#64748b"
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X size={16} color="#94a3b8" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleScroller} contentContainerStyle={{ gap: 8 }}>
+          {[
+            { key: 'all', label: 'All Staff' },
+            { key: 'admin', label: 'Admins' },
+            { key: 'manager', label: 'Managers' },
+            { key: 'employee', label: 'Field Staff' },
+          ].map((item) => {
+            const isActive = filterRole === item.key;
+            const count = roleCounts[item.key] || 0;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.roleChip, isActive && styles.roleChipActive]}
+                onPress={() => setFilterRole(item.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>
+                  {item.label}
+                </Text>
+                <View style={[styles.chipCountBadge, isActive && styles.chipCountBadgeActive]}>
+                  <Text style={[styles.chipCountText, isActive && styles.chipCountTextActive]}>{count}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
-<FlatList
+
+      {/* WORKFORCE LIST */}
+      <FlatList
         data={filtered}
         keyExtractor={(item, idx) => getEmployeeId(item) || String(idx)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={styles.body}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#10b981']} tintColor="#10b981" />}
+        contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Users size={40} color={C.sub} />
-            <Text style={[styles.emptyText, { color: C.sub }]}>No employees found</Text>
+            <UserX size={44} color="#475569" />
+            <Text style={styles.emptyText}>No workforce members found</Text>
+            <Text style={styles.emptySubText}>Try adjusting search query or role filters</Text>
           </View>
         }
         renderItem={({ item: emp }) => {
           const empId = getEmployeeId(emp);
           const isApproved = emp.isApproved !== false;
+          const roleUpper = (emp.role || 'EMPLOYEE').toUpperCase();
+          const isBlocked = !!emp.isBlocked;
+          const isLive = emp.isTracking || emp.isOnline;
+
+          let roleBadgeBg = 'rgba(2, 132, 199, 0.15)';
+          let roleBadgeText = '#38bdf8';
+          if (roleUpper === 'MANAGER') {
+            roleBadgeBg = 'rgba(16, 185, 129, 0.15)';
+            roleBadgeText = '#34d399';
+          } else if (['SUPER_ADMIN', 'SUPERADMIN', 'ORG_ADMIN', 'ORGADMIN', 'ADMIN'].includes(roleUpper)) {
+            roleBadgeBg = 'rgba(139, 92, 246, 0.15)';
+            roleBadgeText = '#c084fc';
+          }
+
           return (
-            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
-              <View style={styles.cardRow}>
-                {getAvatarUrl(emp.avatar) ? (
-                  <Avatar.Image size={40} source={{ uri: getAvatarUrl(emp.avatar) }} />
-                ) : (
-                  <Avatar.Text size={40} label={(emp.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: emp.isBlocked ? '#dc2626' : '#334155' }} labelStyle={{ color: '#fff' }} />
-                )}
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[styles.empName, { color: C.text }]}>{emp.name || 'Unnamed'}</Text>
-                  <Text style={[styles.empSub, { color: C.sub }]}>{(emp.department || 'Staff')} • {(emp.role || '').toUpperCase()}</Text>
-                  {emp.phone ? <Text style={[styles.empSub, { color: C.sub }]}>{emp.phone}</Text> : null}
-                </View>
-                <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                  {!isApproved && (
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a' }]} onPress={() => handleApprove(empId)}>
-                      <UserCheck size={12} color="#fff" />
-                      <Text style={styles.actionBtnTxt}>Approve</Text>
-                    </TouchableOpacity>
+            <Surface style={[styles.card, cardShadow]} elevation={2}>
+              <View style={styles.cardHeaderRow}>
+                {/* Left Avatar & Status */}
+                <View style={styles.avatarWrap}>
+                  {getAvatarUrl(emp.avatar) ? (
+                    <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={styles.avatarImg} />
+                  ) : (
+                    <View style={[styles.avatarFallback, { backgroundColor: isBlocked ? '#ef4444' : '#0ea5e9' }]}>
+                      <Text style={styles.avatarInitials}>{getUserInitials(emp.name)}</Text>
+                    </View>
                   )}
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#283b96' }]} onPress={() => openEdit(emp)}>
-                      <Pencil size={12} color="#fff" />
-                      <Text style={styles.actionBtnTxt}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: emp.isBlocked ? '#16a34a' : '#dc2626' }]} onPress={() => handleToggleBlock(empId)}>
-                      <Ban size={12} color="#fff" />
-                      <Text style={styles.actionBtnTxt}>{emp.isBlocked ? 'Unblock' : 'Block'}</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <View style={[styles.statusDot, { backgroundColor: isBlocked ? '#ef4444' : isLive ? '#10b981' : '#64748b' }]} />
                 </View>
+
+                {/* Info Column */}
+                <View style={styles.infoCol}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={styles.empNameText} numberOfLines={1}>{emp.name || 'Unnamed Staff'}</Text>
+                    <View style={[styles.roleBadgePill, { backgroundColor: roleBadgeBg }]}>
+                      <Text style={[styles.roleBadgeText, { color: roleBadgeText }]}>{roleUpper}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.empDeptText} numberOfLines={1}>
+                    {emp.department || 'Field Operations'} • {emp.designation || 'Field Executive'}
+                  </Text>
+
+                  {emp.phone ? (
+                    <View style={styles.metaRow}>
+                      <Phone size={12} color="#64748b" />
+                      <Text style={styles.empMetaText}>{emp.phone}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Right Status Badge */}
+                <View style={styles.rightStatusCol}>
+                  {isBlocked ? (
+                    <View style={[styles.statusTagPill, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                      <Ban size={10} color="#f87171" />
+                      <Text style={[styles.statusTagText, { color: '#f87171' }]}>BLOCKED</Text>
+                    </View>
+                  ) : !isApproved ? (
+                    <View style={[styles.statusTagPill, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                      <Text style={[styles.statusTagText, { color: '#fbbf24' }]}>PENDING</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.statusTagPill, { backgroundColor: isLive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)' }]}>
+                      <View style={[styles.livePulseDot, { backgroundColor: isLive ? '#10b981' : '#64748b' }]} />
+                      <Text style={[styles.statusTagText, { color: isLive ? '#34d399' : '#94a3b8' }]}>
+                        {isLive ? 'ACTIVE' : 'OFFLINE'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Bottom Action Buttons Row */}
+              <View style={styles.cardFooterDivider} />
+              <View style={styles.cardFooterActions}>
+                {!isApproved && (
+                  <TouchableOpacity style={[styles.actionBtn, styles.approveBtn]} onPress={() => handleApprove(empId)}>
+                    <CheckCircle2 size={13} color="#ffffff" />
+                    <Text style={styles.approveBtnText}>Approve Staff</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={[styles.actionBtn, styles.editBtn]} onPress={() => openEdit(emp)} activeOpacity={0.75}>
+                  <Pencil size={13} color="#60a5fa" />
+                  <Text style={styles.editBtnText}>Edit Info</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, isBlocked ? styles.unblockBtn : styles.blockBtn]}
+                  onPress={() => handleToggleBlock(empId)}
+                  activeOpacity={0.75}
+                >
+                  {isBlocked ? (
+                    <>
+                      <UserCheck size={13} color="#34d399" />
+                      <Text style={styles.unblockBtnText}>Unblock</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ban size={13} color="#f43f5e" />
+                      <Text style={styles.blockBtnText}>Block</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             </Surface>
           );
         }}
       />
-<Modal visible={!!editEmp} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: C.surface, borderColor: C.border }]}>
+
+      {/* FLOATING BOTTOM TAB BAR (UI/UX PRO MAX) */}
+      <View style={styles.bottomTabBarContainer}>
+        <Surface style={styles.bottomTabBarSurface} elevation={5}>
+          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.7}>
+            <View style={styles.tabBarIconBox}>
+              <LayoutDashboard size={20} color="#94a3b8" />
+            </View>
+            <Text style={styles.tabBarLabel}>Home</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
+            <View style={styles.tabBarIconBox}>
+              <MapPin size={20} color="#94a3b8" />
+            </View>
+            <Text style={styles.tabBarLabel}>Live Map</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/team')} activeOpacity={0.7}>
+            <View style={[styles.tabBarIconBox, styles.tabBarIconBoxActive]}>
+              <Users size={20} color="#10b981" />
+            </View>
+            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>Workforce</Text>
+            <View style={styles.activeTabDot} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
+            <View style={styles.tabBarIconBox}>
+              <FileText size={20} color="#94a3b8" />
+            </View>
+            <Text style={styles.tabBarLabel}>Reports</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.7}>
+            <View style={styles.tabBarIconBox}>
+              <Settings size={20} color="#94a3b8" />
+            </View>
+            <Text style={styles.tabBarLabel}>Settings</Text>
+          </TouchableOpacity>
+        </Surface>
+      </View>
+
+      {/* EDIT EMPLOYEE MODAL */}
+      <Modal visible={!!editEmp} transparent animationType="slide" onRequestClose={() => setEditEmp(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditEmp(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <View style={styles.sheetHandle} />
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: C.text }]}>Edit Employee</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.modalIconBox}>
+                  <Pencil size={18} color="#38bdf8" />
+                </View>
+                <Text style={styles.modalTitle}>Edit Staff Details</Text>
+              </View>
               <TouchableOpacity onPress={() => setEditEmp(null)}>
-                <X size={20} color={C.sub} />
+                <X size={20} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.fieldLabel, { color: C.sub }]}>NAME</Text>
-            <TextInput style={[styles.fieldInput, { color: C.text, borderColor: C.border }]} value={editName} onChangeText={setEditName} placeholderTextColor={C.sub} />
+            <ScrollView style={{ maxHeight: height * 0.6 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>FULL NAME *</Text>
+              <TextInput style={styles.fieldInput} value={editName} onChangeText={setEditName} placeholder="Enter full name" placeholderTextColor="#64748b" />
 
-            <Text style={[styles.fieldLabel, { color: C.sub }]}>PHONE</Text>
-            <TextInput style={[styles.fieldInput, { color: C.text, borderColor: C.border }]} value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" placeholderTextColor={C.sub} />
+              <Text style={styles.fieldLabel}>PHONE NUMBER *</Text>
+              <TextInput style={styles.fieldInput} value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#64748b" />
 
-            <Text style={[styles.fieldLabel, { color: C.sub }]}>DEPARTMENT</Text>
-            <TextInput style={[styles.fieldInput, { color: C.text, borderColor: C.border }]} value={editDepartment} onChangeText={setEditDepartment} placeholderTextColor={C.sub} />
+              <Text style={styles.fieldLabel}>DEPARTMENT</Text>
+              <TextInput style={styles.fieldInput} value={editDepartment} onChangeText={setEditDepartment} placeholder="Field Sales / Operations" placeholderTextColor="#64748b" />
 
-            <Text style={[styles.fieldLabel, { color: C.sub }]}>ROLE</Text>
-            <View style={[styles.roleRow, { borderColor: C.border }]}>
-              {['employee', 'manager', 'admin'].map((r) => (
-                <TouchableOpacity key={r} style={[styles.rolePick, editRole === r && styles.rolePickActive]} onPress={() => setEditRole(r)}>
-                  <Text style={[styles.rolePickText, editRole === r && styles.rolePickTextActive]}>{r.toUpperCase()}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              <Text style={styles.fieldLabel}>ASSIGNED ROLE</Text>
+              <View style={styles.rolePickerRow}>
+                {['EMPLOYEE', 'MANAGER', 'ADMIN'].map((r) => (
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.rolePickBtn, editRole.toUpperCase() === r && styles.rolePickBtnActive]}
+                    onPress={() => setEditRole(r)}
+                  >
+                    <Text style={[styles.rolePickText, editRole.toUpperCase() === r && styles.rolePickTextActive]}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             <TouchableOpacity style={[styles.saveBtn, editSaving && { opacity: 0.6 }]} onPress={handleSaveEdit} disabled={editSaving}>
-              {editSaving ? <ActivityIndicator color="#fff" size="small" /> : <Check size={16} color="#fff" />}
-              <Text style={styles.saveBtnText}>{editSaving ? 'Saving…' : 'Save Changes'}</Text>
+              {editSaving ? <ActivityIndicator color="#0f172a" size="small" /> : <Check size={18} color="#0f172a" />}
+              <Text style={styles.saveBtnText}>{editSaving ? 'Updating Staff…' : 'Save Changes'}</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-root: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingTop: Platform.OS === 'ios' ? 54 : 22, paddingBottom: 12, borderBottomWidth: 1 },
-  eyebrow: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5 },
-  title: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', marginTop: 2 },
-  subtitle: { fontFamily: FONT, fontSize: 11, marginTop: 2 },
-  filterBar: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, gap: 8 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, height: 36, gap: 6 },
-  searchInput: { fontFamily: FONT, flex: 1, fontSize: 12, paddingVertical: 0 },
-  roleScroller: { flexGrow: 0 },
-  roleChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', marginRight: 6 },
-  roleChipActive: { backgroundColor: '#283b96', borderColor: '#283b96' },
-  roleChipText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: '#64748b' },
-  roleChipTextActive: { color: '#ffffff' },
-  body: { padding: 12, paddingBottom: 28 },
-  card: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  empName: { fontFamily: FONT, fontSize: 13, fontWeight: 'bold' },
-  empSub: { fontFamily: FONT, fontSize: 10, marginTop: 1 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
-  actionBtnTxt: { fontFamily: FONT, color: '#fff', fontSize: 9, fontWeight: 'bold' },
+  root: { flex: 1, backgroundColor: BG_COLOR },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyWrap: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontFamily: FONT, fontSize: 12, marginTop: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, padding: 18, paddingBottom: 30 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  modalTitle: { fontFamily: FONT, fontSize: 16, fontWeight: 'bold' },
-  fieldLabel: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5, marginTop: 10, marginBottom: 4 },
-  fieldInput: { height: 40, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, fontFamily: FONT, fontSize: 13 },
-  roleRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 10, padding: 6 },
-  rolePick: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'transparent', alignItems: 'center' },
-  rolePickActive: { backgroundColor: '#283b96', borderColor: '#283b96' },
-  rolePickText: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: '#64748b' },
+  loadingText: { color: '#94a3b8', fontSize: 13, marginTop: 10 },
+
+  // Header
+  headerGradient: { paddingTop: Platform.OS === 'ios' ? 0 : 0, paddingBottom: 16 },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 8 : 12,
+  },
+  navCircleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
+  },
+  navbarAppIcon: { width: '100%', height: '100%' },
+  appName: { fontSize: 17, fontWeight: '800', color: '#ffffff', letterSpacing: 0.3 },
+  appTag: { fontSize: 9, fontWeight: '700', color: '#6ee7b7', letterSpacing: 0.8 },
+  topNavRight: { flexDirection: 'row', alignItems: 'center' },
+  countBadgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  countBadgeTextHeader: { color: '#34d399', fontSize: 12, fontWeight: '800' },
+
+  // Filter & Search Section
+  filterSection: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 12,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 44,
+    gap: 10,
+  },
+  searchInput: { flex: 1, fontSize: 13, color: '#f8fafc', paddingVertical: 0 },
+  roleScroller: { flexGrow: 0 },
+  roleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  roleChipActive: { backgroundColor: '#059669', borderColor: '#10b981' },
+  roleChipText: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
+  roleChipTextActive: { color: '#ffffff', fontWeight: '700' },
+  chipCountBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  chipCountBadgeActive: { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
+  chipCountText: { fontSize: 10, fontWeight: '700', color: '#94a3b8' },
+  chipCountTextActive: { color: '#ffffff' },
+
+  // List Container
+  listContainer: { padding: 14, paddingBottom: 110 },
+  card: {
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 14,
+    marginBottom: 12,
+  },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarWrap: { position: 'relative', marginRight: 12 },
+  avatarImg: { width: 48, height: 48, borderRadius: 14 },
+  avatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+  statusDot: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#1e293b',
+  },
+  infoCol: { flex: 1, justifyContent: 'center' },
+  empNameText: { fontSize: 15, fontWeight: '800', color: '#f8fafc' },
+  roleBadgePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  empDeptText: { fontSize: 11, color: '#94a3b8', marginTop: 3, fontWeight: '500' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  empMetaText: { fontSize: 11, color: '#64748b' },
+
+  rightStatusCol: { alignItems: 'flex-end', justifyContent: 'center' },
+  statusTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  livePulseDot: { width: 6, height: 6, borderRadius: 3 },
+  statusTagText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+
+  cardFooterDivider: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.06)', marginVertical: 12 },
+  cardFooterActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  approveBtn: { backgroundColor: '#10b981', flex: 1, justifyContent: 'center' },
+  approveBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
+  editBtn: { backgroundColor: 'rgba(59, 130, 246, 0.15)' },
+  editBtnText: { color: '#60a5fa', fontSize: 11, fontWeight: '700' },
+  blockBtn: { backgroundColor: 'rgba(244, 63, 94, 0.15)' },
+  blockBtnText: { color: '#f43f5e', fontSize: 11, fontWeight: '700' },
+  unblockBtn: { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
+  unblockBtnText: { color: '#34d399', fontSize: 11, fontWeight: '700' },
+
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyText: { color: '#f8fafc', fontSize: 15, fontWeight: '700', marginTop: 12 },
+  emptySubText: { color: '#64748b', fontSize: 12, marginTop: 4 },
+
+  // Bottom Navigation Bar
+  bottomTabBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    backgroundColor: 'transparent',
+  },
+  bottomTabBarSurface: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#0f172a',
+    borderRadius: 22,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  tabBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  tabBarIconBox: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  tabBarIconBoxActive: { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
+  tabBarLabel: { fontSize: 10, fontWeight: '600', color: '#94a3b8', marginTop: 2 },
+  tabBarLabelActive: { color: '#10b981', fontWeight: '800' },
+  activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#10b981', marginTop: 2 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: '#1e293b',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#475569', alignSelf: 'center', marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(56, 189, 248, 0.15)', alignItems: 'center', justifyContent: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#f8fafc' },
+  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: '#94a3b8', marginTop: 14, marginBottom: 6 },
+  fieldInput: {
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#f8fafc',
+  },
+  rolePickerRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  rolePickBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+  },
+  rolePickBtnActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
+  rolePickText: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
   rolePickTextActive: { color: '#ffffff' },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#008080', borderRadius: 12, paddingVertical: 12, marginTop: 18 },
-  saveBtnText: { fontFamily: FONT, color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 20,
+  },
+  saveBtnText: { color: '#0f172a', fontWeight: '800', fontSize: 14 },
 });
