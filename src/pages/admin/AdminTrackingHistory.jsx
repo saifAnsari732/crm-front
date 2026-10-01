@@ -25,6 +25,12 @@ import {
   LogIn,
   Battery,
   ShieldCheck,
+  Plus,
+  X,
+  Edit3,
+  User,
+  Sparkles,
+  Check,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import L from 'leaflet';
@@ -432,27 +438,77 @@ export default function AdminTrackingHistory() {
     toast.success('KM Report exported as CSV! 📊');
   };
 
-  // Adjust Distance
-  const handleAdjustDistance = async () => {
-    if (!selectedSession) return;
-    const input = window.prompt('Enter extra KM to add to this session (e.g., 5.5):');
-    if (!input) return;
-    const distanceToAdd = parseFloat(input);
-    if (isNaN(distanceToAdd) || distanceToAdd <= 0) {
-      toast.error('Please enter a valid number greater than 0');
+  // Adjust Distance Modal State
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [adjustTargetSession, setAdjustTargetSession] = useState(null);
+  const [adjustEmployeeId, setAdjustEmployeeId] = useState('');
+  const [adjustDate, setAdjustDate] = useState(todayStr);
+  const [adjustMode, setAdjustMode] = useState('add'); // 'add' | 'set'
+  const [adjustKmValue, setAdjustKmValue] = useState('5');
+  const [adjustReason, setAdjustReason] = useState('Official field commute allowance');
+  const [adjustLoading, setAdjustLoading] = useState(false);
+
+  const openAdjustModal = (session = null) => {
+    if (session) {
+      setAdjustTargetSession(session);
+      setAdjustEmployeeId(session.employee?._id || session.employee || '');
+      setAdjustDate(session.date || (session.startTime ? session.startTime.slice(0, 10) : todayStr));
+    } else {
+      setAdjustTargetSession(null);
+      setAdjustEmployeeId(selectedEmployeeId || (employees.length > 0 ? employees[0]._id : ''));
+      setAdjustDate(startDate || todayStr);
+    }
+    setAdjustMode('add');
+    setAdjustKmValue('5');
+    setAdjustReason('Official field commute allowance');
+    setIsAdjustModalOpen(true);
+  };
+
+  const handleApplyAdjustment = async (e) => {
+    if (e) e.preventDefault();
+    const km = parseFloat(adjustKmValue);
+    if (isNaN(km) || km < 0) {
+      toast.error('Please enter a valid KM number (0 or greater)');
       return;
     }
 
+    if (!adjustEmployeeId && !adjustTargetSession) {
+      toast.error('Please select an employee');
+      return;
+    }
+
+    setAdjustLoading(true);
     try {
-      toast.loading('Adjusting distance...', { id: 'adjust-distance' });
-      const { data } = await adminAPI.adjustDistance({ sessionId: selectedSession._id, distanceToAdd });
+      const payload = {
+        sessionId: adjustTargetSession?._id,
+        employeeId: adjustEmployeeId,
+        date: adjustDate,
+        distanceToAdd: km,
+        newTotalDistance: km,
+        mode: adjustMode,
+        reason: adjustReason,
+      };
+
+      const { data } = await adminAPI.adjustDistance(payload);
       if (data.success) {
-        toast.success(`Successfully added ${distanceToAdd} km`, { id: 'adjust-distance' });
+        toast.success(data.message || `Successfully adjusted distance!`, { id: 'adjust-distance' });
+        setIsAdjustModalOpen(false);
         fetchHistory();
-        setSelectedSession(data.session);
+        if (data.session) {
+          setSelectedSession((prev) => {
+            if (prev && prev._id === data.session._id) {
+              return { ...prev, ...data.session };
+            }
+            return data.session;
+          });
+        }
+      } else {
+        toast.error(data.message || 'Failed to adjust distance');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to adjust distance', { id: 'adjust-distance' });
+      toast.error(err.response?.data?.message || 'Failed to adjust distance');
+    } finally {
+      setAdjustLoading(false);
     }
   };
 
@@ -587,10 +643,38 @@ export default function AdminTrackingHistory() {
               </select>
             </div>
 
+            {/* Action Buttons: Adjust KM, Export Snapshot, Refresh */}
+            <button
+              onClick={() => openAdjustModal(selectedSession || null)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl shadow-xs text-xs font-black transition active:scale-95 cursor-pointer"
+              title="Give or adjust KM for an employee"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Adjust / Give KM</span>
+            </button>
+
+            <button
+              onClick={exportImage}
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+              title="Download Map Snapshot"
+            >
+              <FileImage className="w-4 h-4" />
+            </button>
+
+            {selectedSession && (
+              <button
+                onClick={exportToCSV}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                title="Export Shift CSV Report"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+
             {/* Refresh Button */}
             <button
               onClick={fetchHistory}
-              className="p-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition active:scale-95"
+              className="p-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
               title="Refresh KM History"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -733,8 +817,8 @@ export default function AdminTrackingHistory() {
                             </span>
                           </div>
 
-                          {/* Check-In / Check-Out Badges */}
-                          <div className="flex items-center justify-between mt-2">
+                          {/* Check-In / Check-Out Badges & Quick Action */}
+                          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
                             <div className="flex items-center gap-1.5">
                               <span
                                 className={`w-2 h-2 rounded-full ${
@@ -745,9 +829,23 @@ export default function AdminTrackingHistory() {
                                 {session.isActive ? 'Active Shift' : 'Checked-Out'}
                               </span>
                             </div>
-                            <span className="text-[10px] font-bold text-rose-600 group-hover:underline flex items-center gap-0.5">
-                              <Navigation className="w-3 h-3" /> View on Map
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openAdjustModal(session);
+                                }}
+                                className="px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold flex items-center gap-1 transition cursor-pointer active:scale-95"
+                                title="Adjust or give extra KM to this shift"
+                              >
+                                <Plus className="w-2.5 h-2.5 text-emerald-600" />
+                                <span>Adjust KM</span>
+                              </button>
+                              <span className="text-[10px] font-bold text-rose-600 group-hover:underline flex items-center gap-0.5">
+                                <Navigation className="w-3 h-3" /> Map
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -878,6 +976,50 @@ export default function AdminTrackingHistory() {
               </MapContainer>
             </div>
 
+            {/* Selected Shift KM Inspection & Action Bar */}
+            {selectedSession && (
+              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-4.5 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-black shrink-0">
+                    <Gauge className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Shift Distance Traveled</span>
+                      {selectedSession.manualDistanceAdded > 0 && (
+                        <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 rounded-md">
+                          +{selectedSession.manualDistanceAdded} KM Manual Credit
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-2xl font-black text-emerald-400 mt-0.5">
+                      {(selectedSession.totalDistance || 0).toFixed(2)} <span className="text-sm font-bold text-slate-300">KM</span>
+                      <span className="text-xs font-semibold text-slate-400 ml-2">
+                        ({selectedSession.employee?.name || 'Employee'})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => openAdjustModal(selectedSession)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 transition active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Adjust / Give Extra KM</span>
+                  </button>
+                  <button
+                    onClick={exportToCSV}
+                    className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer border border-slate-700"
+                    title="Download Shift CSV"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Detailed Timeline Breakdown */}
             {selectedSession && (
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -913,6 +1055,245 @@ export default function AdminTrackingHistory() {
             )}
           </div>
         </div>
+
+        {/* ⚡ INTERACTIVE ADJUST / CREDIT KM MODAL */}
+        {isAdjustModalOpen && (
+          <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              {/* Modal Top Header */}
+              <div className="p-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center">
+                    <SlidersHorizontal className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black tracking-tight">Adjust / Credit Employee KM</h3>
+                    <p className="text-xs text-emerald-100 font-medium">Manually give extra KM or adjust travel distance</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Form Content */}
+              <form onSubmit={handleApplyAdjustment} className="p-6 space-y-5">
+                {/* 1. Select Employee */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                    Field Employee <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={adjustEmployeeId}
+                    onChange={(e) => setAdjustEmployeeId(e.target.value)}
+                    disabled={Boolean(adjustTargetSession)}
+                    className="w-full px-3.5 py-2.5 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-75"
+                  >
+                    <option value="">Select Employee...</option>
+                    {employees.map((e) => (
+                      <option key={e._id} value={e._id}>
+                        {e.name} ({e.employeeId || 'EMP'}) {e.department ? `• ${e.department}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Target Date */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                    Date of Shift / Travel <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={adjustDate}
+                    onChange={(e) => setAdjustDate(e.target.value)}
+                    disabled={Boolean(adjustTargetSession)}
+                    className="w-full px-3.5 py-2.5 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-75"
+                  />
+                </div>
+
+                {/* 3. Adjustment Mode (Add Extra vs Set Total) */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                    Adjustment Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setAdjustMode('add')}
+                      className={`py-2 text-xs font-black rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        adjustMode === 'add'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Extra KM (+)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAdjustMode('set')}
+                      className={`py-2 text-xs font-black rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        adjustMode === 'set'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Gauge className="w-3.5 h-3.5" />
+                      <span>Set Exact Total (=)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Distance Input with Quick Add Chips */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                      {adjustMode === 'add' ? 'KM to Add (Kilometers)' : 'New Total KM'} <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      Current Shift: {((adjustTargetSession?.totalDistance || 0)).toFixed(1)} KM
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      required
+                      placeholder="e.g. 5.5"
+                      value={adjustKmValue}
+                      onChange={(e) => setAdjustKmValue(e.target.value)}
+                      className="w-full px-4 py-3 text-base font-black text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:bg-white"
+                    />
+                    <span className="absolute right-4 top-3.5 text-xs font-black text-slate-400">
+                      KM
+                    </span>
+                  </div>
+
+                  {/* Quick Preset Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                    {[2, 5, 10, 20, 50].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          if (adjustMode === 'add') {
+                            setAdjustKmValue(num.toString());
+                          } else {
+                            const cur = adjustTargetSession?.totalDistance || 0;
+                            setAdjustKmValue((cur + num).toFixed(1));
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold transition cursor-pointer"
+                      >
+                        +{num} KM
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Adjustment Reason / Audit Note */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                    Reason / Audit Note
+                  </label>
+                  <input
+                    type="text"
+                    value={adjustReason}
+                    onChange={(e) => setAdjustReason(e.target.value)}
+                    placeholder="e.g. Client visit approved by Manager"
+                    className="w-full px-3.5 py-2.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+
+                  {/* Quick Reason Presets */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                    {[
+                      'GPS offline during highway commute',
+                      'Client visit approved by Manager',
+                      'Official field allowance adjustment',
+                      'Vehicle odometer calibration discrepancy'
+                    ].map((presetText) => (
+                      <button
+                        key={presetText}
+                        type="button"
+                        onClick={() => setAdjustReason(presetText)}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                      >
+                        {presetText}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 6. Dynamic Projection Preview */}
+                {(() => {
+                  const val = parseFloat(adjustKmValue) || 0;
+                  const cur = Number(adjustTargetSession?.totalDistance || 0);
+                  const newTotal = adjustMode === 'add' ? cur + val : val;
+                  const matchedEmp = employees.find((e) => e._id === adjustEmployeeId) || adjustTargetSession?.employee;
+                  const taRate = Number(matchedEmp?.TA) || 0;
+                  const estimatedPay = taRate > 0 ? (newTotal * taRate).toFixed(2) : null;
+
+                  return (
+                    <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-slate-500 font-bold block text-[11px]">CALCULATED NEW DISTANCE:</span>
+                        <div className="text-base font-black text-emerald-900 mt-0.5">
+                          {newTotal.toFixed(2)} KM {adjustMode === 'add' && val > 0 && <span className="text-xs font-bold text-emerald-700">(+{val.toFixed(1)} KM)</span>}
+                        </div>
+                      </div>
+                      {estimatedPay && (
+                        <div className="text-right">
+                          <span className="text-slate-500 font-bold block text-[11px]">PROJECTED TA PAY:</span>
+                          <span className="text-base font-black text-slate-900 mt-0.5 block">
+                            ₹{estimatedPay} <span className="text-[10px] text-slate-500 font-normal">(@ ₹{taRate}/km)</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Modal Actions */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdjustModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={adjustLoading}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-black shadow-md shadow-emerald-600/20 transition active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {adjustLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Confirm & Apply KM Credit</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </TrackProLayout>
   );
