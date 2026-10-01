@@ -428,22 +428,22 @@ export default function ManagerDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {/* ── MANAGER PUNCH-IN & FIELD DUTY TRACKING CARD (Halka Green Theme + Black Text) ── */}
-        <Surface style={[styles.trackingCard, cardShadow, { borderColor: '#A7F3D0', borderWidth: 1 }]} elevation={3}>
+        {/* ── MANAGER PUNCH-IN & FIELD DUTY TRACKING CARD ── */}
+        <Surface style={[styles.trackingCard, cardShadow, { borderColor: isTracking ? '#FCA5A5' : '#A7F3D0', borderWidth: 1 }]} elevation={3}>
           <LinearGradient
-            colors={isTracking ? ['#ECFDF5', '#D1FAE5'] : ['#E6FBF2', '#CCFBF1']}
+            colors={isTracking ? ['#FEF2F2', '#FFE4E6'] : ['#E6FBF2', '#CCFBF1']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.trackingGradient}
           >
             <View style={styles.trackingHeaderRow}>
-              <View style={[styles.trackingBadgeRow, { backgroundColor: 'rgba(5, 150, 105, 0.15)' }]}>
-                <View style={[styles.statusPulseDot, { backgroundColor: '#059669' }]} />
+              <View style={[styles.trackingBadgeRow, { backgroundColor: isTracking ? 'rgba(220, 38, 38, 0.15)' : 'rgba(5, 150, 105, 0.15)' }]}>
+                <View style={[styles.statusPulseDot, { backgroundColor: isTracking ? '#DC2626' : '#059669' }]} />
                 <Text style={[styles.trackingBadgeText, { color: '#000000' }]}>
                   {isTracking ? 'FIELD DUTY LIVE TRACKING ACTIVE' : 'DUTY PUNCHED OUT'}
                 </Text>
               </View>
-              <View style={[styles.roleTag, { backgroundColor: 'rgba(5, 150, 105, 0.18)' }]}>
+              <View style={[styles.roleTag, { backgroundColor: isTracking ? 'rgba(220, 38, 38, 0.18)' : 'rgba(5, 150, 105, 0.18)' }]}>
                 <ShieldCheck size={14} color="#000000" />
                 <Text style={[styles.roleTagText, { color: '#000000' }]}>Manager Duty</Text>
               </View>
