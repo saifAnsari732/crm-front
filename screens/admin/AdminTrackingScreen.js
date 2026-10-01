@@ -3,7 +3,7 @@ import {
   StyleSheet, View, TouchableOpacity, ActivityIndicator,
   Platform, TextInput, FlatList, StatusBar, Modal, ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -19,8 +19,8 @@ import { cleanTrackingRoute } from '../../utils/trackingRoute';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
-const GREEN = '#0d5c46';
-const GREEN_DARK = '#0a4a39';
+const GREEN = '#0f766e';
+const GREEN_DARK = '#0a3d3c';
 
 const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0px 4px 14px rgba(15, 23, 42, 0.12)' }
@@ -44,8 +44,73 @@ const normalizeAddress = (value) => {
   return String(value);
 };
 
+const buildPathTimeline = (coordinates = []) => {
+  const sorted = [...coordinates]
+    .filter((point) => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)))
+    .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+  if (!sorted.length) return [];
+
+  const timeline = [sorted[0]];
+  let distSinceLastCheckpoint = 0;
+  let checkpointRef = sorted[0];
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    const prev = checkpointRef;
+    const latitudeDelta = Number(current.lat) - Number(prev.lat);
+    const longitudeDelta = Number(current.lng) - Number(prev.lng);
+    const distanceKm = Math.sqrt((latitudeDelta ** 2) + (longitudeDelta ** 2)) * 111; // rough fallback approximation for route chunking
+    const timeGapMinutes = prev.timestamp && current.timestamp
+      ? (new Date(current.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 60000
+      : 0;
+
+    distSinceLastCheckpoint += Number.isFinite(distanceKm) ? distanceKm : 0;
+
+    if (timeGapMinutes >= 5 || distSinceLastCheckpoint >= 5 || index === sorted.length - 1) {
+      timeline.push(current);
+      checkpointRef = current;
+      distSinceLastCheckpoint = 0;
+    }
+  }
+
+  return timeline.map((point, index) => ({
+    ...point,
+    _id: point._id || point.eventId || `${point.timestamp || index}-${index}`,
+    address: point.address || normalizeAddress(point.address) || `${Number(point.lat).toFixed(5)}, ${Number(point.lng).toFixed(5)}`,
+    speed: Number(point.speed || 0),
+  }));
+};
+
+const getRouteSummary = (coordinates = []) => {
+  const validCoords = (coordinates || []).filter((point) => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)));
+  if (!validCoords.length) return { start: null, end: null, points: 0, durationLabel: 'No route' };
+
+  const first = validCoords[0];
+  const last = validCoords[validCoords.length - 1];
+  const startTimestamp = first.timestamp ? new Date(first.timestamp).getTime() : null;
+  const endTimestamp = last.timestamp ? new Date(last.timestamp).getTime() : null;
+  const spanMs = startTimestamp && endTimestamp ? Math.max(0, endTimestamp - startTimestamp) : 0;
+
+  let durationLabel = 'Live route';
+  if (spanMs > 0) {
+    const totalMinutes = Math.round(spanMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    durationLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes} min`;
+  }
+
+  return {
+    start: first,
+    end: last,
+    points: validCoords.length,
+    durationLabel,
+  };
+};
+
 export default function AdminTrackingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { employeeId: requestedEmployeeId, sessionId: requestedSessionId } = useLocalSearchParams();
   const autoSelectedRef = useRef('');
@@ -184,12 +249,15 @@ export default function AdminTrackingScreen() {
 
   const filteredDirectory = useMemo(() => {
     const query = search.toLowerCase();
-    return directoryStaff.filter((emp) => (
-      !query
-        || (emp.name || '').toLowerCase().includes(query)
+    return directoryStaff.filter((emp) => {
+      // Only show tracking/online employees
+      if (emp.status === 'OFFLINE') return false;
+      
+      if (!query) return true;
+      return (emp.name || '').toLowerCase().includes(query)
         || (emp.address || '').toLowerCase().includes(query)
-        || (emp.department || '').toLowerCase().includes(query)
-    ));
+        || (emp.department || '').toLowerCase().includes(query);
+    });
   }, [directoryStaff, search]);
 
   const defaultRegion = useMemo(() => ({
@@ -205,46 +273,104 @@ export default function AdminTrackingScreen() {
   })), [directoryStaff]);
 
   const handleSelectEmployee = useCallback(async (emp, routeSessionId = null) => {
-    setSelectedEmployee(emp);
+    if (!emp || (!emp._id && !emp.employeeId)) return;
+
+    const baseEmployee = {
+      ...emp,
+      name: emp.name && emp.name !== 'Selected employee' ? emp.name : 'Field Executive',
+    };
+    setSelectedEmployee({ ...baseEmployee, routeSummary: getRouteSummary(baseEmployee.routeSummary?.start ? [baseEmployee.routeSummary.start, baseEmployee.routeSummary.end] : []) });
     setShowEmployeeModal(true);
-    if (emp?.lat && emp?.lng && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
+    if (baseEmployee?.lat && baseEmployee?.lng && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
       mapRef.current.animateToRegion({
-        latitude: parseFloat(emp.lat),
-        longitude: parseFloat(emp.lng),
+        latitude: parseFloat(baseEmployee.lat),
+        longitude: parseFloat(baseEmployee.lng),
         latitudeDelta: 0.015,
         longitudeDelta: 0.015,
       }, 800);
     }
-    const sessId = routeSessionId || emp?.sessionId || emp?._id;
-    if (sessId) {
+
+    const employeeId = baseEmployee?._id || baseEmployee?.employeeId || null;
+    const preferredIds = [];
+    if (employeeId) preferredIds.push(employeeId);
+    if (routeSessionId) preferredIds.push(routeSessionId);
+    if (baseEmployee?.sessionId) preferredIds.push(baseEmployee.sessionId);
+
+    if (preferredIds.length > 0) {
       setLoadingRoute(true);
       try {
-        const res = await trackingAPI.getSession(sessId);
-        if (res.data?.success && res.data.session?.coordinates) {
-          const rawCoords = res.data.session.coordinates;
-          const sessionDist = res.data.session.totalDistance || 0;
-          
-          setSelectedEmployee(prev => ({ ...prev, totalDistance: sessionDist }));
+        let chosenResponse = null;
+        for (const candidateId of preferredIds) {
+          try {
+            const res = await trackingAPI.getSession(candidateId);
+            if (res.data?.success) {
+              chosenResponse = res;
+              break;
+            }
+          } catch (e) {
+            // continue to next candidate if this route id is not valid
+          }
+        }
 
-          // Sort by timestamp descending (newest first) for the timeline view
-          const sortedCoords = [...rawCoords].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setFullSessionData(sortedCoords);
-          
-          setRouteCoords(cleanTrackingRoute(rawCoords.map((c) => ({
+        if (chosenResponse?.data?.success) {
+          const sessionData = chosenResponse.data.session || {};
+          const rawCoords = sessionData.coordinates || [];
+          const sessionDist = Number(sessionData.totalDistance || baseEmployee.totalDistance || 0);
+          const employeeDayTotal = Number((employeeId && sessionData.isCombined) ? sessionData.totalDistance : 0) || sessionDist;
+          const finalDistance = employeeDayTotal || sessionDist;
+          const sortedCoords = [...rawCoords].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          const routeSummary = getRouteSummary(sortedCoords.map((c) => ({
+            lat: Number(c.lat),
+            lng: Number(c.lng),
+            timestamp: c.timestamp,
+          })));
+          const checkpointedTimeline = buildPathTimeline(sortedCoords);
+
+          setSelectedEmployee((prev) => ({
+            ...(prev || baseEmployee),
+            ...baseEmployee,
+            totalDistance: finalDistance,
+            routeSummary,
+          }));
+
+          setFullSessionData(checkpointedTimeline);
+          setRouteCoords(cleanTrackingRoute(sortedCoords.map((c) => ({
             latitude: parseFloat(c.lat),
             longitude: parseFloat(c.lng),
             timestamp: c.timestamp,
           }))));
+        } else {
+          setSelectedEmployee((prev) => ({
+            ...(prev || baseEmployee),
+            ...baseEmployee,
+            totalDistance: Number(baseEmployee.totalDistance || 0),
+            routeSummary: getRouteSummary([]),
+          }));
+          setRouteCoords([]);
+          setFullSessionData([]);
         }
       } catch (e) {
         setRouteCoords([]);
         setFullSessionData([]);
+        setSelectedEmployee((prev) => ({
+          ...(prev || baseEmployee),
+          ...baseEmployee,
+          totalDistance: Number(baseEmployee.totalDistance || 0),
+          routeSummary: getRouteSummary([]),
+        }));
         console.log('Employee route unavailable:', e.response?.data?.message || e.message);
       } finally {
         setLoadingRoute(false);
       }
     } else {
       setRouteCoords([]);
+      setFullSessionData([]);
+      setSelectedEmployee((prev) => ({
+        ...(prev || baseEmployee),
+        ...baseEmployee,
+        totalDistance: Number(baseEmployee.totalDistance || 0),
+        routeSummary: getRouteSummary([]),
+      }));
     }
   }, []);
 
@@ -276,15 +402,18 @@ export default function AdminTrackingScreen() {
   useEffect(() => {
     const employeeId = Array.isArray(requestedEmployeeId) ? requestedEmployeeId[0] : requestedEmployeeId;
     const sessionId = Array.isArray(requestedSessionId) ? requestedSessionId[0] : requestedSessionId;
+    if (!employeeId && !sessionId) return;
     const requestKey = `${employeeId || ''}:${sessionId || ''}`;
-    if (!requestKey.trim(':') || autoSelectedRef.current === requestKey) return;
+    if (autoSelectedRef.current === requestKey) return;
     const employee = directoryStaff.find((item) =>
       (sessionId && String(item.sessionId) === String(sessionId)) ||
       (employeeId && String(item._id) === String(employeeId))
     );
-    autoSelectedRef.current = requestKey;
-    handleSelectEmployee(employee || { _id: employeeId, sessionId, name: 'Selected employee' }, sessionId);
-  }, [directoryStaff, requestedEmployeeId, requestedSessionId]);
+    if (employee) {
+      autoSelectedRef.current = requestKey;
+      handleSelectEmployee(employee, sessionId);
+    }
+  }, [directoryStaff, requestedEmployeeId, requestedSessionId, handleSelectEmployee]);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -326,7 +455,7 @@ export default function AdminTrackingScreen() {
                 <MapIcon size={13} color={GREEN} />
                 <Text style={styles.tabActiveText}>Map</Text>
               </View>
-              <TouchableOpacity style={styles.tab} onPress={() => setPanelOpen((v) => !v)}>
+              <TouchableOpacity style={styles.tab} onPress={() => router.push('/(admin)/team')}>
                 <Users size={13} color="#64748b" />
                 <Text style={styles.tabText}>Team</Text>
               </TouchableOpacity>
@@ -394,9 +523,9 @@ export default function AdminTrackingScreen() {
         </TouchableOpacity>
 
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Team Members ({directoryStaff.length})</Text>
+          <Text style={styles.sheetTitle}>Active Team ({filteredDirectory.length})</Text>
           <TouchableOpacity style={styles.viewAll} onPress={() => router.push('/(admin)/team')}>
-            <Text style={styles.viewAllText}>View All</Text>
+            <Text style={styles.viewAllText}>All Employees</Text>
             <ChevronRight size={13} color={GREEN} />
           </TouchableOpacity>
         </View>
@@ -408,6 +537,7 @@ export default function AdminTrackingScreen() {
               data={filteredDirectory}
               keyExtractor={(item, idx) => (item && item._id) ? `${String(item._id)}-${idx}` : `staff-${idx}`}
               style={styles.sheetList}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
@@ -490,17 +620,37 @@ export default function AdminTrackingScreen() {
             </View>
 
             <View style={styles.modalStatsRow}>
-              <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatLabel}>Total Distance Today</Text>
+              <View style={styles.modalStatBoxPrimary}>
+                <Text style={styles.modalStatLabel}>Shift Distance</Text>
                 <Text style={styles.modalStatValue}>{selectedEmployee?.totalDistance ? parseFloat(selectedEmployee.totalDistance).toFixed(2) : '0.00'} km</Text>
+                <Text style={styles.modalStatSubLabel}>{selectedEmployee?.routeSummary?.durationLabel || 'Live route'}</Text>
               </View>
               <View style={styles.modalStatBox}>
                 <Text style={styles.modalStatLabel}>Current Status</Text>
                 <Text style={[styles.modalStatValue, { color: STATUS_META[selectedEmployee?.status]?.color || '#64748b' }]}>
                   {STATUS_META[selectedEmployee?.status]?.label || 'Offline'}
                 </Text>
+                <Text style={styles.modalStatSubLabel}>
+                  {selectedEmployee?.routeSummary?.points ? `${selectedEmployee.routeSummary.points} tracked points` : 'No route yet'}
+                </Text>
               </View>
             </View>
+
+            {(selectedEmployee?.routeSummary?.start || selectedEmployee?.routeSummary?.end) && (
+              <View style={styles.routeSummaryCard}>
+                <Text style={styles.routeSummaryTitle}>Path summary</Text>
+                <View style={styles.routeSummaryGrid}>
+                  <View style={styles.routeSummaryCell}>
+                    <Text style={styles.routeSummaryLabel}>Start</Text>
+                    <Text style={styles.routeSummaryValue}>{selectedEmployee?.routeSummary?.start?.timestamp ? fmtTime(selectedEmployee.routeSummary.start.timestamp) : '–'}</Text>
+                  </View>
+                  <View style={styles.routeSummaryCell}>
+                    <Text style={styles.routeSummaryLabel}>End</Text>
+                    <Text style={styles.routeSummaryValue}>{selectedEmployee?.routeSummary?.end?.timestamp ? fmtTime(selectedEmployee.routeSummary.end.timestamp) : '–'}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
 
             <Text style={{ fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#334155', marginHorizontal: 16, marginTop: 10, marginBottom: 5 }}>
               Activity & Path Timeline
@@ -588,7 +738,7 @@ const styles = StyleSheet.create({
   routeLoader: { position: 'absolute', top: 58, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.94)', paddingHorizontal: 13, paddingVertical: 7, borderRadius: 18, gap: 7 },
   routeLoaderText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: GREEN },
 
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 14, paddingBottom: Platform.OS === 'ios' ? 18 : 10, maxHeight: 330, flexShrink: 0 },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 14, paddingTop: 10, maxHeight: '65%', flexShrink: 0 },
   sheetCollapsed: { maxHeight: 74 },
   sheetHandleWrap: { alignItems: 'center', paddingVertical: 8 },
   sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
@@ -599,7 +749,7 @@ const styles = StyleSheet.create({
 
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 11, paddingHorizontal: 10, height: 36, gap: 7, marginBottom: 8 },
   searchInput: { flex: 1, fontFamily: FONT, fontSize: 11, color: '#0f172a', paddingVertical: 0 },
-  sheetList: { maxHeight: 214 },
+  sheetList: { flexGrow: 1 },
 
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderRadius: 12 },
   memberRowSelected: { backgroundColor: '#e7f6ec' },
@@ -623,8 +773,16 @@ const styles = StyleSheet.create({
   closeBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   modalStatsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 12 },
   modalStatBox: { flex: 1, backgroundColor: '#f8fafc', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  modalStatBoxPrimary: { flex: 1, backgroundColor: '#e7f6ec', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#bbf7d0' },
   modalStatLabel: { fontFamily: FONT, color: '#64748b', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
   modalStatValue: { fontFamily: FONT, color: '#0f172a', fontSize: 18, fontWeight: 'bold', marginTop: 4 },
+  modalStatSubLabel: { fontFamily: FONT, color: '#64748b', fontSize: 10, marginTop: 6 },
+  routeSummaryCard: { marginHorizontal: 16, marginTop: 4, borderRadius: 16, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', padding: 12 },
+  routeSummaryTitle: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 },
+  routeSummaryGrid: { flexDirection: 'row', marginTop: 10, gap: 10 },
+  routeSummaryCell: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  routeSummaryLabel: { fontFamily: FONT, fontSize: 9, color: '#64748b', textTransform: 'uppercase', fontWeight: '700' },
+  routeSummaryValue: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 },
   timelineRow: { flexDirection: 'row' },
   timelineDotWrap: { width: 30, alignItems: 'center' },
   timelineDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: GREEN, marginTop: 4, borderWidth: 2, borderColor: '#e7f6ec' },

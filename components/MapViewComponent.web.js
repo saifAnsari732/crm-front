@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import Constants from 'expo-constants';
+import { AlertCircle } from 'lucide-react-native';
 
 const GOOGLE_MAPS_KEY = Constants.expoConfig?.extra?.googleMapsApiKey
   || Constants.expoConfig?.android?.config?.googleMaps?.apiKey
@@ -63,8 +64,18 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
   const markersRef = useRef([]);
   const routeOutlineRef = useRef(null);
   const routeRef = useRef(null);
+  const startMarkerRef = useRef(null);
+  const endMarkerRef = useRef(null);
   const [mapError, setMapError] = useState('');
   const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.gm_authFailure = () => {
+        setMapError('BillingNotEnabledMapError: Billing is not enabled on this Google Cloud Project.');
+      };
+    }
+  }, []);
 
   useImperativeHandle(ref, () => ({
     animateToRegion: (region, duration = 600) => {
@@ -122,28 +133,78 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
     });
     if (routeOutlineRef.current) routeOutlineRef.current.setMap(null);
     if (routeRef.current) routeRef.current.setMap(null);
+    if (startMarkerRef.current) startMarkerRef.current.setMap(null);
+    if (endMarkerRef.current) endMarkerRef.current.setMap(null);
+
     if (routeCoords.length > 1) {
       const routePath = routeCoords
         .map((point) => ({ lat: Number(point.latitude), lng: Number(point.longitude) }))
         .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+
       routeOutlineRef.current = new maps.Polyline({
         map: mapRef.current,
         path: routePath,
-        strokeColor: '#0f172a',
-        strokeOpacity: 0.78,
-        strokeWeight: 11,
+        strokeColor: '#ffffff',
+        strokeOpacity: 0.9,
+        strokeWeight: 6,
         geodesic: true,
         zIndex: 20,
       });
       routeRef.current = new maps.Polyline({
         map: mapRef.current,
         path: routePath,
-        strokeColor: '#14b8a6',
+        strokeColor: '#2563eb',
         strokeOpacity: 1,
-        strokeWeight: 6,
+        strokeWeight: 3,
         geodesic: true,
         zIndex: 21,
+        icons: [{
+          icon: {
+            path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            scale: 2.2,
+            fillColor: '#2563eb',
+            fillOpacity: 1,
+            strokeWeight: 1.5,
+            strokeColor: '#ffffff'
+          },
+          offset: '0%',
+          repeat: '100px'
+        }]
       });
+
+      const routeStart = routePath[0];
+      const routeEnd = routePath[routePath.length - 1];
+      if (routeStart) {
+        startMarkerRef.current = new maps.Marker({
+          map: mapRef.current,
+          position: routeStart,
+          title: 'Shift start',
+          icon: {
+            path: maps.SymbolPath.CIRCLE,
+            scale: 7,
+            fillColor: '#10b981',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          },
+        });
+      }
+      if (routeEnd) {
+        endMarkerRef.current = new maps.Marker({
+          map: mapRef.current,
+          position: routeEnd,
+          title: 'Shift end',
+          icon: {
+            path: maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: '#ef4444',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          },
+        });
+      }
+
       if (routePath.length > 1) {
         const bounds = new maps.LatLngBounds();
         routePath.forEach((point) => bounds.extend(point));
@@ -155,17 +216,45 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
   return (
     <View style={styles.container}>
       <View ref={mapElement} style={styles.map} />
-      {mapError ? <View style={styles.error}><Text style={styles.errorTitle}>Map unavailable</Text><Text style={styles.errorText}>{mapError}</Text></View> : null}
+      {mapError ? (
+        <View style={styles.error}>
+          <View style={styles.errorHeader}>
+            <AlertCircle size={20} color="#dc2626" />
+            <Text style={styles.errorTitle}>Google Maps Billing Required</Text>
+          </View>
+          <Text style={styles.errorText}>{mapError}</Text>
+          <Text style={styles.errorSub}>
+            Google Cloud JavaScript API requires an active billing account linked to the key project.
+            Please enable billing in Google Cloud Console or build for Android/iOS native view.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#e5e7eb' },
+  container: { flex: 1, backgroundColor: '#0f172a' },
   map: { flex: 1, minHeight: 0 },
-  error: { position: 'absolute', top: 18, left: 18, right: 18, padding: 12, borderRadius: 10, backgroundColor: '#fff' },
-  errorTitle: { color: '#b91c1c', fontWeight: '700', fontSize: 13 },
-  errorText: { color: '#64748b', fontSize: 11, marginTop: 3 },
+  error: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    right: 18,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  errorHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  errorTitle: { color: '#dc2626', fontWeight: '800', fontSize: 14 },
+  errorText: { color: '#475569', fontSize: 12, fontWeight: '600' },
+  errorSub: { color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 15 },
 });
 
 export default MapViewComponent;

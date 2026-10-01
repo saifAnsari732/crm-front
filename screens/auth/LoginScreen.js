@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { 
   StyleSheet, View, TouchableOpacity, ScrollView, 
-  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image 
+  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image, Modal 
 } from 'react-native';
 import { Text, TextInput, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
-  Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Cloud, Network 
+  Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Cloud, Network, X, CheckCircle2, KeyRound, UserCheck 
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { authApi, BASE_URL } from '../../services/api';
+import { authApi } from '../../services/api';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -24,17 +24,21 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const validateEmail = (text) => {
-    return text.includes('@') && text.includes('.');
-  };
+  // ── Forgot Password Modal State ────────────────────────────────
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1: Verify Email, 2: Reset Password
+  const [resetEmail, setResetEmail] = useState('');
+  const [verifiedUser, setVerifiedUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetSecureText, setResetSecureText] = useState(true);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
 
   const handleLogin = async () => {
     if (!email || !password) {
       setErrorMsg('Please enter both your email and password.');
-      return;
-    }
-    if (!validateEmail(email)) {
-      setErrorMsg('Please enter a valid operational email address.');
       return;
     }
 
@@ -42,7 +46,7 @@ export default function LoginScreen() {
       setLoading(true);
       setErrorMsg('');
       
-      const response = await authApi.login(email.trim(), password);
+      const response = await authApi.login({ email: email.trim(), password });
       
       if (response.data?.success) {
         const { user, token } = response.data;
@@ -58,18 +62,99 @@ export default function LoginScreen() {
     }
   };
 
+  const handleOpenForgotModal = () => {
+    setShowForgotModal(true);
+    setResetStep(1);
+    setResetEmail(email.trim());
+    setVerifiedUser(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetError('');
+    setResetSuccess('');
+  };
+
+  const handleVerifyEmail = async () => {
+    if (!resetEmail) {
+      setResetError('Please enter your registered email address or phone number.');
+      return;
+    }
+    try {
+      setResetLoading(true);
+      setResetError('');
+      const res = await authApi.verifyResetEmail(resetEmail.trim());
+      if (res.data?.success) {
+        setVerifiedUser(res.data.user);
+        setResetStep(2);
+      } else {
+        setResetError(res.data?.message || 'No account found with this email.');
+      }
+    } catch (err) {
+      if (err.response?.data?.message) {
+        setResetError(err.response.data.message);
+      } else if (err.message && err.message.toLowerCase().includes('network')) {
+        setResetError('Network Error: Unable to reach server. Please check your internet connection.');
+      } else {
+        setResetError(err.message || 'No user account found with this email address or phone number.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      setResetError('Please enter and confirm your new password.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setResetError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError('New passwords do not match. Please check again.');
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      setResetError('');
+      const res = await authApi.resetPasswordDirect(resetEmail.trim(), newPassword);
+      if (res.data?.success) {
+        setResetSuccess(res.data.message || 'Password updated successfully!');
+        setEmail(resetEmail.trim());
+        setPassword(newPassword);
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setResetSuccess('');
+        }, 1800);
+      } else {
+        setResetError(res.data?.message || 'Failed to update password.');
+      }
+    } catch (err) {
+      if (err.response?.data?.message) {
+        setResetError(err.response.data.message);
+      } else if (err.message && err.message.toLowerCase().includes('network')) {
+        setResetError('Network Error: Unable to reach server. Please check your internet connection.');
+      } else {
+        setResetError(err.message || 'Error updating password. Please try again.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView 
       style={{ flex: 1 }} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        {/* Light Minimalist Gradient Canvas Background */}
+        {/* Canvas Background */}
         <LinearGradient
           colors={['#f8fafc', '#f1f5f9']}
           style={styles.container}
         >
-          {/* Top Brand Logo Container */}
+          {/* Top Brand Logo */}
           <View style={styles.brandContainer}>
             <Surface style={styles.logoSurface} elevation={2}>
               <Image 
@@ -78,7 +163,7 @@ export default function LoginScreen() {
                 resizeMode="cover"
               />
             </Surface>
-            <Text style={styles.brandTitle}>kisanTeam</Text>
+            <Text style={styles.brandTitle}>kisanConnect</Text>
             <Text style={styles.brandSubtitle}>
               Secure employee portal for enterprise field operations and fleet management.
             </Text>
@@ -93,7 +178,7 @@ export default function LoginScreen() {
             ) : null}
 
             {/* Email field */}
-            <Text style={styles.inputLabel}>Email Address</Text>
+            <Text style={styles.inputLabel}>Email Address / Mobile</Text>
             <View style={styles.inputWrapper}>
               <Mail size={20} color="#64748b" style={styles.fieldIcon} />
               <TextInput
@@ -115,7 +200,7 @@ export default function LoginScreen() {
             {/* Password field */}
             <View style={styles.passwordHeaderRow}>
               <Text style={styles.inputLabel}>Password</Text>
-              <TouchableOpacity onPress={() => alert('Redirecting to password recovery...')}>
+              <TouchableOpacity onPress={handleOpenForgotModal}>
                 <Text style={styles.forgotLabel}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
@@ -155,32 +240,164 @@ export default function LoginScreen() {
                 </>
               )}
             </TouchableOpacity>
-
-            {/* Register Proxy Link */}
-           
-          </Surface>
-
-          {/* Secure Encryption & System Indicators */}
-          <View style={styles.indicatorRow}>
-            <View style={styles.indicatorItem}>
-              <ShieldCheck size={16} color="#64748b" style={{ marginRight: 6 }} />
-              <Text style={styles.indicatorText}>256-bit AES</Text>
-            </View>
-            <View style={styles.indicatorItem}>
-              <Cloud size={16} color="#64748b" style={{ marginRight: 6 }} />
-              <Text style={styles.indicatorText}>System Online</Text>
-            </View>
-          </View>
-          
-          {/* Subtle Watermark Branding Coin at the Bottom */}
-          <View style={styles.watermark}>
-            <LinearGradient
-              colors={['#e2e8f0', '#cbd5e1']}
-              style={styles.watermarkCoin}
-            />
-          </View>
+          </Surface>        
         </LinearGradient>
       </ScrollView>
+
+      {/* ── FORGOT PASSWORD INTERACTIVE MODAL ──────────────────────── */}
+      <Modal
+        visible={showForgotModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowForgotModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Surface style={styles.modalCard} elevation={5}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleWrap}>
+                <View style={styles.modalIconBg}>
+                  <KeyRound size={20} color="#0f766e" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Reset Password</Text>
+                  <Text style={styles.modalSub}>
+                    {resetStep === 1 ? 'Step 1: Verify your registered account' : 'Step 2: Set your new account password'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setShowForgotModal(false)} style={styles.closeBtn}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Error & Success Messages */}
+            {resetError ? (
+              <View style={styles.modalErrorBox}>
+                <Text style={styles.modalErrorText}>{resetError}</Text>
+              </View>
+            ) : null}
+
+            {resetSuccess ? (
+              <View style={styles.modalSuccessBox}>
+                <CheckCircle2 size={18} color="#059669" style={{ marginRight: 6 }} />
+                <Text style={styles.modalSuccessText}>{resetSuccess}</Text>
+              </View>
+            ) : null}
+
+            {/* STEP 1: VERIFY EMAIL / PHONE */}
+            {resetStep === 1 ? (
+              <View style={styles.stepContainer}>
+                <Text style={styles.modalInputLabel}>Registered Email / Phone</Text>
+                <View style={styles.modalInputWrapper}>
+                  <Mail size={18} color="#64748b" style={{ marginRight: 10 }} />
+                  <TextInput
+                    placeholder="Enter email or phone..."
+                    placeholderTextColor="#94a3b8"
+                    value={resetEmail}
+                    onChangeText={setResetEmail}
+                    mode="flat"
+                    style={styles.modalInputField}
+                    activeUnderlineColor="transparent"
+                    underlineColor="transparent"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    textColor="#334155"
+                    theme={{ colors: { background: 'transparent' } }}
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.modalActionBtn, resetLoading && styles.signInBtnDisabled]} 
+                  onPress={handleVerifyEmail}
+                  disabled={resetLoading}
+                >
+                  {resetLoading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Text style={styles.modalActionBtnText}>Verify Account</Text>
+                      <ArrowRight size={16} color="#fff" style={{ marginLeft: 6 }} />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* STEP 2: SET NEW PASSWORD (NO OTP REQUIRED) */
+              <View style={styles.stepContainer}>
+                {verifiedUser && (
+                  <View style={styles.verifiedBadge}>
+                    <UserCheck size={16} color="#059669" />
+                    <Text style={styles.verifiedBadgeText}>
+                      Account Verified: {verifiedUser.name} ({verifiedUser.email})
+                    </Text>
+                  </View>
+                )}
+
+                <Text style={styles.modalInputLabel}>New Password</Text>
+                <View style={styles.modalInputWrapper}>
+                  <Lock size={18} color="#64748b" style={{ marginRight: 10 }} />
+                  <TextInput
+                    placeholder="Enter new password (min 6 chars)"
+                    placeholderTextColor="#94a3b8"
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    mode="flat"
+                    style={styles.modalInputField}
+                    activeUnderlineColor="transparent"
+                    underlineColor="transparent"
+                    secureTextEntry={resetSecureText}
+                    textColor="#334155"
+                    theme={{ colors: { background: 'transparent' } }}
+                  />
+                  <TouchableOpacity onPress={() => setResetSecureText(!resetSecureText)}>
+                    {resetSecureText ? <Eye size={18} color="#64748b" /> : <EyeOff size={18} color="#64748b" />}
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.modalInputLabel, { marginTop: 12 }]}>Confirm New Password</Text>
+                <View style={styles.modalInputWrapper}>
+                  <Lock size={18} color="#64748b" style={{ marginRight: 10 }} />
+                  <TextInput
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#94a3b8"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    mode="flat"
+                    style={styles.modalInputField}
+                    activeUnderlineColor="transparent"
+                    underlineColor="transparent"
+                    secureTextEntry={resetSecureText}
+                    textColor="#334155"
+                    theme={{ colors: { background: 'transparent' } }}
+                  />
+                </View>
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity 
+                    style={styles.backStepBtn} 
+                    onPress={() => setResetStep(1)}
+                  >
+                    <Text style={styles.backStepBtnText}>Back</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.modalActionBtn, { flex: 1 }, resetLoading && styles.signInBtnDisabled]} 
+                    onPress={handleResetPassword}
+                    disabled={resetLoading}
+                  >
+                    {resetLoading ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.modalActionBtnText}>Reset Password</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </Surface>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -191,8 +408,8 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 80 : 50,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 80 : 80,
     paddingBottom: 40,
     alignItems: 'center',
   },
@@ -257,17 +474,17 @@ const styles = StyleSheet.create({
   forgotLabel: {
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#00332c',
+    color: '#0f766e',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 14,
+    height: 50,
   },
   fieldIcon: {
     marginRight: 10,
@@ -275,83 +492,218 @@ const styles = StyleSheet.create({
   inputField: {
     flex: 1,
     fontSize: 14,
+    height: 48,
     backgroundColor: 'transparent',
-    height: 50,
-    paddingHorizontal: 0,
   },
   eyeBtn: {
-    padding: 8,
+    padding: 6,
   },
   signInBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#0a3d3c',
-    borderRadius: 12,
-    paddingVertical: 15,
+    borderRadius: 14,
+    height: 52,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 24,
-    height: 54,
+    shadowColor: '#0a3d3c',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   signInBtnDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   signInBtnText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  registerText: {
-    color: '#64748b',
-    fontSize: 13,
-  },
-  registerLink: {
-    color: '#0f172a',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  indicatorRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 32,
-    width: '100%',
-  },
-  indicatorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 14,
-  },
-  indicatorText: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  watermark: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
-  watermarkCoin: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    opacity: 0.15,
   },
   errorContainer: {
     backgroundColor: '#fef2f2',
     borderWidth: 1,
     borderColor: '#fca5a5',
-    padding: 12,
     borderRadius: 12,
+    padding: 12,
     marginBottom: 16,
   },
   errorText: {
-    color: '#b91c1c',
+    color: '#991b1b',
     fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 32,
+    gap: 20,
+  },
+  indicatorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  indicatorText: {
+    fontSize: 12,
+    color: '#64748b',
     fontWeight: '500',
+  },
+
+  // ── Modal Styles ──────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 20,
+    width: '100%',
+    maxWidth: 440,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#ccfbf1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0f172a',
+  },
+  modalSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  closeBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  stepContainer: {
+    marginTop: 4,
+  },
+  modalInputLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  modalInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 12,
+    height: 46,
+    marginBottom: 14,
+  },
+  modalInputField: {
+    flex: 1,
+    fontSize: 13,
+    height: 44,
+    backgroundColor: 'transparent',
+  },
+  modalActionBtn: {
+    backgroundColor: '#0f766e',
+    borderRadius: 12,
+    height: 46,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  modalActionBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalErrorBox: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  modalErrorText: {
+    color: '#991b1b',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  modalSuccessBox: {
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#6ee7b7',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSuccessText: {
+    color: '#065f46',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  verifiedBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#047857',
+    flex: 1,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  backStepBtn: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    height: 46,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backStepBtnText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

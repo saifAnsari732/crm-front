@@ -118,16 +118,6 @@ const totalKmSum = rows.reduce((sum, r) => sum + r.totalKm, 0);
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <UserRound size={24} color="#283b96" />
-        <View style={styles.headerText}>
-          <Text style={[styles.eyebrow, { color: C.sub }]}>ADMIN</Text>
-          <Text style={[styles.title, { color: C.text }]}>KM History</Text>
-        </View>
-        <Route size={20} color="#008080" />
-      </View>
-
       {/* Filter panel */}
       <View style={[styles.filterPanel, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', gap: 10 }]}>
         <View style={{ flexDirection: 'row', gap: 8 }}>

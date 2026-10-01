@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Platform, RefreshControl,
-  StyleSheet, TextInput, TouchableOpacity, View,
+  StyleSheet, TextInput, TouchableOpacity, View, Image,
 } from 'react-native';
 import { BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, MapPin, Search, XCircle } from 'lucide-react-native';
 import { Text, Surface } from 'react-native-paper';
@@ -82,11 +82,6 @@ export default function AdminVisitsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <View style={[styles.hero, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View style={styles.heroIcon}><BriefcaseBusiness size={22} color="#fff" /></View>
-        <View style={styles.heroCopy}><Text style={[styles.eyebrow, { color: C.sub }]}>ADMIN</Text><Text style={[styles.title, { color: C.text }]}>Team Visits</Text><Text style={[styles.subtitle, { color: C.sub }]}>All employee visit activity</Text></View>
-      </View>
-
       <FlatList
         data={filteredVisits}
         keyExtractor={(item, index) => String(item._id || index)}
@@ -122,14 +117,82 @@ function Summary({ label, value, color }) {
 function VisitCard({ visit, colors }) {
   const config = statusConfig[visit.status] || statusConfig.scheduled;
   const StatusIcon = config.icon;
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-      <View style={styles.cardTop}><View style={styles.clientIcon}><BriefcaseBusiness size={18} color="#283b96" /></View><View style={styles.cardMain}><Text style={[styles.clientName, { color: colors.text }]}>{visit.clientName || 'Unnamed client'}</Text><Text style={[styles.company, { color: colors.sub }]}>{visit.companyName || 'Independent visit'}</Text></View><View style={[styles.statusBadge, { backgroundColor: config.background }]}><StatusIcon size={13} color={config.color} /><Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text></View></View>
+      <TouchableOpacity onPress={() => setExpanded(!expanded)} activeOpacity={0.8} style={styles.cardTop}>
+        <View style={styles.clientIcon}>
+          <BriefcaseBusiness size={18} color="#283b96" />
+        </View>
+        <View style={styles.cardMain}>
+          <Text style={[styles.clientName, { color: colors.text }]}>{visit.clientName || 'Unnamed client'}</Text>
+          <Text style={[styles.company, { color: colors.sub }]}>{visit.companyName || 'Independent visit'}</Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: config.background }]}>
+          <StatusIcon size={13} color={config.color} />
+          <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+        </View>
+      </TouchableOpacity>
+      
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
-      <View style={styles.detailRow}><Text style={[styles.detailLabel, { color: colors.sub }]}>Employee</Text><Text style={[styles.detailValue, { color: colors.text }]}>{visit.employee?.name || 'Unknown employee'}</Text></View>
-      <View style={styles.detailRow}><Text style={[styles.detailLabel, { color: colors.sub }]}>Date</Text><Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(visit.date)}</Text></View>
-      {visit.meetingAddress ? <View style={styles.locationRow}><MapPin size={14} color="#008080" /><Text style={[styles.locationText, { color: colors.sub }]} numberOfLines={2}>{visit.meetingAddress}</Text></View> : null}
-      {visit.dealAmount ? <Text style={styles.amount}>Deal amount: ₹{Number(visit.dealAmount).toLocaleString('en-IN')}</Text> : null}
+      
+      <View style={styles.detailRow}>
+        <Text style={[styles.detailLabel, { color: colors.sub }]}>Employee</Text>
+        <Text style={[styles.detailValue, { color: colors.text }]}>{visit.employee?.name || 'Unknown employee'}</Text>
+      </View>
+      <View style={styles.detailRow}>
+        <Text style={[styles.detailLabel, { color: colors.sub }]}>Date</Text>
+        <Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(visit.date)}</Text>
+      </View>
+
+      {visit.meetingAddress ? (
+        <View style={styles.locationRow}>
+          <MapPin size={14} color="#008080" />
+          <Text style={[styles.locationText, { color: colors.sub }]} numberOfLines={expanded ? undefined : 2}>
+            {visit.meetingAddress}
+          </Text>
+        </View>
+      ) : null}
+
+      {expanded && (
+        <View style={styles.expandedContent}>
+          {visit.mobileNumber && (
+            <View style={styles.detailRow}>
+              <Text style={[styles.detailLabel, { color: colors.sub }]}>Mobile</Text>
+              <Text style={[styles.detailValue, { color: colors.text }]}>{visit.mobileNumber}</Text>
+            </View>
+          )}
+          {visit.dealAmount > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={[styles.detailLabel, { color: colors.sub }]}>Deal Amount</Text>
+              <Text style={[styles.detailValue, { color: '#008080' }]}>₹{Number(visit.dealAmount).toLocaleString('en-IN')}</Text>
+            </View>
+          )}
+          {visit.followUpDate && (
+            <View style={styles.detailRow}>
+              <Text style={[styles.detailLabel, { color: colors.sub }]}>Follow-up</Text>
+              <Text style={[styles.detailValue, { color: '#a16207' }]}>{formatDate(visit.followUpDate)}</Text>
+            </View>
+          )}
+          {visit.meetingNotes && (
+            <View style={styles.notesBox}>
+              <Text style={[styles.notesLabel, { color: colors.sub }]}>Meeting Notes / Outcome</Text>
+              <Text style={[styles.notesText, { color: colors.text }]}>{visit.meetingNotes}</Text>
+            </View>
+          )}
+          {visit.selfieUrl && (
+            <View style={styles.selfieBox}>
+              <Text style={[styles.notesLabel, { color: colors.sub, marginBottom: 6 }]}>Visit Selfie</Text>
+              <Image source={{ uri: visit.selfieUrl }} style={styles.visitSelfie} />
+            </View>
+          )}
+        </View>
+      )}
+
+      {!expanded && visit.dealAmount > 0 && (
+        <Text style={styles.amount}>Deal: ₹{Number(visit.dealAmount).toLocaleString('en-IN')}</Text>
+      )}
     </Surface>
   );
 }
@@ -176,4 +239,10 @@ const styles = StyleSheet.create({
   emptyText: { fontFamily: FONT, fontSize: 11, marginTop: 4, textAlign: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontFamily: FONT, fontSize: 12, marginTop: 8 },
+  expandedContent: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 },
+  notesBox: { backgroundColor: '#f8fafc', padding: 10, borderRadius: 8, marginTop: 8 },
+  notesLabel: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  notesText: { fontFamily: FONT, fontSize: 11, lineHeight: 16 },
+  selfieBox: { marginTop: 12 },
+  visitSelfie: { width: '100%', height: 180, borderRadius: 10, resizeMode: 'cover', backgroundColor: '#e2e8f0' },
 });

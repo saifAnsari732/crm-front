@@ -105,7 +105,7 @@ export default function AdminMonitoringScreen() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
-  const [showDirectory, setShowDirectory] = useState(false); // Default collapsed for max map height!
+  const [showDirectory, setShowDirectory] = useState(true); // Default auto-opened for immediate staff list access!
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -740,10 +740,29 @@ export default function AdminMonitoringScreen() {
           keyExtractor={(item, idx) => item._id || String(idx)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.body}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <CheckCircle2 size={40} color={C.sub} />
+              <Text style={[styles.emptyText, { color: C.sub }]}>No tasks found.</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
-              <Text style={[styles.empName, { color: C.text }]}>{item.title}</Text>
-              <Text style={[styles.empSub, { color: C.sub }]}>Assigned: {item.employee?.name || 'Staff'}</Text>
+              <View style={styles.cardRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.empName, { color: C.text, fontSize: 14 }]}>{item.title}</Text>
+                  {item.description && <Text style={[styles.empSub, { color: C.sub, marginTop: 4 }]} numberOfLines={2}>{item.description}</Text>}
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                    <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold' }}>👤 {item.employee?.name || 'Staff'}</Text>
+                    {item.dueDate && <Text style={{ fontSize: 11, color: '#a16207', fontWeight: 'bold' }}>📅 Due: {fmtDate(item.dueDate)}</Text>}
+                  </View>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: item.status === 'completed' ? '#dcfce7' : '#fef3c7', alignSelf: 'flex-start' }]}>
+                  <Text style={[styles.statusText, { color: item.status === 'completed' ? '#15803d' : '#d97706' }]}>
+                    {(item.status || 'PENDING').toUpperCase()}
+                  </Text>
+                </View>
+              </View>
             </Surface>
           )}
         />
@@ -756,21 +775,34 @@ export default function AdminMonitoringScreen() {
           keyExtractor={(item, idx) => item._id || String(idx)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.body}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={[styles.emptyText, { color: C.sub }]}>No expenses found.</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
               <View style={styles.cardRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.empName, { color: C.text }]}>₹{item.amount} — {item.category}</Text>
-                  <Text style={[styles.empSub, { color: C.sub }]}>{item.employee?.name}</Text>
+                  <Text style={[styles.empName, { color: C.text, fontSize: 15 }]}>₹{item.amount?.toLocaleString('en-IN')} — {item.category?.toUpperCase()}</Text>
+                  <Text style={[styles.empSub, { color: C.sub, marginTop: 4, fontWeight: 'bold' }]}>By: {item.employee?.name}</Text>
+                  {item.description && <Text style={[styles.empSub, { color: C.sub, marginTop: 4 }]}>Note: {item.description}</Text>}
+                  <Text style={{ fontSize: 10, color: C.sub, marginTop: 6 }}>📅 {fmtDate(item.date)}</Text>
                 </View>
-                {item.status === 'pending' && (
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a' }]} onPress={() => handleExpenseStatus(item._id, 'approved')}>
+                {item.status === 'pending' ? (
+                  <View style={{ gap: 8 }}>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a', paddingHorizontal: 16 }]} onPress={() => handleExpenseStatus(item._id, 'approved')}>
                       <Text style={styles.actionBtnTxt}>Approve</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#dc2626' }]} onPress={() => handleExpenseStatus(item._id, 'rejected')}>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#dc2626', paddingHorizontal: 16 }]} onPress={() => handleExpenseStatus(item._id, 'rejected')}>
                       <Text style={styles.actionBtnTxt}>Reject</Text>
                     </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={[styles.statusBadge, { backgroundColor: item.status === 'approved' ? '#dcfce7' : '#fee2e2' }]}>
+                    <Text style={[styles.statusText, { color: item.status === 'approved' ? '#15803d' : '#dc2626' }]}>
+                      {(item.status || 'PROCESSED').toUpperCase()}
+                    </Text>
                   </View>
                 )}
               </View>

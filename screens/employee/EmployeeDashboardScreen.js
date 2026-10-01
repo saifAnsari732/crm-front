@@ -33,6 +33,7 @@ import {
   X,
   Home,
   Radio,
+  Building2,
 } from "lucide-react-native";
 import useLocationTracker from "../../hooks/useLocationTracker";
 import { useRouter } from "expo-router";
@@ -59,7 +60,7 @@ const getExpenseStatusStyle = (statusVal) => {
 export default function EmployeeDashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isTracking, startTracking, stopTracking } = useLocationTracker();
+  const { isTracking, startTracking, stopTracking, requestPermissions } = useLocationTracker();
   const [currentDate, setCurrentDate] = useState("");
   const [showMenu, setShowMenu] = useState(false);
 
@@ -180,17 +181,9 @@ export default function EmployeeDashboardScreen() {
       try {
         setIsUploadingSelfie(true);
 
-        // 1. Prompt mandatory selfie check-in
-        const cameraPerm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!cameraPerm.granted) {
-          Alert.alert(
-            "Camera Permission Required",
-            "Camera access is mandatory to take a selfie check-in before starting your shift.",
-            [
-              { text: "Cancel", style: "cancel" },
-              { text: "Open Settings", onPress: () => Linking.openSettings() }
-            ]
-          );
+        // 1. Ensure all permissions (Foreground, Background, Camera, Notifications) are granted
+        const hasAllPermissions = await requestPermissions();
+        if (!hasAllPermissions) {
           setIsUploadingSelfie(false);
           return;
         }
@@ -299,10 +292,19 @@ export default function EmployeeDashboardScreen() {
                 </Text>
               )}
 
-              <View style={[styles.roleBadgeBox, isTracking && { backgroundColor: "#065f46" }]}>
-                <Text style={[styles.roleBadgeText, isTracking && { color: "#a7f3d0" }]}>
-                  {isTracking ? "ON SHIFT • RIDER MODE 🏍️" : user?.role?.toUpperCase() || "EMPLOYEE"}
-                </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                <View style={[styles.roleBadgeBox, isTracking && { backgroundColor: "#065f46" }]}>
+                  <Text style={[styles.roleBadgeText, isTracking && { color: "#a7f3d0" }]}>
+                    {isTracking ? "ON SHIFT • RIDER MODE 🏍️" : user?.role?.toUpperCase() || "EMPLOYEE"}
+                  </Text>
+                </View>
+
+                <View style={styles.orgBadgePill}>
+                  <Building2 size={11} color="rgba(255, 255, 255, 0.9)" />
+                  <Text style={styles.orgBadgeText} numberOfLines={1}>
+                    {user?.organizationName || user?.organizationId?.name || user?.organization?.name || user?.organizationCode || "Kisan Choice Pvt Ltd"}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -361,9 +363,11 @@ export default function EmployeeDashboardScreen() {
                   <View style={[styles.statIconCircle, { backgroundColor: '#e0f7fa' }]}>
                     <MapPin size={15} color="#00b4d8" />
                   </View>
-                  <TrendingUp size={14} color="#00c6a9" />
+                  <Text style={{ fontSize: 10, color: '#00b4d8', fontWeight: 'bold' }}>
+                    +₹{((parseFloat(stats?.distanceToday || 0)) * (parseFloat(stats?.travelRate || 0))).toFixed(0)}
+                  </Text>
                 </View>
-                <Text style={styles.statLabelText}>DISTANCE</Text>
+                <Text style={styles.statLabelText}>DISTANCE (TODAY)</Text>
                 <Text style={styles.statValueText}>{stats?.distanceToday || "0.00"} km</Text>
               </Surface>
             </TouchableOpacity>
@@ -396,17 +400,21 @@ export default function EmployeeDashboardScreen() {
               </Surface>
             </TouchableOpacity>
 
-            {/* Card 4: TRAVEL RATE */}
+            {/* Card 4: TRAVEL PAY */}
             <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/expenses")}>
               <Surface style={styles.statCard} elevation={1}>
                 <View style={styles.statHeaderRow}>
                   <View style={[styles.statIconCircle, { backgroundColor: '#fef3c7' }]}>
                     <Wallet size={15} color="#f59e0b" />
                   </View>
-                  <TrendingUp size={14} color="#f59e0b" />
+                  <Text style={{ fontSize: 10, color: '#f59e0b', fontWeight: 'bold' }}>
+                    ₹{stats?.travelRate || 0}/km
+                  </Text>
                 </View>
-                <Text style={styles.statLabelText}>TRAVEL RATE</Text>
-                <Text style={styles.statValueText}>₹{stats?.travelRate || 0}/km</Text>
+                <Text style={styles.statLabelText}>TRAVEL PAY (TOTAL)</Text>
+                <Text style={styles.statValueText}>
+                  ₹{((parseFloat(stats?.totalDistanceAllDates || 0)) * (parseFloat(stats?.travelRate || 0))).toFixed(0)}
+                </Text>
               </Surface>
             </TouchableOpacity>
           </View>
@@ -1265,5 +1273,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+  },
+  orgBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  orgBadgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 });

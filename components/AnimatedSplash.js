@@ -3,6 +3,7 @@ import { StyleSheet, View, Animated, Dimensions, Platform, Image } from 'react-n
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 
 const { width, height } = Dimensions.get('window');
 const useNativeDriver = Platform.OS !== 'web';
@@ -105,6 +106,7 @@ export default function AnimatedSplash({ onFinish }) {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" hidden={false} />
       <LinearGradient
         colors={['#020617', '#0f172a', '#064e3b']}
         locations={[0, 0.4, 1]}
@@ -161,12 +163,20 @@ export default function AnimatedSplash({ onFinish }) {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
     zIndex: 99999,
     backgroundColor: '#020617', // Fallback
   },
   gradient: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },

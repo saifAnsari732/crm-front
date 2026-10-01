@@ -135,6 +135,11 @@ class SocketService {
         console.log('🔌 Socket: Status DISCONNECTED. Reason:', reason);
         this.notifyConnectionStateChange(false);
         this.stopHeartbeat();
+        // Socket.io v4: If the server explicitly initiates the disconnect, auto-reconnect is paused.
+        // Calling this.socket.connect() restores auto-reconnection seamlessly.
+        if (reason === 'io server disconnect') {
+          try { this.socket.connect(); } catch (_) {}
+        }
       });
 
       this.socket.on('connect_error', (error) => {
@@ -148,7 +153,13 @@ class SocketService {
       });
 
       this.socket.on('heartbeat_ack', (data) => {
-        // Heartbeat acknowledged, channel is active and healthy
+        if (data?.timestamp) {
+          const rtt = Date.now() - data.timestamp;
+          this.networkLatency = rtt;
+          if (rtt > 1500) {
+            console.log(`🔌 Socket: Slow network connection detected (RTT: ${rtt}ms)`);
+          }
+        }
       });
 
       return this.socket;

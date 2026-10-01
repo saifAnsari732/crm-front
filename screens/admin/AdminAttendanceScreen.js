@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Platform, RefreshControl,
-  StyleSheet, TextInput, TouchableOpacity, View,
+  StyleSheet, TextInput, TouchableOpacity, View, Image,
 } from 'react-native';
 import { CalendarDays, CheckCircle2, Clock3, Search, UserX, X } from 'lucide-react-native';
 import { Avatar, Surface, Text } from 'react-native-paper';
@@ -51,10 +51,6 @@ export default function AdminAttendanceScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <View style={[styles.hero, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View style={styles.heroIcon}><CalendarDays size={22} color="#fff" /></View>
-        <View><Text style={[styles.eyebrow, { color: C.sub }]}>ADMIN</Text><Text style={[styles.title, { color: C.text }]}>Attendance</Text><Text style={[styles.subtitle, { color: C.sub }]}>Employee attendance records</Text></View>
-      </View>
       <FlatList
         data={filteredRecords}
         keyExtractor={(item, index) => String(item._id || index)}
@@ -85,13 +81,47 @@ function Summary({ icon: Icon, label, value, color }) {
 
 function AttendanceCard({ record, colors, onSelfie }) {
   const present = record.status === 'present';
+  const selfie = record.checkInImage || record.selfieUrl;
+  const [expanded, setExpanded] = useState(false);
+  
   return <Surface style={[styles.recordCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-    <View style={styles.recordTop}>{getAvatarUrl(record.employee?.avatar) ? <Avatar.Image size={44} source={{ uri: getAvatarUrl(record.employee.avatar) }} /> : <Avatar.Text size={44} label={(record.employee?.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />}<View style={styles.recordInfo}><Text style={[styles.name, { color: colors.text }]}>{record.employee?.name || 'Employee'}</Text><Text style={[styles.meta, { color: colors.sub }]}>{record.employee?.department || 'Staff'} · Check in {formatTime(record.checkIn)}</Text></View><View style={[styles.status, { backgroundColor: present ? '#dcfce7' : '#fee2e2' }]}><Text style={[styles.statusText, { color: present ? '#15803d' : '#dc2626' }]}>{(record.status || 'unknown').toUpperCase()}</Text></View></View>
-    <View style={[styles.detailRow, { borderTopColor: colors.border }]}><Text style={[styles.detail, { color: colors.sub }]}>Date: {formatDate(record.date)}</Text>{record.checkOut ? <Text style={[styles.detail, { color: colors.sub }]}>Out: {formatTime(record.checkOut)}</Text> : null}</View>
-    {record.selfieUrl ? <TouchableOpacity onPress={() => onSelfie(record.selfieUrl)}><Text style={styles.selfie}>View punch-in selfie</Text></TouchableOpacity> : null}
+    <TouchableOpacity onPress={() => setExpanded(!expanded)} activeOpacity={0.8} style={styles.recordTop}>
+      {getAvatarUrl(record.employee?.avatar) ? <Avatar.Image size={44} source={{ uri: getAvatarUrl(record.employee.avatar) }} /> : <Avatar.Text size={44} label={(record.employee?.name || 'E').slice(0, 2).toUpperCase()} style={{ backgroundColor: '#283b96' }} labelStyle={{ color: '#fff' }} />}
+      <View style={styles.recordInfo}>
+        <Text style={[styles.name, { color: colors.text }]}>{record.employee?.name || 'Employee'}</Text>
+        <Text style={[styles.meta, { color: colors.sub }]}>{record.employee?.department || 'Staff'} · Check in {formatTime(record.checkIn)}</Text>
+      </View>
+      <View style={[styles.status, { backgroundColor: present ? '#dcfce7' : '#fee2e2' }]}>
+        <Text style={[styles.statusText, { color: present ? '#15803d' : '#dc2626' }]}>{(record.status || 'unknown').toUpperCase()}</Text>
+      </View>
+    </TouchableOpacity>
+    <View style={[styles.detailRow, { borderTopColor: colors.border }]}>
+      <Text style={[styles.detail, { color: colors.sub }]}>Date: {formatDate(record.date)}</Text>
+      {record.checkOut ? <Text style={[styles.detail, { color: colors.sub }]}>Out: {formatTime(record.checkOut)}</Text> : null}
+      {!expanded && selfie ? (
+        <TouchableOpacity onPress={() => setExpanded(true)}>
+          <Text style={{ color: '#283b96', fontSize: 10, fontWeight: 'bold' }}>+ View Selfie</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+    {expanded && selfie ? (
+      <View style={{ marginTop: 12 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <Text style={[styles.selfieTitle, { color: colors.sub, marginBottom: 0 }]}>Punch-in Selfie</Text>
+          <TouchableOpacity onPress={() => setExpanded(false)}>
+            <Text style={{ color: '#dc2626', fontSize: 10, fontWeight: 'bold' }}>Close</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity onPress={() => onSelfie(selfie)} activeOpacity={0.9}>
+          <Image source={{ uri: selfie }} style={styles.inlineSelfie} />
+        </TouchableOpacity>
+      </View>
+    ) : null}
   </Surface>;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 }, hero: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 }, heroIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#283b96', alignItems: 'center', justifyContent: 'center', marginRight: 12 }, eyebrow: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' }, title: { fontFamily: FONT, fontSize: 19, fontWeight: 'bold' }, subtitle: { fontFamily: FONT, fontSize: 11, marginTop: 2 }, content: { padding: 12, paddingBottom: 28 }, filterCard: { flexDirection: 'row', gap: 8, padding: 10, borderWidth: 1, borderRadius: 12 }, dateBox: { flex: 1, height: 40, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, borderWidth: 1, borderRadius: 9 }, dateInput: { flex: 1, fontFamily: FONT, fontSize: 12 }, applyButton: { height: 40, paddingHorizontal: 15, borderRadius: 9, backgroundColor: '#008080', alignItems: 'center', justifyContent: 'center' }, applyText: { color: '#fff', fontFamily: FONT, fontWeight: 'bold', fontSize: 12 }, searchBox: { height: 40, marginTop: 8, borderWidth: 1, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10 }, searchInput: { flex: 1, fontFamily: FONT, fontSize: 12 }, summaryRow: { flexDirection: 'row', gap: 8, marginTop: 10 }, summaryCard: { flex: 1, minHeight: 62, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', marginTop: 2 }, summaryLabel: { color: '#64748b', fontFamily: FONT, fontSize: 8, fontWeight: 'bold', marginTop: 2 }, results: { fontFamily: FONT, fontSize: 10, marginVertical: 10 }, recordCard: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 10 }, recordTop: { flexDirection: 'row', alignItems: 'center' }, recordInfo: { flex: 1, marginLeft: 10 }, name: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold' }, meta: { fontFamily: FONT, fontSize: 10, marginTop: 3 }, status: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 }, statusText: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' }, detailRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, marginTop: 10, paddingTop: 8 }, detail: { fontFamily: FONT, fontSize: 10 }, selfie: { color: '#283b96', fontFamily: FONT, fontSize: 11, fontWeight: 'bold', marginTop: 8 }, empty: { alignItems: 'center', paddingVertical: 48 }, emptyTitle: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', marginTop: 10 }, emptyText: { fontFamily: FONT, fontSize: 11, marginTop: 4 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, loading: { fontFamily: FONT, fontSize: 12, marginTop: 8 }, modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,.85)', alignItems: 'center', justifyContent: 'center' }, modalCard: { position: 'relative' }, closeButton: { position: 'absolute', right: -8, top: -32, zIndex: 2, padding: 5 }, shortcutTitle: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold' },
+  selfieTitle: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', marginBottom: 6 },
+  inlineSelfie: { width: '100%', height: 160, borderRadius: 10, backgroundColor: '#e2e8f0', resizeMode: 'cover' },
 });

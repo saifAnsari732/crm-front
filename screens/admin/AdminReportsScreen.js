@@ -92,12 +92,6 @@ export default function AdminReportsScreen() {
   }
 return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <View style={[styles.header, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View style={styles.headerIcon}><BarChart3 size={20} color="#fff" /></View>
-        <View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: C.sub }]}>ADMIN ANALYTICS</Text><Text style={[styles.title, { color: C.text }]}>Employee reports</Text><Text style={[styles.subtitle, { color: C.sub }]}>Review activity, travel and expenses</Text></View>
-        <TouchableOpacity onPress={onRefresh} style={[styles.refreshBtn, { borderColor: C.border }]}><RefreshCw size={16} color="#283b96" /></TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <View style={[styles.reportHero, { backgroundColor: '#eef2ff', borderColor: '#dbe4ff' }]}><UserRound size={20} color="#283b96" /><View style={{ flex: 1, marginLeft: 10 }}><Text style={styles.heroTitle}>Build a staff report</Text><Text style={styles.heroSub}>Choose one employee and a date range to see the full activity picture.</Text></View></View>
 

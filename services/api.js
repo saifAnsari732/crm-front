@@ -158,9 +158,6 @@ export const trackingAPI = {
                                          API.post('/tracking/start', { lat, lng, selfieUrl }),
 };
 
-// Backward-compat alias (useLocationTracker uses trackingApi lowercase)
-export const trackingApi = trackingAPI;
-
 // ─── Meetings ─────────────────────────────────────────────────────────────
 export const meetingAPI = {
   create: (data) => API.post('/meetings', data),
@@ -182,6 +179,9 @@ export const expenseAPI = {
 export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
   getEmployees: (params) => API.get('/admin/employees', { params }),
+  createEmployee: (data) => API.post('/employees', data),
+  createManager: (data) => API.post('/admin/managers', data),
+  getManagers: () => API.get('/admin/managers'),
   approveEmployee: (id) => API.put(`/admin/employees/${id}/approve`),
   toggleBlock: (id) => API.put(`/admin/employees/${id}/block`),
   updateEmployee: (id, data) => API.put(`/admin/employees/${id}`, data),
@@ -364,9 +364,10 @@ export const trackingApi = {
   stopTracking: (sessionId, endTime, endAddress = '', totalDistance = 0) => {
     return trackingAPI.stop({ sessionId, endTime, endAddress, totalDistance });
   },
+  heartbeat: (data) => trackingAPI.heartbeat(data),          // ← NEW: keepalive ping
   getTodaySessions: () => trackingAPI.getToday(),
-  getLiveEmployees: () => trackingAPI.getLive(),
-  getSessionRoute: (id) => trackingAPI.getSession(id),
+  getLiveEmployees:  () => trackingAPI.getLive(),
+  getSessionRoute:   (id) => trackingAPI.getSession(id),
 };
 
 export const meetingApi = {

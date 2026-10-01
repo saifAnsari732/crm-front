@@ -9,7 +9,7 @@ import { trackingApi } from '../services/api';
 import socketService from '../services/socket';
 import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat } from '../services/locationTask';
 import { enqueueCoordinate, enqueueStop } from '../services/offlineSync';
-import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification } from '../services/trackingNotification';
+import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification, sendGpsDisabledNotification } from '../services/trackingNotification';
 import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
 
 /* =========================================================================
@@ -161,6 +161,7 @@ export default function useLocationTracker() {
       // 0.5. Check if device Location Services are turned on
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
+        sendGpsDisabledNotification().catch(() => {});
         alert('Please turn on your device GPS / Location Services before starting the shift.');
         return false;
       }

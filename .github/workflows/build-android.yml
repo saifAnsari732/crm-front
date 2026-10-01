@@ -29,7 +29,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Verify Expo version
-        run: node -e "const v=require('./node_modules/expo/package.json').version; console.log('expo installed:',v); if(!v.startsWith('52')) process.exit(1);"
+        run: node -e "const v=require('./node_modules/expo/package.json').version; console.log('expo installed:',v); if(!v.startsWith('57')) process.exit(1);"
 
       - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install

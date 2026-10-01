@@ -50,8 +50,8 @@ const MapViewComponent = forwardRef(({
 
       {routeCoords && routeCoords.length > 1 && (
         <>
-          <Polyline coordinates={routeCoords} strokeColor="#0f172a" strokeOpacity={0.78} strokeWidth={11} lineCap="round" lineJoin="round" geodesic />
-          <Polyline coordinates={routeCoords} strokeColor="#14b8a6" strokeOpacity={1} strokeWidth={6} lineCap="round" lineJoin="round" geodesic />
+          <Polyline coordinates={routeCoords} strokeColor="#ffffff" strokeOpacity={0.8} strokeWidth={6} lineCap="round" lineJoin="round" geodesic />
+          <Polyline coordinates={routeCoords} strokeColor="#2563eb" strokeOpacity={1} strokeWidth={3} lineCap="round" lineJoin="round" geodesic />
         </>
       )}
     </MapView>

@@ -144,15 +144,6 @@ export default function AdminProfileScreen() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.scrollContent}>
       
-      {/* 0. Top Navigation Bar */}
-      <View style={styles.topNavBar}>
-        <TouchableOpacity style={styles.backBtnCircle} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.topNavTitle, { color: colors.text }]}>Admin Profile</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
       {/* 1. Header Profile Box */}
       <View style={styles.profileHeaderBox}>
         <View style={styles.avatarWrapper}>

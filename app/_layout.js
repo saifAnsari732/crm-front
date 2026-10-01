@@ -39,17 +39,18 @@ function InitialLayout() {
     const inAuthGroup = segments.some(s => s === '(auth)');
     const inEmployeeGroup = segments.some(s => s === '(employee)');
     const inAdminGroup = segments.some(s => s === '(admin)');
-    const isAdmin = user?.role === 'admin' || user?.role === 'hr';
+    const roleUpper = user?.role ? String(user.role).toUpperCase() : '';
+    const isAdminOrManager = ['ADMIN', 'ORG_ADMIN', 'HR', 'MANAGER', 'SUPER_ADMIN', 'SUPERADMIN'].includes(roleUpper);
 
     if (!user) {
       // Unauthenticated: force redirection to Login Screen
       if (!inAuthGroup) {
         router.replace('/(auth)/login');
       }
-    } else if (isAdmin) {
-      // Admin/HR: route to admin workspace
+    } else if (isAdminOrManager) {
+      // Admin/Manager/HR: route to admin workspace
       if (!inAdminGroup) {
-        console.log(`🏃 Navigation: Routing admin ${user.name} to admin dashboard.`);
+        console.log(`🏃 Navigation: Routing admin/manager ${user.name} to admin workspace.`);
         router.replace('/(admin)/dashboard');
       }
     } else {
@@ -80,6 +81,10 @@ function InitialLayout() {
     setShowSplash(false);
   };
 
+  if (showSplash) {
+    return <AnimatedSplash onFinish={finishSplash} />;
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -88,7 +93,6 @@ function InitialLayout() {
         <Stack.Screen name="(employee)" options={{ animation: 'none' }} />
         <Stack.Screen name="(admin)" options={{ animation: 'none' }} />
       </Stack>
-      {showSplash ? <AnimatedSplash onFinish={finishSplash} /> : null}
     </View>
   );
 }

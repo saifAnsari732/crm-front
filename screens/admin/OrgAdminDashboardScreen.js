@@ -628,11 +628,11 @@ export default function OrgAdminDashboardScreen() {
 
       {/* ── FLOATING BOTTOM TAB BAR (UI/UX PRO MAX) ────────────────────── */}
       <View style={styles.bottomTabBarContainer}>
-        <Surface style={styles.bottomTabBarSurface} elevation={5}>
+        <Surface style={styles.bottomTabBarSurface} elevation={6}>
           {/* Tab 1: Home */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.7}>
             <View style={[styles.tabBarIconBox, styles.tabBarIconBoxActive]}>
-              <LayoutDashboard size={20} color="#10b981" />
+              <LayoutDashboard size={20} color="#059669" />
             </View>
             <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>Home</Text>
             <View style={styles.activeTabDot} />
@@ -641,7 +641,7 @@ export default function OrgAdminDashboardScreen() {
           {/* Tab 2: Live Map */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <MapPin size={20} color="#94a3b8" />
+              <MapPin size={20} color="#64748b" />
             </View>
             <Text style={styles.tabBarLabel}>Live Map</Text>
           </TouchableOpacity>
@@ -649,7 +649,7 @@ export default function OrgAdminDashboardScreen() {
           {/* Tab 3: Workforce */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/monitoring')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <Users size={20} color="#94a3b8" />
+              <Users size={20} color="#64748b" />
             </View>
             <Text style={styles.tabBarLabel}>Workforce</Text>
           </TouchableOpacity>
@@ -657,7 +657,7 @@ export default function OrgAdminDashboardScreen() {
           {/* Tab 4: Reports */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <FileText size={20} color="#94a3b8" />
+              <FileText size={20} color="#64748b" />
             </View>
             <Text style={styles.tabBarLabel}>Reports</Text>
           </TouchableOpacity>
@@ -665,7 +665,7 @@ export default function OrgAdminDashboardScreen() {
           {/* Tab 5: Settings */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <Settings size={20} color="#94a3b8" />
+              <Settings size={20} color="#64748b" />
             </View>
             <Text style={styles.tabBarLabel}>Settings</Text>
           </TouchableOpacity>
@@ -755,7 +755,7 @@ export default function OrgAdminDashboardScreen() {
               {/* Drawer Footer Logout */}
               <View style={styles.drawerFooter}>
                 <TouchableOpacity style={styles.drawerLogoutBtn} onPress={handleLogout}>
-                  <LogOut size={18} color="#ef4444" />
+                  <LogOut size={18} color="#f43f5e" />
                   <Text style={styles.drawerLogoutText}>Logout Session</Text>
                 </TouchableOpacity>
               </View>
@@ -846,13 +846,13 @@ export default function OrgAdminDashboardScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.modalHeaderRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={styles.modalHeaderIconBox}>
-                  <UserPlus size={20} color="#34d399" />
+                <View style={[styles.modalHeaderIconBox, { backgroundColor: '#ecfdf5' }]}>
+                  <UserPlus size={20} color="#059669" />
                 </View>
                 <Text style={styles.modalHeaderTitle}>Create New Employee</Text>
               </View>
               <TouchableOpacity onPress={() => setAddEmpModalVisible(false)}>
-                <X size={20} color="#94a3b8" />
+                <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -861,7 +861,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. Rahul Sharma"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newEmp.name}
                 onChangeText={(val) => setNewEmp((p) => ({ ...p, name: val }))}
               />
@@ -870,7 +870,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. rahul@company.com"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={newEmp.email}
@@ -881,7 +881,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. 9876543210"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="phone-pad"
                 value={newEmp.phone}
                 onChangeText={(val) => setNewEmp((p) => ({ ...p, phone: val }))}
@@ -891,7 +891,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="Field Sales / Operations / Services"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newEmp.department}
                 onChangeText={(val) => setNewEmp((p) => ({ ...p, department: val }))}
               />
@@ -900,7 +900,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="Field Executive / Sales Officer"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newEmp.designation}
                 onChangeText={(val) => setNewEmp((p) => ({ ...p, designation: val }))}
               />
@@ -909,7 +909,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="18000"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="numeric"
                 value={newEmp.salary}
                 onChangeText={(val) => setNewEmp((p) => ({ ...p, salary: val }))}
@@ -918,7 +918,7 @@ export default function OrgAdminDashboardScreen() {
 
             <TouchableOpacity style={styles.submitFormBtn} onPress={handleCreateEmployee} disabled={creatingEmp}>
               {creatingEmp ? (
-                <ActivityIndicator size="small" color="#0f172a" />
+                <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <Text style={styles.submitFormBtnText}>Create Employee Account</Text>
               )}
@@ -939,13 +939,13 @@ export default function OrgAdminDashboardScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.modalHeaderRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={[styles.modalHeaderIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
-                  <UserCheck size={20} color="#10b981" />
+                <View style={[styles.modalHeaderIconBox, { backgroundColor: '#e0f2fe' }]}>
+                  <UserCheck size={20} color="#0284c7" />
                 </View>
                 <Text style={styles.modalHeaderTitle}>Create New Manager</Text>
               </View>
               <TouchableOpacity onPress={() => setAddMgrModalVisible(false)}>
-                <X size={20} color="#94a3b8" />
+                <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -954,7 +954,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. Vikram Singh"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newMgr.name}
                 onChangeText={(val) => setNewMgr((p) => ({ ...p, name: val }))}
               />
@@ -963,7 +963,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. vikram@company.com"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={newMgr.email}
@@ -974,7 +974,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="e.g. 9876543210"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="phone-pad"
                 value={newMgr.phone}
                 onChangeText={(val) => setNewMgr((p) => ({ ...p, phone: val }))}
@@ -984,7 +984,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="Field Operations / Zonal Management"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newMgr.department}
                 onChangeText={(val) => setNewMgr((p) => ({ ...p, department: val }))}
               />
@@ -993,7 +993,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="Area Manager / Operations Lead"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 value={newMgr.designation}
                 onChangeText={(val) => setNewMgr((p) => ({ ...p, designation: val }))}
               />
@@ -1002,7 +1002,7 @@ export default function OrgAdminDashboardScreen() {
               <TextInput
                 style={styles.formInputText}
                 placeholder="28000"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 keyboardType="numeric"
                 value={newMgr.salary}
                 onChangeText={(val) => setNewMgr((p) => ({ ...p, salary: val }))}
@@ -1011,7 +1011,7 @@ export default function OrgAdminDashboardScreen() {
 
             <TouchableOpacity style={styles.submitFormBtn} onPress={handleCreateManager} disabled={creatingMgr}>
               {creatingMgr ? (
-                <ActivityIndicator size="small" color="#0f172a" />
+                <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <Text style={styles.submitFormBtnText}>Create Manager Account</Text>
               )}
@@ -1119,25 +1119,40 @@ const styles = StyleSheet.create({
   emptyText: { color: '#94a3b8', fontSize: 12 },
 
   /* FLOATING BOTTOM TAB BAR STYLES */
-  bottomTabBarContainer: { position: 'absolute', bottom: 12, left: 16, right: 16 },
-  bottomTabBarSurface: { backgroundColor: '#0f172a', borderRadius: 24, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  bottomTabBarContainer: { position: 'absolute', bottom: Platform.OS === 'ios' ? 28 : 20, left: 16, right: 16, zIndex: 999 },
+  bottomTabBarSurface: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.08)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
   tabBarItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  tabBarIconBoxActive: { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
-  tabBarLabel: { fontSize: 10, fontWeight: '600', color: '#94a3b8', marginTop: 2 },
-  tabBarLabelActive: { color: '#34d399', fontWeight: '800' },
-  activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#34d399', marginTop: 2 },
+  tabBarIconBoxActive: { backgroundColor: '#ecfdf5' },
+  tabBarLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 2 },
+  tabBarLabelActive: { color: '#059669', fontWeight: '800' },
+  activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#059669', marginTop: 2 },
 
   /* SIDE DRAWER MODAL STYLES */
-  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', flexDirection: 'row' },
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', flexDirection: 'row' },
   drawerDismissArea: { flex: 1 },
-  drawerContainer: { width: width * 0.82, backgroundColor: '#0f172a', height: '100%' },
-  drawerHeader: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b' },
+  drawerContainer: { width: width * 0.82, backgroundColor: '#0f172a', height: '100%', borderTopRightRadius: 28, borderBottomRightRadius: 28 },
+  drawerHeader: { padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
   drawerBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  drawerLogoImg: { width: 36, height: 36, borderRadius: 8 },
+  drawerLogoImg: { width: 38, height: 38, borderRadius: 10 },
   drawerBrandTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
   drawerBrandSub: { color: '#34d399', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1e293b', borderRadius: 16, padding: 12 },
+  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1e293b', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
   drawerUserAvatar: { width: 44, height: 44, borderRadius: 22 },
   drawerUserAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
   drawerUserAvatarText: { color: '#34d399', fontSize: 15, fontWeight: '800' },
@@ -1147,16 +1162,16 @@ const styles = StyleSheet.create({
   drawerOrgText: { color: '#34d399', fontSize: 10, fontWeight: '700' },
   drawerMenuSectionHeader: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 12 },
   drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
-  drawerMenuItemActive: { backgroundColor: 'rgba(52, 211, 153, 0.12)' },
+  drawerMenuItemActive: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderLeftWidth: 3, borderLeftColor: '#10b981' },
   drawerMenuText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
   drawerMenuTextActive: { color: '#34d399', fontWeight: '800' },
-  drawerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: '#1e293b' },
-  drawerLogoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(239, 68, 68, 0.12)', paddingVertical: 12, borderRadius: 12 },
-  drawerLogoutText: { color: '#ef4444', fontSize: 13, fontWeight: '800' },
+  drawerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
+  drawerLogoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(244, 63, 94, 0.15)', paddingVertical: 12, borderRadius: 12 },
+  drawerLogoutText: { color: '#f43f5e', fontSize: 13, fontWeight: '800' },
 
   /* PROFILE SHEET & FORM MODAL STYLES */
-  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  profileSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
+  profileSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20 },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#cbd5e1', alignSelf: 'center', marginBottom: 16 },
   profileSheetHeader: { flexDirection: 'row', alignItems: 'center' },
   profileSheetAvatarWrap: { position: 'relative' },
@@ -1178,12 +1193,21 @@ const styles = StyleSheet.create({
   menuItemSub: { fontSize: 10, color: '#64748b', marginTop: 1 },
 
   /* FORM MODALS */
-  formSheetModal: { backgroundColor: '#0f172a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  formSheetModal: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 22,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 20,
+  },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalHeaderIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(52, 211, 153, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  modalHeaderTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  formInputLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '700', marginTop: 10, marginBottom: 4 },
-  formInputText: { backgroundColor: '#1e293b', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: '#ffffff', fontSize: 13, borderWidth: 1, borderColor: '#334155' },
-  submitFormBtn: { backgroundColor: '#34d399', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
-  submitFormBtnText: { color: '#0f172a', fontSize: 14, fontWeight: '800' },
+  modalHeaderIconBox: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  modalHeaderTitle: { color: '#0f172a', fontSize: 18, fontWeight: '800' },
+  formInputLabel: { color: '#475569', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginTop: 12, marginBottom: 6 },
+  formInputText: { backgroundColor: '#f8fafc', borderRadius: 14, paddingHorizontal: 14, height: 48, color: '#0f172a', fontSize: 14, borderWidth: 1, borderColor: '#cbd5e1' },
+  submitFormBtn: { backgroundColor: '#074e26', borderRadius: 14, height: 50, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
+  submitFormBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
 });

@@ -3,10 +3,15 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.18",
+    "version": "1.0.20",
     "orientation": "portrait",
     "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#020617"
+    },
     "extra": {
       "googleMapsApiKey": "AIzaSyCgmGEomqsMzK3Fcx5Q4eVj8yWLkBBrbbA",
       "router": {},
@@ -17,13 +22,28 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kisanteam.crm",
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#020617"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 38,
+      "versionCode": 40,
       "package": "com.kisanteam.crm",
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#020617"
+      },
+      "statusBar": {
+        "barStyle": "light-content",
+        "backgroundColor": "#020617",
+        "translucent": true
+      },
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCgmGEomqsMzK3Fcx5Q4eVj8yWLkBBrbbA"
@@ -34,22 +54,6 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "WAKE_LOCK",
-        "POST_NOTIFICATIONS",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.CAMERA",
-        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
@@ -107,7 +111,15 @@
       ],
       "expo-font",
       "expo-asset",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#020617"
+        }
+      ],
       "expo-status-bar"
     ],
     "owner": "saifuddinansari"
