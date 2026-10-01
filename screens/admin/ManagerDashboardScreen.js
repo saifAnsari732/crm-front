@@ -2,21 +2,24 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, RefreshControl, StatusBar,
-  Dimensions, Modal, Linking, Image
+  Dimensions, Modal, Linking, Image, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface, Avatar } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Menu, Bell, MapPin, Users, UserCheck, Navigation, Clock,
   ClipboardList, UserMinus, ChevronRight, Phone, Mail, Briefcase,
   DollarSign, X, MessageSquare, ShieldCheck, ArrowRight, Compass,
   Route, CheckCircle2, AlertCircle, Layers, RefreshCw, FileText,
   CalendarCheck, Sparkles, Building2, LayoutDashboard, Settings,
-  LogOut, Shield, ChevronDown
+  LogOut, Shield, ChevronDown, Radio, Power, Play, Camera, Calendar,
+  Wallet, UserPlus, CheckSquare
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
-import { adminAPI, trackingAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
+import { adminAPI, trackingAPI, uploadAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
+import useLocationTracker from '../../hooks/useLocationTracker';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -25,16 +28,37 @@ const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
 const formatAddress = (addr, fallback = '') => {
   if (!addr) return fallback;
-  if (typeof addr === 'string') return addr;
-  if (typeof addr === 'object') {
-    if (addr.street || addr.city || addr.state || addr.pincode) {
-      const parts = [addr.street, addr.city, addr.state, addr.pincode].filter(Boolean);
-      return parts.length > 0 ? parts.join(', ') : fallback;
+
+  let parsed = addr;
+  if (typeof addr === 'string') {
+    const trimmed = addr.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (e) {
+        parsed = trimmed;
+      }
+    } else {
+      return trimmed || fallback;
     }
-    if (addr.name || addr.label || addr.title) return addr.name || addr.label || addr.title;
-    try { return JSON.stringify(addr); } catch (e) { return fallback; }
   }
-  return String(addr);
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    if (parsed.street || parsed.city || parsed.state || parsed.pincode) {
+      const parts = [parsed.street, parsed.city, parsed.state, parsed.pincode]
+        .filter(Boolean)
+        .map(s => String(s).trim())
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join(', ');
+    }
+    if (parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address) {
+      const val = parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address;
+      if (typeof val === 'string' && val.trim()) return val.trim();
+    }
+    return fallback;
+  }
+
+  return String(parsed || '').trim() || fallback;
 };
 
 // ── UI/UX Pro Max Colors (No Black Colors!) ──
@@ -76,6 +100,9 @@ export default function ManagerDashboardScreen() {
   const { user, logout } = useAuth();
   const mapRef = useRef(null);
 
+  const { isTracking, startTracking, stopTracking, requestPermissions } = useLocationTracker();
+  const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
+
   const [teamMembers, setTeamMembers] = useState([]);
   const [liveLocations, setLiveLocations] = useState([]);
   const [orgData, setOrgData] = useState(null);
@@ -84,9 +111,116 @@ export default function ManagerDashboardScreen() {
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const handleClockToggle = async () => {
+    if (isTracking) {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.confirm('Are you sure you want to end your active operational tracking shift?')) {
+          const res = await stopTracking();
+          if (res.success) {
+            alert(`Shift Ended. Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`);
+            fetchData(false);
+          } else {
+            alert(res.error || "Failed to stop tracking session.");
+          }
+        }
+      } else {
+        Alert.alert(
+          "Confirm Clock Out",
+          "Are you sure you want to end your active operational tracking shift?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "End Shift",
+              style: "destructive",
+              onPress: async () => {
+                const res = await stopTracking();
+                if (res.success) {
+                  Alert.alert(
+                    "Shift Ended",
+                    `Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`,
+                  );
+                  fetchData(false);
+                } else {
+                  Alert.alert("Error", res.error || "Failed to stop tracking session.");
+                }
+              },
+            },
+          ],
+        );
+      }
+    } else {
+      try {
+        setIsUploadingSelfie(true);
+
+        const hasAllPermissions = await requestPermissions();
+        if (!hasAllPermissions) {
+          setIsUploadingSelfie(false);
+          return;
+        }
+
+        if (Platform.OS !== 'web') {
+          const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+          if (cameraStatus !== 'granted') {
+            Alert.alert("Camera Permission Required", "Camera permission is required to log selfie check-in.");
+            setIsUploadingSelfie(false);
+            return;
+          }
+        }
+
+        const photoResult = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.6,
+          cameraType: ImagePicker.CameraType?.front || 'front',
+        });
+
+        if (photoResult.canceled || !photoResult.assets?.length) {
+          if (Platform.OS === 'web') alert("Shift Not Started: Selfie check-in is mandatory to punch in.");
+          else Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
+          setIsUploadingSelfie(false);
+          return;
+        }
+
+        const selfieAsset = photoResult.assets[0];
+        let selfieUrl = '';
+
+        try {
+          if (Platform.OS === 'web') {
+            const formData = new FormData();
+            const filename = selfieAsset.uri.split('/').pop() || 'selfie.jpg';
+            const resp = await fetch(selfieAsset.uri);
+            const blob = await resp.blob();
+            formData.append('image', blob, filename);
+            const uploadRes = await uploadAPI.uploadImageFormData(formData);
+            selfieUrl = uploadRes.data?.url || '';
+          } else {
+            const uploadRes = await uploadAPI.uploadImageFormData(selfieAsset.uri);
+            selfieUrl = uploadRes.data?.url || '';
+          }
+        } catch (uploadErr) {
+          console.log('Selfie upload note:', uploadErr.message);
+        }
+
+        const res = await startTracking(selfieUrl);
+        if (res.success) {
+          fetchData(false);
+        } else {
+          if (Platform.OS === 'web') alert(res.error || "Failed to start shift.");
+          else Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
+        }
+      } catch (err) {
+        console.log('Manager selfie capture error:', err.message);
+        if (Platform.OS === 'web') alert("Could not complete selfie check-in. Please try again.");
+        else Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
+      } finally {
+        setIsUploadingSelfie(false);
+      }
+    }
+  };
+
+  const fetchData = useCallback(async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) setLoading(true);
       const [empRes, locRes, orgRes] = await Promise.all([
         adminAPI.getEmployees({ limit: 200 }).catch(() => ({ data: { success: false } })),
         trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
@@ -105,17 +239,17 @@ export default function ManagerDashboardScreen() {
     } catch (e) {
       console.log('Manager dashboard fetch error:', e.message);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, [fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    await fetchData(false);
     setRefreshing(false);
   };
 
@@ -294,6 +428,73 @@ export default function ManagerDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
+        {/* ── MANAGER PUNCH-IN & FIELD DUTY TRACKING CARD (Halka Pink Theme + Black Text) ── */}
+        <Surface style={[styles.trackingCard, cardShadow, { borderColor: isTracking ? '#A7F3D0' : '#FECDD3', borderWidth: 1 }]} elevation={3}>
+          <LinearGradient
+            colors={isTracking ? ['#ECFDF5', '#D1FAE5'] : ['#FFF1F2', '#FFE4E6']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.trackingGradient}
+          >
+            <View style={styles.trackingHeaderRow}>
+              <View style={[styles.trackingBadgeRow, { backgroundColor: isTracking ? 'rgba(5, 150, 105, 0.15)' : 'rgba(225, 29, 72, 0.12)' }]}>
+                <View style={[styles.statusPulseDot, { backgroundColor: isTracking ? '#059669' : '#E11D48' }]} />
+                <Text style={[styles.trackingBadgeText, { color: '#000000' }]}>
+                  {isTracking ? 'FIELD DUTY LIVE TRACKING ACTIVE' : 'DUTY PUNCHED OUT'}
+                </Text>
+              </View>
+              <View style={[styles.roleTag, { backgroundColor: isTracking ? 'rgba(5, 150, 105, 0.18)' : 'rgba(225, 29, 72, 0.15)' }]}>
+                <ShieldCheck size={14} color="#000000" />
+                <Text style={[styles.roleTagText, { color: '#000000' }]}>Manager Duty</Text>
+              </View>
+            </View>
+
+            <View style={styles.trackingContentRow}>
+              <Text style={[styles.trackingMainTitle, { color: '#000000' }]}>
+                {isTracking ? 'Your Field Duty Shift Is Active' : 'Start Your Field Shift (Punch In)'}
+              </Text>
+              <Text style={[styles.trackingSubTitle, { color: '#1E293B' }]}>
+                {isTracking
+                  ? 'GPS location & distance telemetry are active. End shift when duty completes.'
+                  : 'Take mandatory selfie verification to start tracking field visits, distance & route.'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.punchBtn,
+                isTracking ? styles.punchBtnStop : styles.punchBtnStartPink
+              ]}
+              onPress={handleClockToggle}
+              disabled={isUploadingSelfie}
+              activeOpacity={0.85}
+            >
+              {isUploadingSelfie ? (
+                <View style={styles.punchBtnInner}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
+                    Verifying Selfie & GPS...
+                  </Text>
+                </View>
+              ) : isTracking ? (
+                <View style={styles.punchBtnInner}>
+                  <Power size={18} color="#fff" />
+                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
+                    End Field Shift (Punch Out)
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.punchBtnInner}>
+                  <Camera size={18} color="#fff" />
+                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
+                    Punch In (Selfie Verification)
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </LinearGradient>
+        </Surface>
+
         {/* ── MY TEAM SUMMARY BANNER (Clean Floating Surface) ── */}
         <Surface style={[styles.myTeamCard, cardShadow]} elevation={2}>
           <TouchableOpacity style={styles.myTeamInner} onPress={() => goTo('/(admin)/team')} activeOpacity={0.85}>
@@ -304,7 +505,7 @@ export default function ManagerDashboardScreen() {
               <Text style={styles.myTeamLabel}>{orgName} Team</Text>
               <Text style={styles.myTeamCount}>{totalTeam} Employees</Text>
               <View style={styles.viewTeamRow}>
-                <Text style={styles.viewTeamText}>View All Team Members</Text>
+                <Text style={styles.viewTeamText}>Manage Team & Details</Text>
                 <ArrowRight size={13} color={COLORS.primary} style={{ marginLeft: 4 }} />
               </View>
             </View>
@@ -312,35 +513,71 @@ export default function ManagerDashboardScreen() {
           </TouchableOpacity>
         </Surface>
 
-        {/* ── QUICK ACTION BUTTONS ROW ── */}
-        <View style={styles.quickActionsGrid}>
-          <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
-            <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
-              <Compass size={18} color={COLORS.primary} />
-            </View>
-            <Text style={styles.actionPillLabel}>Live Map</Text>
-          </TouchableOpacity>
+        {/* ── MANAGER FIELD OPERATIONS & QUICK ACTIONS GRID ── */}
+        <View style={{ marginBottom: 14 }}>
+          <Text style={styles.quickGridHeaderTitle}>FIELD OPERATIONS & TEAM TOOLS</Text>
+          
+          {/* Row 1: Field Duties & Employee Features */}
+          <View style={[styles.quickActionsGrid, { marginBottom: 8 }]}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/visits')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.indigoLight }]}>
+                <Briefcase size={18} color={COLORS.indigo} />
+              </View>
+              <Text style={styles.actionPillLabel}>Visits</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
-            <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
-              <FileText size={18} color={COLORS.purple} />
-            </View>
-            <Text style={styles.actionPillLabel}>Reports</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/tasks')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
+                <CheckSquare size={18} color={COLORS.purple} />
+              </View>
+              <Text style={styles.actionPillLabel}>Tasks Plan</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/attendance')} activeOpacity={0.7}>
-            <View style={[styles.actionIconCircle, { backgroundColor: COLORS.successLight }]}>
-              <CalendarCheck size={18} color={COLORS.success} />
-            </View>
-            <Text style={styles.actionPillLabel}>Attendance</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/leaves')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.warningLight }]}>
+                <Calendar size={18} color={COLORS.warning} />
+              </View>
+              <Text style={styles.actionPillLabel}>Leaves</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/history')} activeOpacity={0.7}>
-            <View style={[styles.actionIconCircle, { backgroundColor: COLORS.warningLight }]}>
-              <Route size={18} color={COLORS.warning} />
-            </View>
-            <Text style={styles.actionPillLabel}>KM History</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/expenses')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.successLight }]}>
+                <Wallet size={18} color={COLORS.success} />
+              </View>
+              <Text style={styles.actionPillLabel}>Expenses</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Row 2: Sales & Team Telemetry */}
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(employee)/leads')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
+                <UserPlus size={18} color={COLORS.primary} />
+              </View>
+              <Text style={styles.actionPillLabel}>Leads</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
+                <Compass size={18} color={COLORS.primary} />
+              </View>
+              <Text style={styles.actionPillLabel}>Live Map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/team')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.indigoLight }]}>
+                <Users size={18} color={COLORS.indigo} />
+              </View>
+              <Text style={styles.actionPillLabel}>Team Staff</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
+              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
+                <FileText size={18} color={COLORS.purple} />
+              </View>
+              <Text style={styles.actionPillLabel}>Reports</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── 2X2 METRICS CARDS GRID ── */}
@@ -618,16 +855,50 @@ export default function ManagerDashboardScreen() {
 
               {/* Drawer Menu Items */}
               <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
-                <Text style={styles.drawerMenuSectionHeader}>MANAGER NAVIGATION</Text>
+                {/* SECTION 1: MY FIELD DUTIES */}
+                <Text style={styles.drawerMenuSectionHeader}>MY FIELD DUTIES & OPERATIONS</Text>
 
                 <TouchableOpacity style={[styles.drawerMenuItem, styles.drawerMenuItemActive]} onPress={() => goTo('/(admin)/dashboard')}>
                   <LayoutDashboard size={18} color={COLORS.primary} />
                   <Text style={[styles.drawerMenuText, styles.drawerMenuTextActive]}>Manager Dashboard</Text>
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/visits')}>
+                  <Briefcase size={18} color={COLORS.indigo} />
+                  <Text style={styles.drawerMenuText}>Meetings & Client Visits</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/tasks')}>
+                  <CheckSquare size={18} color={COLORS.purple} />
+                  <Text style={styles.drawerMenuText}>Action Plan & Tasks</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/leaves')}>
+                  <Calendar size={18} color={COLORS.warning} />
+                  <Text style={styles.drawerMenuText}>Leave Requests & Apply</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/expenses')}>
+                  <Wallet size={18} color={COLORS.success} />
+                  <Text style={styles.drawerMenuText}>My Expense Claims</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(employee)/leads')}>
+                  <UserPlus size={18} color={COLORS.primary} />
+                  <Text style={styles.drawerMenuText}>Field Leads & Customers</Text>
+                </TouchableOpacity>
+
+                {/* SECTION 2: TEAM MANAGEMENT */}
+                <Text style={[styles.drawerMenuSectionHeader, { marginTop: 18 }]}>TEAM & STAFF MANAGEMENT</Text>
+
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/team')}>
+                  <Shield size={18} color={COLORS.indigo} />
+                  <Text style={styles.drawerMenuText}>Team Roster & Staff Data</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tracking')}>
-                  <Compass size={18} color={COLORS.textSecondary} />
-                  <Text style={styles.drawerMenuText}>Live Field Telemetry</Text>
+                  <Compass size={18} color={COLORS.primary} />
+                  <Text style={styles.drawerMenuText}>Live Field Telemetry & Map</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/monitoring')}>
@@ -635,23 +906,18 @@ export default function ManagerDashboardScreen() {
                   <Text style={styles.drawerMenuText}>Workforce Activity Log</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/team')}>
-                  <Shield size={18} color={COLORS.textSecondary} />
-                  <Text style={styles.drawerMenuText}>Team Roster & Staff</Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/reports')}>
-                  <FileText size={18} color={COLORS.textSecondary} />
+                  <FileText size={18} color={COLORS.purple} />
                   <Text style={styles.drawerMenuText}>Consolidated Reports</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/attendance')}>
-                  <CalendarCheck size={18} color={COLORS.textSecondary} />
+                  <CalendarCheck size={18} color={COLORS.success} />
                   <Text style={styles.drawerMenuText}>Team Attendance</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/history')}>
-                  <Route size={18} color={COLORS.textSecondary} />
+                  <Route size={18} color={COLORS.warning} />
                   <Text style={styles.drawerMenuText}>KM Tracking History</Text>
                 </TouchableOpacity>
 
@@ -836,8 +1102,101 @@ const styles = StyleSheet.create({
 
   body: { paddingHorizontal: 14, maxWidth: 720, width: '100%', alignSelf: 'center' },
 
+  // Manager Punch-In & Field Duty Tracking Card
+  trackingCard: {
+    borderRadius: 22,
+    marginTop: 16,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  trackingGradient: {
+    padding: 18,
+    borderRadius: 22,
+  },
+  trackingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  trackingBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusPulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  trackingBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  roleTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  roleTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  trackingContentRow: {
+    marginBottom: 14,
+  },
+  trackingMainTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  trackingSubTitle: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 3,
+    lineHeight: 16,
+    fontFamily: FONT,
+  },
+  punchBtn: {
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    ...cardShadow,
+  },
+  punchBtnStartPink: {
+    backgroundColor: '#E11D48',
+  },
+  punchBtnStop: {
+    backgroundColor: '#DC2626',
+  },
+  punchBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  punchBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+
   // Floating Team Banner Card
-  myTeamCard: { backgroundColor: COLORS.card, borderRadius: 20, marginTop: 20, marginBottom: 14 },
+  myTeamCard: { backgroundColor: COLORS.card, borderRadius: 20, marginTop: 4, marginBottom: 14 },
   myTeamInner: { flexDirection: 'row', alignItems: 'center', padding: 16 },
   teamIconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   myTeamLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '700' },
@@ -846,7 +1205,8 @@ const styles = StyleSheet.create({
   viewTeamText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
 
   // Quick Action Buttons Row
-  quickActionsGrid: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  quickGridHeaderTitle: { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase' },
+  quickActionsGrid: { flexDirection: 'row', gap: 8 },
   actionPill: {
     flex: 1,
     backgroundColor: COLORS.card,
