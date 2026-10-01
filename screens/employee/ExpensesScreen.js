@@ -107,7 +107,7 @@ export default function ExpensesScreen() {
       
       let receiptUrls = [];
       
-      // 1. Upload receipt to ImageKit via Backend if one is selected
+      // 1. Upload receipt via Backend if one is selected
       if (receiptImage && receiptImage.uri) {
         setUploadingImage(true);
         try {
@@ -118,24 +118,20 @@ export default function ExpensesScreen() {
             const formData = new FormData();
             const response = await fetch(receiptImage.uri);
             const blob = await response.blob();
-            formData.append('file', blob, fileName);
-            formData.append('fileName', fileName);
+            formData.append('image', blob, fileName);
             formData.append('folder', '/crm-tracker/receipts');
-            uploadRes = await uploadAPI.uploadImageDirect(formData);
+            uploadRes = await uploadAPI.uploadImageFormData(formData);
           } else {
-            uploadRes = await uploadAPI.uploadImageDirect({
-              uri: receiptImage.uri,
-              fileName: fileName,
-              folder: '/crm-tracker/receipts'
-            });
+            uploadRes = await uploadAPI.uploadImageFormData(receiptImage.uri);
           }
           
-          if (uploadRes.data && uploadRes.data.success) {
-            receiptUrls.push(uploadRes.data.url);
+          if (uploadRes && uploadRes.data) {
+            const imageUrl = uploadRes.data.url || uploadRes.data.imageUrl || uploadRes.data.data?.url || uploadRes.data.fileUrl;
+            if (imageUrl) receiptUrls.push(imageUrl);
           }
         } catch (uploadErr) {
           console.log('⚠️ ExpensesScreen: Image upload failed:', uploadErr.message);
-          Alert.alert('Upload Failed', 'Failed to upload the receipt image. Submitting without receipt.');
+          Alert.alert('Upload Note', 'Receipt image upload failed. Submitting claim details.');
         } finally {
           setUploadingImage(false);
         }
