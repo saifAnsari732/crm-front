@@ -148,21 +148,28 @@ export default function AdminVisitsScreen() {
       let uploadedSelfieUrl = null;
 
       if (selfieImage) {
-        try {
-          if (Platform.OS === 'web') {
-            const formData = new FormData();
-            const response = await fetch(selfieImage.uri);
-            const blob = await response.blob();
-            formData.append('image', blob, `visit_selfie_${Date.now()}.jpg`);
-            formData.append('folder', '/crm-tracker/meetings');
-            const uploadRes = await uploadAPI.uploadImageFormData(formData);
-            if (uploadRes.data?.success) uploadedSelfieUrl = uploadRes.data.url;
-          } else {
-            const uploadRes = await uploadAPI.uploadImageFormData(selfieImage.uri);
-            if (uploadRes.data?.success) uploadedSelfieUrl = uploadRes.data.url;
-          }
-        } catch (uploadErr) {
-          console.log('Selfie upload note:', uploadErr.message);
+        let uploadRes;
+        const uriToUpload = selfieImage.uri || selfieImage;
+
+        if (Platform.OS === 'web') {
+          const formData = new FormData();
+          const response = await fetch(uriToUpload);
+          const blob = await response.blob();
+          formData.append('image', blob, `visit_selfie_${Date.now()}.jpg`);
+          formData.append('folder', '/crm-tracker/meetings');
+          uploadRes = await uploadAPI.uploadImageFormData(formData);
+        } else {
+          uploadRes = await uploadAPI.uploadImageFormData(uriToUpload);
+        }
+
+        if (uploadRes && uploadRes.data) {
+          uploadedSelfieUrl = uploadRes.data.url || uploadRes.data.imageUrl || uploadRes.data.data?.url || uploadRes.data.fileUrl;
+        }
+
+        if (!uploadedSelfieUrl) {
+          Alert.alert('Upload Failed', uploadRes?.data?.message || 'Failed to upload visit selfie. Please try again.');
+          setSubmitting(false);
+          return;
         }
       }
 

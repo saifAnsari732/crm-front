@@ -12,8 +12,8 @@ export const setUnauthorizedCallback = (callback) => {
 // =========================================================================
 // BACKEND API CONFIGURATION
 // =========================================================================
-export const PROD_URL = 'https://kisanteamapp.online/api';
-
+// export const PROD_URL = 'https://kisanteamapp.online/api';
+export const PROD_URL = 'https://field-backend-monitor-web-ym7d.onrender.com/api';
 const getBaseUrl = () => {
   // Production / Release Build (EAS Production / Release APK / AAB) -> Always use production server!
   if (!__DEV__ || process.env.NODE_ENV === 'production' || Constants.executionEnvironment === 'standalone') {
@@ -233,9 +233,13 @@ export const uploadAPI = {
       console.log('API call: POST /upload/image');
       const token = await storage.getItem('userToken') || await storage.getItem('token');
       
+      const fileUri = typeof formDataOrUri === 'string' 
+        ? formDataOrUri 
+        : (formDataOrUri && formDataOrUri.uri ? formDataOrUri.uri : null);
+
       // For Native (iOS/Android) we pass the URI and use expo-file-system
-      if (typeof formDataOrUri === 'string' && Platform.OS !== 'web') {
-        const response = await FileSystemLegacy.uploadAsync(`${BASE_URL}/upload/image`, formDataOrUri, {
+      if (fileUri && Platform.OS !== 'web') {
+        const response = await FileSystemLegacy.uploadAsync(`${BASE_URL}/upload/image`, fileUri, {
           httpMethod: 'POST',
           uploadType: FileSystemLegacy.FileSystemUploadType?.MULTIPART ?? 1,
           fieldName: 'image',
