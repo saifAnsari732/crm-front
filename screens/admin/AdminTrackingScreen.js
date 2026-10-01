@@ -428,48 +428,7 @@ export default function AdminTrackingScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={GREEN_DARK} />
-
-      {/* ── HEADER ─────────────────────────────────────────────── */}
-      <LinearGradient colors={[GREEN_DARK, GREEN]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <SafeAreaView edges={['top']}>
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))} accessibilityLabel="Back">
-              <ArrowLeft size={19} color="#fff" />
-            </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Live Tracking</Text>
-              <Text style={styles.headerSub}>Track your field team in real-time</Text>
-            </View>
-            <TouchableOpacity style={styles.iconBtn} accessibilityLabel="Notifications">
-              <Bell size={17} color="#fff" />
-              <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
-            </TouchableOpacity>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{(user?.name || 'A').slice(0, 1).toUpperCase()}</Text>
-            </View>
-          </View>
-          <View style={styles.headerControls}>
-            <View style={styles.tabsWrap}>
-              <View style={[styles.tab, styles.tabActive]}>
-                <MapIcon size={13} color={GREEN} />
-                <Text style={styles.tabActiveText}>Map</Text>
-              </View>
-              <TouchableOpacity style={styles.tab} onPress={() => router.push('/(admin)/team')}>
-                <Users size={13} color="#64748b" />
-                <Text style={styles.tabText}>Team</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.datePill}>
-              <CalendarDays size={13} color={GREEN} />
-              <Text style={styles.datePillText}>{todayLabel}</Text>
-              <ChevronDown size={13} color="#64748b" />
-            </View>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-
-      {/* ── MAP ────────────────────────────────────────────────── */}
+      {/* ── FULL SCREEN MAP ────────────────────────────────────── */}
       <View style={styles.mapWrap}>
         <MapViewComponent
           ref={mapRef}
@@ -480,15 +439,28 @@ export default function AdminTrackingScreen() {
           onSelectEmployee={handleSelectEmployee}
         />
 
-        {/* Total distance card */}
-        <TouchableOpacity style={[styles.distanceCard, cardShadow]} onPress={fitRoute} activeOpacity={0.9}>
-          <View style={styles.distanceIcon}><Route size={16} color={GREEN} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.distanceLabel}>Total Distance</Text>
-            <Text style={styles.distanceValue}>{totalKm.toFixed(1)} km</Text>
+        {/* ── FLOATING BACK NAVIGATION & LIVE BADGE ─────────────── */}
+        <SafeAreaView edges={['top']} style={styles.floatingHeaderContainer} pointerEvents="box-none">
+          <View style={styles.floatingHeaderRow}>
+            <TouchableOpacity
+              style={styles.floatingBackBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={20} color="#ffffff" />
+            </TouchableOpacity>
+
+            <View style={styles.floatingTitlePill}>
+              <View style={styles.liveGreenDot} />
+              <Text style={styles.floatingTitleText}>Live Map</Text>
+              <View style={styles.floatingCountBadge}>
+                <Text style={styles.floatingCountText}>{activeCount} Active</Text>
+              </View>
+            </View>
           </View>
-          <ChevronRight size={16} color={GREEN} />
-        </TouchableOpacity>
+        </SafeAreaView>
+
+
 
         {/* Floating controls */}
         <View style={styles.mapControls}>
@@ -698,25 +670,74 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f6f4' },
   loadingText: { fontFamily: FONT, fontSize: 12, color: '#64748b', marginTop: 8 },
 
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, gap: 9 },
-  iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', top: 5, right: 5, minWidth: 13, height: 13, borderRadius: 7, backgroundColor: '#ef3154', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  badgeText: { color: '#fff', fontSize: 7, fontWeight: 'bold' },
-  headerTitle: { color: '#fff', fontFamily: FONT, fontSize: 16, fontWeight: 'bold' },
-  headerSub: { color: '#a7f3d0', fontFamily: FONT, fontSize: 9, marginTop: 1 },
-  avatarCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ef3154', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff' },
-  avatarText: { color: '#fff', fontFamily: FONT, fontSize: 11, fontWeight: 'bold' },
+  floatingHeaderContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 90,
+  },
+  floatingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) + 8 : 8,
+    gap: 12,
+  },
+  floatingBackBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingTitlePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  liveGreenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10b981',
+  },
+  floatingTitleText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  floatingCountBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  floatingCountText: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '800',
+  },
 
-  headerControls: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 10 },
-  tabsWrap: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 3 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, paddingVertical: 6, borderRadius: 9 },
-  tabActive: { backgroundColor: '#e7f6ec' },
-  tabActiveText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: GREEN },
-  tabText: { fontFamily: FONT, fontSize: 10, fontWeight: '700', color: '#64748b' },
-  datePill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 7, marginLeft: 'auto' },
-  datePillText: { fontFamily: FONT, fontSize: 9, fontWeight: '700', color: '#334155' },
-
-  mapWrap: { flex: 1, position: 'relative', minHeight: 300 },
+  mapWrap: { flex: 1, position: 'relative' },
 
   livePillCard: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 13, paddingHorizontal: 11, paddingVertical: 8 },
   livePillDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#16a34a' },
