@@ -559,34 +559,6 @@ export default function AdminReports() {
               </button>
             </div>
           </div>
-          {/* Quick Staff Selection Pills */}
-          {employees.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                Quick Select Field Staff:
-              </span>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
-                {employees.map((emp) => {
-                  const isSelected = selectedEmp === emp._id;
-                  return (
-                    <button
-                      key={emp._id}
-                      type="button"
-                      onClick={() => setSelectedEmp(emp._id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                        isSelected
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                          : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'
-                      }`}
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      <span>{emp.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ── Empty State Hero Card (When No Report Generated Yet) ── */}

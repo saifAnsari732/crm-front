@@ -20,6 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Store,
+  User,
+  RefreshCw,
 } from 'lucide-react';
 import Avatar from '../../components/shared/Avatar';
 
@@ -47,7 +49,9 @@ const getMeetingImage = (m) => {
   return '';
 };
 
-export function AdminMeetings() {
+export default function AdminMeetings() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   const [meetings, setMeetings] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +59,7 @@ export function AdminMeetings() {
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [empFilter, setEmpFilter] = useState('');
+  const [selectedDate, setSelectedDate] = useState(''); // Date filter (YYYY-MM-DD)
   const [searchTerm, setSearchTerm] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
@@ -74,7 +79,7 @@ export function AdminMeetings() {
     try {
       const res = await meetingAPI.getAll({
         page,
-        limit: 20,
+        limit: 50,
         status: statusFilter || undefined,
         employeeId: empFilter || undefined,
       });
@@ -104,6 +109,12 @@ export function AdminMeetings() {
   };
 
   const filteredMeetings = meetings.filter((m) => {
+    // Filter by Date if selected
+    if (selectedDate) {
+      const recordDate = m.date || (m.createdAt ? m.createdAt.slice(0, 10) : '');
+      if (recordDate !== selectedDate) return false;
+    }
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const client = (m.clientName || '').toLowerCase();
@@ -122,11 +133,13 @@ export function AdminMeetings() {
     );
   });
 
+  const selectedEmpObj = employees.find((e) => e._id === empFilter);
+
   return (
     <KisanConnectLayout>
       <div className="space-y-6">
         {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
               <Briefcase className="w-6 h-6 text-blue-600" />
@@ -137,7 +150,7 @@ export function AdminMeetings() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200 shadow-xs">
               {total} Total Visits in DB
             </span>
@@ -188,50 +201,125 @@ export function AdminMeetings() {
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-            <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                placeholder="Search by client, shop, mobile, address, notes, employee..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search client, shop, mobile, notes, employee..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Employee Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700">
+                <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Employee:</span>
+                <select
+                  value={empFilter}
+                  onChange={(e) => {
+                    setEmpFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer max-w-[150px] truncate"
+                >
+                  <option value="">All Field Employees</option>
+                  {employees.map((e) => (
+                    <option key={e._id} value={e._id}>
+                      {e.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none"
+              >
+                <option value="">All Statuses</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="follow-up">Follow-Up</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
             </div>
 
-            <select
-              value={empFilter}
-              onChange={(e) => {
-                setEmpFilter(e.target.value);
-                setPage(1);
-              }}
-              className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none"
-            >
-              <option value="">All Field Employees</option>
-              {employees.map((e) => (
-                <option key={e._id} value={e._id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
+            {/* Date Filter & Presets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase mr-1">Date:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayStr)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                  selectedDate === todayStr
+                    ? 'bg-blue-600 text-white border-blue-700'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - 1);
+                  setSelectedDate(d.toISOString().slice(0, 10));
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition"
+              >
+                Yesterday
+              </button>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none"
-            >
-              <option value="">All Statuses</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="completed">Completed</option>
-              <option value="follow-up">Follow-Up</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+              {/* Date Input */}
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                />
+              </div>
+
+              {(selectedDate || empFilter || statusFilter || searchTerm) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate('');
+                    setEmpFilter('');
+                    setStatusFilter('');
+                    setSearchTerm('');
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition border border-rose-200"
+                >
+                  <RefreshCw className="w-3 h-3" /> Reset
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Active Employee Filter Banner */}
+          {selectedEmpObj && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs font-bold text-blue-900">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-600" />
+                <span>Showing visits for employee: <strong>{selectedEmpObj.name}</strong> ({filteredMeetings.length} visits found)</span>
+              </div>
+              <button onClick={() => setEmpFilter('')} className="text-blue-700 hover:underline">
+                Clear Employee Filter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Table of Meetings */}
@@ -261,7 +349,7 @@ export function AdminMeetings() {
                 ) : filteredMeetings.length === 0 ? (
                   <tr>
                     <td colSpan="9" className="py-12 text-center text-xs text-slate-400">
-                      No client visit records found.
+                      No client visit records found for selected criteria.
                     </td>
                   </tr>
                 ) : (
@@ -299,36 +387,29 @@ export function AdminMeetings() {
                           {m.mobileNumber && (
                             <a
                               href={`tel:${m.mobileNumber}`}
-                              className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-1 font-mono mt-0.5"
+                              className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-semibold mt-0.5"
                             >
-                              <Phone className="w-2.5 h-2.5" /> {m.mobileNumber}
+                              <Phone className="w-3 h-3" />
+                              {m.mobileNumber}
                             </a>
                           )}
                         </td>
 
-                        {/* Visit Selfie Photo Thumbnail */}
+                        {/* Visit Selfie Preview */}
                         <td className="py-3.5 px-4">
                           {visitImg ? (
                             <button
                               type="button"
-                              onClick={() =>
-                                setPreviewImage({
-                                  url: visitImg,
-                                  client: m.clientName,
-                                  emp: m.employee?.name,
-                                  date: m.date,
-                                  notes: m.meetingNotes,
-                                })
-                              }
-                              className="group relative w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shadow-xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
-                              title="Click to view visit selfie"
+                              onClick={() => setPreviewImage(visitImg)}
+                              className="group relative w-9 h-9 rounded-xl overflow-hidden border border-slate-200 shadow-xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
+                              title="View Visit Photo"
                             >
                               <img
                                 src={visitImg}
                                 alt="Visit Selfie"
                                 className="w-full h-full object-cover group-hover:scale-110 transition duration-200"
                               />
-                              <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
                                 <Eye className="w-3.5 h-3.5 text-white" />
                               </div>
                             </button>
@@ -337,72 +418,63 @@ export function AdminMeetings() {
                           )}
                         </td>
 
-                        {/* Address */}
-                        <td className="py-3.5 px-4 max-w-[200px]">
-                          <span className="text-slate-700 block truncate" title={m.meetingAddress}>
-                            {m.meetingAddress || '—'}
+                        {/* Location / Address */}
+                        <td className="py-3.5 px-4 max-w-[180px]">
+                          <span className="text-slate-800 font-medium block truncate" title={m.meetingAddress}>
+                            {m.meetingAddress || m.locationName || 'Field Location'}
                           </span>
                         </td>
 
-                        {/* Notes */}
-                        <td className="py-3.5 px-4 max-w-[180px]">
-                          <span className="text-slate-600 italic block truncate" title={m.meetingNotes}>
-                            {m.meetingNotes || '—'}
+                        {/* Meeting Notes */}
+                        <td className="py-3.5 px-4 max-w-[200px]">
+                          <span className="text-slate-600 block truncate" title={m.meetingNotes}>
+                            {m.meetingNotes || '-'}
                           </span>
                         </td>
 
                         {/* Deal Value */}
-                        <td className="py-3.5 px-4 text-right font-mono font-bold">
-                          {m.dealAmount > 0 ? (
-                            <span className="text-emerald-600">₹{m.dealAmount.toLocaleString()}</span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
+                          {m.dealValue ? `₹${Number(m.dealValue).toLocaleString('en-IN')}` : '-'}
                         </td>
 
                         {/* Date */}
-                        <td className="py-3.5 px-4 font-mono text-slate-500 whitespace-nowrap">
-                          {new Date(m.date || m.createdAt).toLocaleDateString([], {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600 font-medium">
+                          {m.date || (m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')}
                         </td>
 
-                        {/* Status */}
-                        <td className="py-3.5 px-4 whitespace-nowrap">
+                        {/* Status Badge */}
+                        <td className="py-3.5 px-4">
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-semibold text-[10px] capitalize ${
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
                               m.status === 'completed'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : m.status === 'scheduled'
-                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
                                 : m.status === 'follow-up'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-slate-100 text-slate-700 border border-slate-300'
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
                                 m.status === 'completed'
-                                  ? 'bg-emerald-500'
+                                  ? 'bg-emerald-600'
                                   : m.status === 'scheduled'
-                                  ? 'bg-blue-500'
+                                  ? 'bg-blue-600'
                                   : m.status === 'follow-up'
-                                  ? 'bg-amber-500'
-                                  : 'bg-rose-500'
+                                  ? 'bg-amber-600'
+                                  : 'bg-slate-500'
                               }`}
-                            ></span>
-                            {m.status || 'scheduled'}
+                            />
+                            {m.status || 'Scheduled'}
                           </span>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right">
                           <button
-                            type="button"
                             onClick={() => handleDelete(m._id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                             title="Delete Visit Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -415,80 +487,38 @@ export function AdminMeetings() {
               </tbody>
             </table>
           </div>
-
-          {/* Table Footer with Pagination */}
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>
-              Showing {filteredMeetings.length} of {total} visits recorded
-            </span>
-
-            {total > 20 && (
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50 transition"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 inline mr-1" /> Previous
-                </button>
-                <span className="font-semibold text-slate-800">
-                  Page {page} of {Math.ceil(total / 20)}
-                </span>
-                <button
-                  disabled={page * 20 >= total}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50 transition"
-                >
-                  Next <ChevronRight className="w-3.5 h-3.5 inline ml-1" />
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* Visit Selfie Preview Modal */}
+      {/* Photo Preview Modal */}
       {previewImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
           onClick={() => setPreviewImage(null)}
         >
           <div
-            className="relative max-w-md w-full bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-2xl p-5"
+            className="relative max-w-md w-full bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-2xl p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">Client Visit Selfie</h3>
-                <p className="text-[11px] text-slate-500">
-                  {previewImage.client} • {previewImage.emp}
-                </p>
-              </div>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <h3 className="font-extrabold text-slate-900 text-base">Field Visit Selfie</h3>
               <button
                 onClick={() => setPreviewImage(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="mt-4 rounded-2xl overflow-hidden bg-slate-100 aspect-square max-h-[380px] flex items-center justify-center border border-slate-200">
               <img
-                src={previewImage.url}
-                alt="Client Visit Selfie"
+                src={previewImage}
+                alt="Visit Photo"
                 className="w-full h-full object-cover"
               />
             </div>
-            {previewImage.notes && (
-              <div className="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600">
-                <span className="font-semibold text-slate-800">Visit Notes: </span>
-                {previewImage.notes}
-              </div>
-            )}
           </div>
         </div>
       )}
     </KisanConnectLayout>
   );
 }
-
-export default AdminMeetings;

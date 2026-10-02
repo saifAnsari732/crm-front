@@ -70,7 +70,7 @@
     color: var(--text-main);
   }
   .nav-item {
-    @apply flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-200 font-semibold text-[18px];
+    @apply flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-200 font-semibold text-[15px];
     color: var(--text-muted);
   }
   .nav-item:hover {

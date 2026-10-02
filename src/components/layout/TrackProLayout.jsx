@@ -172,7 +172,7 @@ export default function KisanConnectLayout({ children }) {
                       to={item.to}
                       end={item.end}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-2.5 py-2 px-3 rounded-xl text-[18px] transition-all duration-150 group ${
+                      className={`flex items-center gap-2.5 py-2 px-3 rounded-xl text-[15px] transition-all duration-150 group ${
                         isActive
                           ? 'bg-rose-50 text-rose-600 font-bold border-l-4 border-rose-500 pl-3.5 shadow-sm'
                           : 'text-slate-700 font-medium hover:bg-rose-50/60 hover:text-rose-600 pl-3.5 hover:border-l-4 hover:border-rose-300'
@@ -196,7 +196,7 @@ export default function KisanConnectLayout({ children }) {
                     key={item.to}
                     to={item.to}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 py-2.5 px-3 rounded-xl text-[18px] transition-all duration-150 group ${
+                    className={`flex items-center gap-2.5 py-2.5 px-3 rounded-xl text-[15px] transition-all duration-150 group ${
                       isActive
                         ? 'bg-rose-50 text-rose-600 font-bold border-l-4 border-rose-500 pl-3.5 shadow-sm'
                         : 'text-slate-700 font-medium hover:bg-rose-50/60 hover:text-rose-600 pl-3.5 hover:border-l-4 hover:border-rose-300'

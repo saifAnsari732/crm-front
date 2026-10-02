@@ -12,14 +12,23 @@ import {
   X,
   Radio,
   RefreshCw,
+  User,
+  Filter,
+  History,
+  TrendingUp,
+  MapPin,
 } from 'lucide-react';
 import { API } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import Avatar from '../../components/shared/Avatar';
 
 export default function AdminAttendance() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   const [attendance, setAttendance] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
   const [previewSelfie, setPreviewSelfie] = useState(null);
+  const [selectedEmpHistory, setSelectedEmpHistory] = useState(null);
   const [stats, setStats] = useState({
     totalEmployees: 0,
     presentToday: 0,
@@ -29,22 +38,32 @@ export default function AdminAttendance() {
   });
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'today', 'present', 'absent', 'half-day'
+  const [statusFilter, setStatusFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
-  const [selectedDate, setSelectedDate] = useState(''); // YYYY-MM-DD
+  const [empFilter, setEmpFilter] = useState('all');
+  // Default to TODAY so user sees today's attendance by default
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [viewMode, setViewMode] = useState('today'); // 'today' | 'history' | 'employee'
   const [onlyActiveNow, setOnlyActiveNow] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchAttendanceData = async () => {
     try {
       setLoading(true);
-      const attRes = await API.get('/admin/attendance').catch(() => ({ data: { success: false } }));
+      const [attRes, empRes] = await Promise.all([
+        API.get('/admin/attendance').catch(() => ({ data: { success: false } })),
+        API.get('/employees').catch(() => ({ data: { success: false } })),
+      ]);
 
       if (attRes.data?.success && Array.isArray(attRes.data.records)) {
         setAttendance(attRes.data.records);
         if (attRes.data.stats) {
           setStats(attRes.data.stats);
         }
+      }
+
+      if (empRes.data?.success && Array.isArray(empRes.data.employees)) {
+        setEmployeesList(empRes.data.employees);
       }
     } catch (e) {
       console.error('Error fetching attendance records:', e);
@@ -57,21 +76,33 @@ export default function AdminAttendance() {
     fetchAttendanceData();
   }, []);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-
   const distinctDepts = Array.from(
     new Set(attendance.map((a) => a.employee?.department).filter(Boolean))
   );
 
-  // Count currently active employees (checked in today and haven't checked out yet)
+  // Extract all unique employees from attendance records + employeesList
+  const uniqueEmployees = Array.from(
+    new Map(
+      [
+        ...employeesList.map((e) => [e._id, { id: e._id, name: e.name, employeeId: e.employeeId, dept: e.department }]),
+        ...attendance
+          .filter((a) => a.employee?._id)
+          .map((a) => [a.employee._id, { id: a.employee._id, name: a.employee.name, employeeId: a.employee.employeeId, dept: a.employee.department }]),
+      ]
+    ).values()
+  );
+
+  // Active now count
   const activeNowCount = attendance.filter((a) => {
-    const isToday = (a.date === todayStr) || (!a.date && a.createdAt?.startsWith(todayStr));
+    const isToday = a.date === todayStr || (!a.date && a.createdAt?.startsWith(todayStr));
     return isToday && a.checkIn && !a.checkOut;
   }).length;
 
+  // Filter records
   const filtered = attendance.filter((a) => {
     const empName = a.employee?.name || 'Unknown Employee';
     const empId = a.employee?.employeeId || '';
+    const empDbId = a.employee?._id || '';
     const empDept = a.employee?.department || '';
     const recordDate = a.date || (a.createdAt ? a.createdAt.slice(0, 10) : '');
 
@@ -79,26 +110,29 @@ export default function AdminAttendance() {
       empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       empId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const isToday = recordDate === todayStr;
+    const isTodayRecord = recordDate === todayStr;
     const isCheckedInActive = Boolean(a.checkIn && !a.checkOut);
 
     let matchesStatus = true;
     if (onlyActiveNow || statusFilter === 'active') {
-      matchesStatus = isToday && isCheckedInActive;
+      matchesStatus = isTodayRecord && isCheckedInActive;
     } else if (statusFilter === 'today') {
-      matchesStatus = isToday;
+      matchesStatus = isTodayRecord;
     } else if (statusFilter !== 'all') {
       matchesStatus = a.status?.toLowerCase() === statusFilter.toLowerCase();
     }
 
     const matchesDept = deptFilter === 'all' || empDept === deptFilter;
+    const matchesEmp = empFilter === 'all' || empDbId === empFilter;
 
     let matchesDate = true;
-    if (selectedDate) {
+    if (viewMode === 'today') {
+      matchesDate = isTodayRecord;
+    } else if (selectedDate) {
       matchesDate = recordDate === selectedDate;
     }
 
-    return matchesSearch && matchesStatus && matchesDept && matchesDate;
+    return matchesSearch && matchesStatus && matchesDept && matchesEmp && matchesDate;
   });
 
   const formatTime = (isoString) => {
@@ -123,72 +157,81 @@ export default function AdminAttendance() {
     }
   };
 
+  // Helper for date quick presets
+  const handleDatePreset = (preset) => {
+    if (preset === 'today') {
+      setViewMode('today');
+      setSelectedDate(todayStr);
+    } else if (preset === 'yesterday') {
+      setViewMode('history');
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      setSelectedDate(d.toISOString().slice(0, 10));
+    } else if (preset === 'all') {
+      setViewMode('history');
+      setSelectedDate('');
+    }
+  };
+
   return (
     <KisanConnectLayout>
       <div className="space-y-6">
-        {/* Header */}
+        {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Attendance Management</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Attendance Management</h1>
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-200">
+                {viewMode === 'today' ? `📅 Today (${todayStr})` : selectedDate ? `📅 ${selectedDate}` : '📜 Full History'}
+              </span>
+            </div>
             <p className="text-base font-medium text-slate-600 mt-1">
-              Track real-time active employees, filter by date, and manage team attendance logs.
+              Track today's active workforce, find employee-wise history, and filter attendance logs by date.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center ">
-            {/* Top Date Wise Find Option */}
-            <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 transition px-4 py-2.5 rounded-xl border-2 border-blue-500/30 text-sm font-bold text-slate-800 shadow-xs">
-              <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">Find Date:</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
-              />
-              {selectedDate && (
-                <button
-                  onClick={() => setSelectedDate('')}
-                  className="ml-1 text-xs text-rose-600 hover:bg-rose-100 font-extrabold px-2 py-0.5 rounded-lg border border-rose-200 transition"
-                  title="Show All Dates"
-                >
-                  Clear
-                </button>
-              )}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* View Mode Tabs: Today vs History */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-extrabold">
+              <button
+                onClick={() => handleDatePreset('today')}
+                className={`px-3.5 py-2 rounded-lg transition ${
+                  viewMode === 'today' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📅 Today's Attendance
+              </button>
+              <button
+                onClick={() => handleDatePreset('all')}
+                className={`px-3.5 py-2 rounded-lg transition ${
+                  viewMode === 'history' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📜 All Attendance History
+              </button>
             </div>
-
-            <select
-              value={deptFilter}
-              onChange={(e) => setDeptFilter(e.target.value)}
-              className="text-sm font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Departments</option>
-              {distinctDepts.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
 
             <button
               onClick={() => toast.success('Attendance report exported as CSV!')}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md transition"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-xs transition"
             >
               <Download className="w-4 h-4" /> Export Report
             </button>
           </div>
         </div>
 
-        {/* 6 KisanConnect KPI Cards (Large Text) */}
+        {/* 6 KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3">
               <Users className="w-5 h-5" />
             </div>
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Employees</p>
-            <h3 className="text-3xl font-black text-slate-900 mt-1">{stats.totalEmployees}</h3>
+            <h3 className="text-3xl font-black text-slate-900 mt-1">{stats.totalEmployees || uniqueEmployees.length}</h3>
             <span className="text-xs font-bold text-emerald-600 mt-1 block">Live from DB</span>
           </div>
 
-          {/* Currently Active KPI Card (Clickable to Filter Active Only) */}
+          {/* Active Now Card */}
           <button
             type="button"
             onClick={() => setOnlyActiveNow(!onlyActiveNow)}
@@ -257,103 +300,164 @@ export default function AdminAttendance() {
 
         {/* Filter Controls Bar */}
         <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="w-5 h-5 text-slate-400 absolute left-4 top-3" />
-                <input
-                  type="text"
-                  placeholder="Search by employee name or ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-11 pr-4 py-2.5 text-base font-semibold bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
-                />
+          <div className="p-5 border-b border-slate-200 bg-slate-50/50 space-y-4">
+            {/* Top row: Search + Employee Selector + Dept */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                {/* Search Bar */}
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Search employee name or ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+                  />
+                </div>
+
+                {/* Employee-Wise Select */}
+                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-300 shadow-xs text-xs font-extrabold text-slate-700">
+                  <User className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-slate-400 uppercase text-[10px]">Employee:</span>
+                  <select
+                    value={empFilter}
+                    onChange={(e) => {
+                      setEmpFilter(e.target.value);
+                      if (e.target.value !== 'all') {
+                        setViewMode('history'); // Show full history when specific employee is chosen
+                      }
+                    }}
+                    className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer max-w-[160px] truncate"
+                  >
+                    <option value="all">All Employees</option>
+                    {uniqueEmployees.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.employeeId || 'EMP'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Department Select */}
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl px-3 py-2 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Departments</option>
+                  {distinctDepts.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+
+                {/* Status Select */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl px-3 py-2 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">🟢 Active Now</option>
+                  <option value="present">Present</option>
+                  <option value="absent">Absent</option>
+                  <option value="half-day">Half Day</option>
+                </select>
               </div>
 
-              {/* Quick Filter Active Only Button */}
-              <button
-                type="button"
-                onClick={() => setOnlyActiveNow(!onlyActiveNow)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition shadow-xs border ${
-                  onlyActiveNow
-                    ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-300'
-                    : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                }`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${onlyActiveNow ? 'bg-white animate-ping' : 'bg-emerald-500'}`} />
-                {onlyActiveNow ? 'Showing Active Only' : 'Filter Active Employees'}
-              </button>
-            </div>
+              {/* Date Filter & Quick Preset Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold text-slate-500 uppercase mr-1">Date Filter:</span>
+                <button
+                  type="button"
+                  onClick={() => handleDatePreset('today')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                    viewMode === 'today'
+                      ? 'bg-blue-600 text-white border-blue-700'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDatePreset('yesterday')}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 transition"
+                >
+                  Yesterday
+                </button>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Date Filter Input in Table Bar */}
-              <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-700">
-                <span className="text-xs text-slate-400 font-bold uppercase">Date:</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
-                />
-                {selectedDate && (
+                {/* Custom Date Picker */}
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-bold">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setViewMode(e.target.value === todayStr ? 'today' : 'history');
+                    }}
+                    className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none cursor-pointer"
+                  />
+                </div>
+
+                {(selectedDate || searchTerm || statusFilter !== 'all' || deptFilter !== 'all' || empFilter !== 'all' || onlyActiveNow) && (
                   <button
-                    onClick={() => setSelectedDate('')}
-                    className="text-xs text-slate-400 hover:text-rose-600 font-extrabold"
+                    onClick={() => {
+                      setSelectedDate(todayStr);
+                      setViewMode('today');
+                      setSearchTerm('');
+                      setStatusFilter('all');
+                      setDeptFilter('all');
+                      setEmpFilter('all');
+                      setOnlyActiveNow(false);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition border border-rose-200"
                   >
-                    ✕
+                    <RefreshCw className="w-3.5 h-3.5" /> Reset
                   </button>
                 )}
               </div>
-
-              {/* Status Filter Dropdown */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded-xl px-4 py-2.5 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">🟢 Active Now (Checked In)</option>
-                <option value="today">📅 Today's Logs</option>
-                <option value="present">Present</option>
-                <option value="absent">Absent</option>
-                <option value="half-day">Half Day</option>
-              </select>
-
-              {(selectedDate || searchTerm || statusFilter !== 'all' || deptFilter !== 'all' || onlyActiveNow) && (
-                <button
-                  onClick={() => {
-                    setSelectedDate('');
-                    setSearchTerm('');
-                    setStatusFilter('all');
-                    setDeptFilter('all');
-                    setOnlyActiveNow(false);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Reset Filters
-                </button>
-              )}
             </div>
+
+            {/* Active Employee Selected Banner */}
+            {empFilter !== 'all' && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-blue-900 font-bold">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span>
+                    Showing complete attendance history for: <strong>{uniqueEmployees.find((e) => e.id === empFilter)?.name}</strong> ({filtered.length} logs found)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setEmpFilter('all')}
+                  className="text-xs font-extrabold text-blue-700 hover:underline cursor-pointer"
+                >
+                  Show All Employees
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Table with Large Readable Text */}
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-500  text-sm uppercase tracking-wider">
-                  <th className="py-4 px-5">Date</th>
-                  <th className="py-4 px-5">Employee</th>
-                  <th className="py-4 px-5">Punch Selfie</th>
-                  <th className="py-4 px-5">Employee ID</th>
-                  <th className="py-4 px-5">Department</th>
-                  <th className="py-4 px-5">Check In</th>
-                  <th className="py-4 px-5">Check Out</th>
-                  <th className="py-4 px-5">Working Hours</th>
-                  <th className="py-4 px-5">Distance (KM)</th>
-                  <th className="py-4 px-5">Status</th>
+                <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                  <th className="py-3.5 px-4">Date</th>
+                  <th className="py-3.5 px-4">Employee</th>
+                  <th className="py-3.5 px-4">Punch Selfie</th>
+                  <th className="py-3.5 px-4">Employee ID</th>
+                  <th className="py-3.5 px-4">Department</th>
+                  <th className="py-3.5 px-4">Check In</th>
+                  <th className="py-3.5 px-4">Check Out</th>
+                  <th className="py-3.5 px-4">Working Hours</th>
+                  <th className="py-3.5 px-4">Distance (KM)</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">History</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 text-slate-800 ">
+              <tbody className="divide-y divide-slate-200 text-slate-800 text-xs">
                 {filtered.length > 0 ? (
                   filtered.map((item) => {
                     const selfieImg = item.checkInImage || item.selfie || item.photo;
@@ -364,28 +468,28 @@ export default function AdminAttendance() {
                         key={item._id}
                         className={`transition ${
                           isActiveCheckedIn
-                            ? 'bg-emerald-50/40 hover:bg-emerald-50/80 '
+                            ? 'bg-emerald-50/40 hover:bg-emerald-50/80'
                             : 'hover:bg-slate-50/80'
                         }`}
                       >
                         {/* Date */}
-                        <td className="py-4 px-5 font-mono text-sm font-semibold text-slate-500">
+                        <td className="py-3.5 px-4 font-mono font-semibold text-slate-600">
                           {item.date || (item.createdAt ? item.createdAt.slice(0, 10) : '-')}
                         </td>
 
                         {/* Employee Details */}
-                        <td className="py-4 px-5">
-                          <div className="flex items-center gap-3">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
                             <Avatar
                               src={item.employee?.avatar}
                               name={item.employee?.name}
-                              size="md"
+                              size="sm"
                             />
                             <div>
-                              <span className="font-semibold text-slate-500 text-base block leading-snug">
+                              <span className="font-bold text-slate-900 block leading-snug text-sm">
                                 {item.employee?.name || 'Field Employee'}
                               </span>
-                              <span className="text-xs text-slate-500 font-semibold block">
+                              <span className="text-[11px] text-slate-500 font-semibold block">
                                 {item.employee?.phone || ''}
                               </span>
                             </div>
@@ -393,7 +497,7 @@ export default function AdminAttendance() {
                         </td>
 
                         {/* Selfie Preview Button */}
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-4">
                           {selfieImg ? (
                             <button
                               type="button"
@@ -405,7 +509,7 @@ export default function AdminAttendance() {
                                   time: item.checkIn,
                                 })
                               }
-                              className="group relative w-11 h-11 rounded-xl overflow-hidden border-2 border-slate-300 shadow-xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
+                              className="group relative w-10 h-10 rounded-xl overflow-hidden border-2 border-slate-300 shadow-xs hover:ring-2 hover:ring-blue-500 transition cursor-pointer flex-shrink-0"
                               title="View Punch Selfie"
                             >
                               <img
@@ -418,31 +522,31 @@ export default function AdminAttendance() {
                               </div>
                             </button>
                           ) : (
-                            <span className="text-xs text-slate-400 font-mono italic">No Selfie</span>
+                            <span className="text-[11px] text-slate-400 font-mono italic">No Selfie</span>
                           )}
                         </td>
 
                         {/* Employee ID */}
-                        <td className="py-4 px-5 font-mono text-sm font-bold text-slate-700">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
                           {item.employee?.employeeId || 'EMP-' + (item.employee?._id || item._id).slice(-6).toUpperCase()}
                         </td>
 
                         {/* Department */}
-                        <td className="py-4 px-5">
-                          <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
                             {item.employee?.department || 'Field Services'}
                           </span>
                         </td>
 
                         {/* Check In */}
-                        <td className="py-4 px-5 font-semibold text-base text-slate-900">
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
                           {formatTime(item.checkIn)}
                         </td>
 
                         {/* Check Out */}
-                        <td className="py-4 px-5 text-base font-semibold text-slate-700">
+                        <td className="py-3.5 px-4 font-bold text-slate-700">
                           {isActiveCheckedIn ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800">
                               Active (Checked In)
                             </span>
                           ) : (
@@ -451,19 +555,19 @@ export default function AdminAttendance() {
                         </td>
 
                         {/* Working Hours */}
-                        <td className="py-4 px-5 font-semibold text-base text-slate-900">
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
                           {calculateHours(item.checkIn, item.checkOut)}
                         </td>
 
                         {/* Distance */}
-                        <td className="py-4 px-5 font-mono text-base font-semibold text-blue-700">
+                        <td className="py-3.5 px-4 font-mono font-bold text-blue-700">
                           {item.totalDistanceTraveled ? item.totalDistanceTraveled.toFixed(2) + ' km' : '0 km'}
                         </td>
 
                         {/* Status */}
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-4">
                           <span
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-xs capitalize ${
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold text-[11px] capitalize ${
                               item.status === 'present'
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : item.status === 'absent'
@@ -472,7 +576,7 @@ export default function AdminAttendance() {
                             }`}
                           >
                             <span
-                              className={`w-2 h-2 rounded-full ${
+                              className={`w-1.5 h-1.5 rounded-full ${
                                 item.status === 'present'
                                   ? 'bg-emerald-600'
                                   : item.status === 'absent'
@@ -483,13 +587,36 @@ export default function AdminAttendance() {
                             {item.status}
                           </span>
                         </td>
+
+                        {/* Action: View Employee Log History */}
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const empId = item.employee?._id;
+                              if (empId) {
+                                setEmpFilter(empId);
+                                setViewMode('history');
+                                setSelectedDate('');
+                              }
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition border border-blue-200 cursor-pointer"
+                            title="View All Attendance History of this Employee"
+                          >
+                            View Logs
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan="10" className="py-16 text-center text-base font-bold text-slate-500">
-                      {loading ? 'Loading attendance logs from database...' : 'No attendance records found for selected criteria.'}
+                    <td colSpan="11" className="py-16 text-center text-sm font-bold text-slate-500">
+                      {loading
+                        ? 'Loading attendance logs from database...'
+                        : viewMode === 'today'
+                        ? 'No attendance records found for TODAY. Switch to "All Attendance History" to view previous dates.'
+                        : 'No attendance records match your search criteria.'}
                     </td>
                   </tr>
                 )}
@@ -498,18 +625,20 @@ export default function AdminAttendance() {
           </div>
 
           {/* Table Footer */}
-          <div className="p-5 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-sm font-bold text-slate-700">
-            <span>Showing <strong className="text-blue-700 text-base">{filtered.length}</strong> of {attendance.length} attendance records</span>
-            {selectedDate && (
+          <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs font-bold text-slate-700">
+            <span>
+              Showing <strong className="text-blue-700 text-sm">{filtered.length}</strong> of {attendance.length} attendance records
+            </span>
+            <div className="flex items-center gap-2">
               <span className="bg-blue-50 text-blue-800 px-3 py-1 rounded-xl border border-blue-200">
-                Filtered Date: {selectedDate}
+                Mode: {viewMode === 'today' ? 'Today Only' : selectedDate ? `Date (${selectedDate})` : 'Full History'}
               </span>
-            )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Attendance Punch Selfie Preview Modal */}
+      {/* Selfie Preview Modal */}
       {previewSelfie && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
@@ -522,16 +651,16 @@ export default function AdminAttendance() {
             <div className="flex items-center justify-between pb-4 border-b border-slate-200">
               <div>
                 <h3 className="font-extrabold text-slate-900 text-lg">Attendance Punch Selfie</h3>
-                <p className="text-sm font-semibold text-slate-600">{previewSelfie.name} • {previewSelfie.date}</p>
+                <p className="text-xs font-semibold text-slate-600">{previewSelfie.name} • {previewSelfie.date}</p>
               </div>
               <button
                 onClick={() => setPreviewSelfie(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="mt-4 rounded-2xl overflow-hidden bg-slate-100 aspect-square max-h-[400px] flex items-center justify-center border border-slate-200">
+            <div className="mt-4 rounded-2xl overflow-hidden bg-slate-100 aspect-square max-h-[380px] flex items-center justify-center border border-slate-200">
               <img
                 src={previewSelfie.url}
                 alt="Punch Selfie"
@@ -539,8 +668,8 @@ export default function AdminAttendance() {
               />
             </div>
             {previewSelfie.time && (
-              <div className="mt-4 text-center text-sm font-semibold text-slate-600">
-                Captured at: <strong className="text-slate-900 text-base">{new Date(previewSelfie.time).toLocaleTimeString()}</strong>
+              <div className="mt-4 text-center text-xs font-semibold text-slate-600">
+                Captured at: <strong className="text-slate-900 text-sm">{new Date(previewSelfie.time).toLocaleTimeString()}</strong>
               </div>
             )}
           </div>

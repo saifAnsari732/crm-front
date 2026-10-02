@@ -387,6 +387,14 @@ export default function AdminEmployees() {
 
   // Distinct departments and managers from loaded data
   const distinctDepts = Array.from(new Set(employees.map((e) => e.department).filter(Boolean)));
+  const distinctManagers = Array.from(
+    new Set(
+      employees
+        .map((e) => e.manager?.name || e.managerName)
+        .concat(managersList.map((m) => m.name))
+        .filter(Boolean)
+    )
+  );
   const userOrgId = String(user?.organizationId?._id || user?.organizationId || user?.organization || '');
 
   const filteredEmployees = employees.filter((emp) => {
