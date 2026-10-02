@@ -59,12 +59,12 @@ export default function AdminLayout({ children }) {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 ">
+        <nav className="flex-1 p-4 space-y-1 mt-[10px]">
           <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-widest mb-3 px-2">Navigation</p>
           {navItems.map(({ to, icon: Icon, label, end }) => (
             <NavLink key={to} to={to} end={end} onClick={() => setSidebarOpen(false)}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Icon className="w-4 h-4 flex-shrink-0" />
+              <Icon className="w-5 h-5 flex-shrink-0" />
               <span className="flex-1">{label}</span>
             </NavLink>
           ))}
@@ -98,21 +98,21 @@ export default function AdminLayout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-20 lg:pb-6">
+        <main className="flex-1 overflow-auto pb-32 lg:pb-8">
           {children}
         </main>
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[var(--bg-sidebar)] lg:hidden z-30 border-t border-[var(--border-color)]  backdrop-blur-xl px-2 py-2 flex items-center justify-around">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 lg:hidden z-40 border-t border-slate-200 backdrop-blur-xl px-2 py-2 flex items-center justify-around shadow-lg">
         {navItems.slice(0, 5).map(({ to, icon: Icon, label, end }) => (
           <NavLink key={to} to={to} end={end}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 ${
-                isActive ? 'text-primary-400 bg-primary-600/15' : 'text-[var(--text-main)]'
+              `flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 ${
+                isActive ? 'text-blue-600 bg-blue-50 font-bold shadow-xs' : 'text-slate-600 font-medium hover:text-blue-600'
               }`}>
             <Icon className="w-5 h-5" />
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-[10px]">{label}</span>
           </NavLink>
         ))}
       </nav>

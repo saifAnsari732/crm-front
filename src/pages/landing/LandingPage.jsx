@@ -141,7 +141,7 @@ export default function LandingPage() {
           <Link to="/" className="flex items-center group">
             <img
               src="/images/superCompanyLOGO.png"
-              alt="TrackPro Logo"
+              alt="KisanConnect Logo"
               className="h-36 sm:h-12 w-auto lg:h-28  object-contain transition-transform group-hover:scale-105"
               onError={(e) => {
                 e.target.onerror = null;
@@ -327,7 +327,7 @@ export default function LandingPage() {
                   </div>
                   <div className="flex items-center gap-2 bg-slate-100 px-3.5 py-1 rounded-xl border border-slate-200/80 text-xs font-mono font-bold text-slate-600">
                     <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>app.trackpro.io/admin/dashboard</span>
+                    <span>app.kisanconnect.io/admin/dashboard</span>
                   </div>
                 </div>
 
@@ -339,11 +339,11 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* TrackPro Executive Analytics Dashboard Screenshot Container */}
+              {/* KisanConnect Executive Analytics Dashboard Screenshot Container */}
               <div className="relative mt-3 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xl bg-slate-50">
                 <img
                   src="/images/dashboard-hero.png"
-                  alt="TrackPro SaaS Employee Monitoring Dashboard"
+                  alt="KisanConnect SaaS Employee Monitoring Dashboard"
                   className="w-full h-auto object-cover rounded-2xl group-hover:scale-[1.005] transition-transform duration-500"
                   onError={(e) => {
                     e.target.onerror = null;
@@ -413,7 +413,7 @@ export default function LandingPage() {
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-16">
             <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-4 py-1.5 rounded-full border border-emerald-200 inline-flex items-center gap-1.5 shadow-xs">
               <Zap className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-              <span>Why Choose TrackPro SaaS</span>
+              <span>Why Choose KisanConnect SaaS</span>
             </span>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight">
               Everything You Need for <span className="text-emerald-600">Total Field Control</span>
@@ -635,7 +635,7 @@ export default function LandingPage() {
               Tailored Solutions for Every Field Business
             </h2>
             <p className="text-slate-600 text-sm sm:text-base font-semibold">
-              See how TrackPro optimizes field operations for your specific industry requirements.
+              See how KisanConnect optimizes field operations for your specific industry requirements.
             </p>
           </div>
 
@@ -870,7 +870,7 @@ export default function LandingPage() {
               >
                 <span>Yearly Billing</span>
                 <span className="text-[10px] bg-amber-300 text-slate-900 px-2.5 py-0.5 rounded-full font-black shadow-2xs">
-                  SAVE 20% OFF
+                  SAVE 5% OFF
                 </span>
               </button>
             </div>
@@ -891,11 +891,23 @@ export default function LandingPage() {
 
                 <div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-5xl font-black text-slate-900 tracking-tight">
-                      {billingCycle === 'yearly' ? '₹399' : '₹499'}
+                    <span className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                      {billingCycle === 'yearly' ? '₹4,548' : '₹399'}
                     </span>
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">/ member / mo</span>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                      / member / {billingCycle === 'yearly' ? 'year' : 'mo'}
+                    </span>
                   </div>
+                  {billingCycle === 'yearly' ? (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs text-slate-400 line-through">₹4,788</span>
+                      <span className="text-[11px] font-black text-emerald-700 bg-emerald-100/90 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        ₹379/mo • SAVE 5% OFF
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold text-slate-500 mt-1">Billed monthly</div>
+                  )}
                   <p className="text-xs font-semibold text-slate-500 mt-2">Essential telemetry for small field teams up to 10 staff.</p>
                 </div>
 
@@ -961,11 +973,23 @@ export default function LandingPage() {
 
                 <div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-5xl font-black text-slate-900 tracking-tight">
-                      {billingCycle === 'yearly' ? '₹799' : '₹999'}
+                    <span className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                      {billingCycle === 'yearly' ? '₹9,108' : '₹799'}
                     </span>
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">/ member / mo</span>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                      / member / {billingCycle === 'yearly' ? 'year' : 'mo'}
+                    </span>
                   </div>
+                  {billingCycle === 'yearly' ? (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs text-slate-400 line-through">₹9,588</span>
+                      <span className="text-[11px] font-black text-orange-800 bg-orange-100/90 border border-orange-200 px-2.5 py-0.5 rounded-full">
+                        ₹759/mo • SAVE 5% OFF
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold text-slate-500 mt-1">Billed monthly</div>
+                  )}
                   <p className="text-xs font-semibold text-slate-600 mt-2">Full multi-tenant feature suite for scaling teams up to 50 staff.</p>
                 </div>
 
@@ -1032,11 +1056,23 @@ export default function LandingPage() {
 
                 <div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-5xl font-black text-slate-900 tracking-tight">
-                      {billingCycle === 'yearly' ? '₹1,999' : '₹2,499'}
+                    <span className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                      {billingCycle === 'yearly' ? '₹22,788' : '₹1,999'}
                     </span>
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">/ member / mo</span>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                      / member / {billingCycle === 'yearly' ? 'year' : 'mo'}
+                    </span>
                   </div>
+                  {billingCycle === 'yearly' ? (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs text-slate-400 line-through">₹23,988</span>
+                      <span className="text-[11px] font-black text-emerald-700 bg-emerald-100/90 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        ₹1,899/mo • SAVE 5% OFF
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold text-slate-500 mt-1">Billed monthly</div>
+                  )}
                   <p className="text-xs font-semibold text-slate-500 mt-2">Dedicated cloud infrastructure & REST API for 50+ field staff.</p>
                 </div>
 
@@ -1100,7 +1136,7 @@ export default function LandingPage() {
             </h2>
 
             <p className="text-slate-600 text-sm sm:text-base font-semibold">
-              See why enterprise field teams and operations heads rely on TrackPro SaaS for daily telemetry, attendance & expense audits.
+              See why enterprise field teams and operations heads rely on KisanConnect SaaS for daily telemetry, attendance & expense audits.
             </p>
 
             <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
@@ -1124,135 +1160,141 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Client Brand Logo Ticker (LUCIDE SVG ICONS ONLY - NO EMOJIS) */}
-          <div className="bg-slate-50/80 py-6 px-6 rounded-3xl border border-slate-200/80 flex flex-wrap items-center justify-around gap-6 shadow-2xs">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Enterprise Clients:</span>
+          {/* Client Brand Logo Ticker */}
+          <div className="bg-slate-50/90 py-6 px-8 rounded-3xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-6 shadow-xs">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Enterprise Field Teams:</span>
             <span className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-emerald-600" /> Apollo Healthcare
+              <Building2 className="w-4 h-4 text-emerald-600" /> Mahindra Logistics
             </span>
             <span className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-orange-500" /> Swift Cargo Logistics
+              <Navigation className="w-4 h-4 text-orange-500" /> Delhivery Fleet
             </span>
             <span className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-emerald-600" /> Horizon Retail Beat
+              <Briefcase className="w-4 h-4 text-emerald-600" /> Godrej Agrovet
             </span>
             <span className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-600" /> CivTech Infrastructure
+              <Layers className="w-4 h-4 text-blue-600" /> VRL Logistics
             </span>
             <span className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" /> EnergyTech Field Care
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" /> Tata Power Care
             </span>
           </div>
 
-          {/* Testimonials Grid */}
+          {/* Testimonials Grid - Realistic Executive Avatar Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
             {/* Card 1 */}
-            <div className="bg-slate-50/80 rounded-3xl border border-slate-200/90 overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=600&auto=format&fit=crop"
-                  alt="Rakesh Kumar"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-4 text-white">
-                  <span className="text-xs font-black block">Rakesh Kumar</span>
-                  <span className="text-[10px] text-slate-200 font-semibold">Head of Field Operations, Apollo Care</span>
+            <div className="bg-white rounded-3xl p-7 sm:p-8 border border-slate-200/90 shadow-xl shadow-slate-900/5 hover:border-emerald-300 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-amber-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    Verified Customer
+                  </span>
                 </div>
+
+                <p className="text-slate-700 text-sm sm:text-base font-medium leading-relaxed italic">
+                  "KisanConnect transformed our B2B field sales operations. We eliminated fake location claims completely and reduced travel expense audit processing time from 7 days to 5 minutes!"
+                </p>
               </div>
 
-              <div className="p-7 space-y-4 flex-1 flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-                      Verified Customer ✓
-                    </span>
+              <div className="pt-6 border-t border-slate-100 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&h=200&q=80"
+                    alt="Rakesh Kumar"
+                    className="w-12 h-12 rounded-2xl object-cover object-top border-2 border-emerald-500/20 shadow-sm"
+                  />
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">Rakesh Kumar</h4>
+                    <p className="text-xs font-semibold text-slate-500">Head of Field Ops, Mahindra Logistics</p>
                   </div>
-                  <p className="text-slate-700 text-xs sm:text-sm font-semibold leading-relaxed italic">
-                    "TrackPro transformed our B2B field sales operations. We eliminated fake location claims completely and reduced travel expense audit processing time from 7 days to 5 minutes!"
-                  </p>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200/80 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-emerald-600" /> Punjab, India</span>
-                  <span className="text-emerald-600 font-black">Field Telemetry Suite</span>
-                </div>
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 shrink-0">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Punjab
+                </span>
               </div>
             </div>
 
-            {/* Card 2 */}
-            <div className="bg-emerald-600 text-white rounded-3xl p-8 shadow-xl flex flex-col justify-between space-y-6 relative overflow-hidden group">
-              <div className="space-y-4 relative z-10">
+            {/* Card 2 (Featured Review Card) */}
+            <div className="bg-gradient-to-b from-emerald-600 via-emerald-700 to-teal-800 text-white rounded-3xl p-7 sm:p-8 shadow-2xl shadow-emerald-700/25 border-2 border-emerald-400 flex flex-col justify-between space-y-6 relative transform lg:-translate-y-2 group">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1 text-amber-300">
                     {[...Array(5)].map((_, i) => (
                       <Star key={i} className="w-4 h-4 fill-amber-300 text-amber-300" />
                     ))}
                   </div>
-                  <span className="text-[10px] font-black uppercase text-slate-900 bg-amber-300 px-2.5 py-0.5 rounded-full">
-                    Featured Review
+                  <span className="text-[10px] font-black uppercase text-slate-950 bg-amber-300 px-3 py-0.5 rounded-full shadow-xs">
+                    Featured Customer Review
                   </span>
                 </div>
 
-                <p className="text-emerald-50 text-sm sm:text-base font-bold leading-relaxed italic">
-                  "The automated mileage calculation based on bike km rates saved our logistics company over ₹2.4 Lakhs in the first quarter alone. Essential software for field fleets!"
+                <p className="text-emerald-50 text-sm sm:text-base font-semibold leading-relaxed italic">
+                  "The automated Haversine mileage calculation based on bike km rates saved our logistics fleet over ₹2.4 Lakhs in the first quarter alone. Essential software for field teams!"
                 </p>
               </div>
 
-              <div className="pt-6 border-t border-emerald-500/80 flex items-center gap-3.5 relative z-10">
-                <img
-                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=200&auto=format&fit=crop"
-                  alt="Priya Sharma"
-                  className="w-12 h-12 rounded-2xl object-cover border-2 border-white/40 shadow-sm"
-                />
-                <div>
-                  <h4 className="text-sm font-black text-white">Priya Sharma</h4>
-                  <p className="text-[11px] text-emerald-100 font-semibold">Logistics Director, Swift Cargo • Delhi NCR</p>
+              <div className="pt-6 border-t border-emerald-500/60 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&h=200&q=80"
+                    alt="Priya Sharma"
+                    className="w-12 h-12 rounded-2xl object-cover object-top border-2 border-white/40 shadow-sm"
+                  />
+                  <div>
+                    <h4 className="text-sm font-black text-white">Priya Sharma</h4>
+                    <p className="text-xs font-semibold text-emerald-100">Logistics Director, Delhivery Fleet</p>
+                  </div>
                 </div>
+
+                <span className="text-[11px] font-bold text-emerald-200 flex items-center gap-1 shrink-0">
+                  <MapPin className="w-3.5 h-3.5 text-amber-300" /> Delhi NCR
+                </span>
               </div>
             </div>
 
             {/* Card 3 */}
-            <div className="bg-slate-50/80 rounded-3xl border border-slate-200/90 overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=600&auto=format&fit=crop"
-                  alt="Amit Verma"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-4 text-white">
-                  <span className="text-xs font-black block">Amit Verma</span>
-                  <span className="text-[10px] text-slate-200 font-semibold">Managing Director, Horizon Retail</span>
+            <div className="bg-white rounded-3xl p-7 sm:p-8 border border-slate-200/90 shadow-xl shadow-slate-900/5 hover:border-emerald-300 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-amber-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    Verified Customer
+                  </span>
                 </div>
+
+                <p className="text-slate-700 text-sm sm:text-base font-medium leading-relaxed italic">
+                  "Geofenced selfie attendance combined with digital client signatures gave our executive team complete peace of mind. Highly recommended multi-tenant SaaS platform."
+                </p>
               </div>
 
-              <div className="p-7 space-y-4 flex-1 flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-orange-700 bg-orange-100 px-2.5 py-0.5 rounded-full">
-                      Verified Customer ✓
-                    </span>
+              <div className="pt-6 border-t border-slate-100 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&h=200&q=80"
+                    alt="Amit Verma"
+                    className="w-12 h-12 rounded-2xl object-cover object-top border-2 border-emerald-500/20 shadow-sm"
+                  />
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">Amit Verma</h4>
+                    <p className="text-xs font-semibold text-slate-500">Managing Director, Godrej Agrovet</p>
                   </div>
-                  <p className="text-slate-700 text-xs sm:text-sm font-semibold leading-relaxed italic">
-                    "Geofenced selfie attendance combined with digital client signatures gave our executive team complete peace of mind. Highly recommended multi-tenant SaaS platform."
-                  </p>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200/80 flex items-center justify-between text-[11px] font-bold text-slate-500">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-orange-500" /> Mumbai, India</span>
-                  <span className="text-orange-600 font-black">Retail CRM Suite</span>
-                </div>
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 shrink-0">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Mumbai
+                </span>
               </div>
             </div>
           </div>
@@ -1322,7 +1364,7 @@ export default function LandingPage() {
             {[
               {
                 q: 'How does live location tracking affect field employees’ mobile battery?',
-                a: 'TrackPro uses intelligent adaptive polling algorithms. When the employee is stationary, GPS polling automatically slows down to consume less than 3% battery per full 9-hour work shift.',
+                a: 'KisanConnect uses intelligent adaptive polling algorithms. When the employee is stationary, GPS polling automatically slows down to consume less than 3% battery per full 9-hour work shift.',
               },
               {
                 q: 'Can employees punch in from outside their assigned office or site radius?',
@@ -1330,7 +1372,7 @@ export default function LandingPage() {
               },
               {
                 q: 'How does the automated expense mileage audit work?',
-                a: 'TrackPro calculates the exact distance traveled via Haversine GPS telemetry during active shifts, then automatically multiplies the km count by your organization’s set rate (e.g. ₹3.50/km for Bike, ₹8.00/km for Car).',
+                a: 'KisanConnect calculates the exact distance traveled via Haversine GPS telemetry during active shifts, then automatically multiplies the km count by your organization’s set rate (e.g. ₹3.50/km for Bike, ₹8.00/km for Car).',
               },
               {
                 q: 'Can we upload our own organization logo and brand identity?',
@@ -1449,7 +1491,7 @@ export default function LandingPage() {
             </span>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-              Watch <span className="text-emerald-600">TrackPro SaaS</span> in Action
+              Watch <span className="text-emerald-600">KisanConnect SaaS</span> in Action
             </h2>
 
             <p className="text-slate-600 text-sm sm:text-base font-semibold leading-relaxed max-w-2xl mx-auto">
@@ -1555,7 +1597,7 @@ export default function LandingPage() {
                 <div className="h-10 px-2 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-xs overflow-hidden">
                   <img
                     src="/images/superCompanyLOGO.png"
-                    alt="TrackPro Logo"
+                    alt="KisanConnect Logo"
                     className="h-7 w-auto object-contain"
                     onError={(e) => {
                       e.target.style.display = 'none';
@@ -1567,7 +1609,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div>
-                  <span className="text-2xl font-black text-slate-900 block leading-none tracking-tight">TrackPro SaaS</span>
+                  <span className="text-2xl font-black text-slate-900 block leading-none tracking-tight">KisanConnect SaaS</span>
                   <span className="text-[11px] font-black uppercase text-emerald-600 tracking-wider">Field Telemetry & CRM</span>
                 </div>
               </div>
@@ -1618,7 +1660,7 @@ export default function LandingPage() {
           </div>
 
           <div className="pt-8 border-t border-slate-200/90 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4 font-semibold">
-            <p>© {new Date().getFullYear()} TrackPro SaaS Platform. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} KisanConnect SaaS Platform. All rights reserved.</p>
             <div className="flex items-center gap-6">
               <a href="#" className="hover:text-slate-700 transition-colors">Privacy Policy</a>
               <a href="#" className="hover:text-slate-700 transition-colors">Terms of Service</a>

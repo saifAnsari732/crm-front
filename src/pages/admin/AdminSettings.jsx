@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { adminAPI, uploadAPI } from '../../services/api.service';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -35,11 +35,16 @@ import {
   Copy,
   Info,
   Car,
-  Bike
+  Bike,
+  LogOut,
+  Shield,
+  Zap,
+  SlidersHorizontal,
+  CheckSquare
 } from 'lucide-react';
 
 export default function AdminSettings() {
-  const { user, organization: authOrg, updateOrganization } = useAuth();
+  const { user, organization: authOrg, updateOrganization, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -149,7 +154,7 @@ export default function AdminSettings() {
       if (data.organization && updateOrganization) {
         updateOrganization(data.organization);
       }
-      toast.success('🎉 Organization settings saved successfully!');
+      toast.success('🎉 Organization settings & logo saved successfully!');
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || 'Failed to save settings');
@@ -256,7 +261,7 @@ export default function AdminSettings() {
       (pos) => {
         updateSetting('officeLat', parseFloat(pos.coords.latitude.toFixed(6)));
         updateSetting('officeLng', parseFloat(pos.coords.longitude.toFixed(6)));
-        toast.success(`📍 Coordinates updated from current location: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        toast.success(`📍 Office coordinates set: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
         setLocatingOffice(false);
       },
       (err) => {
@@ -268,64 +273,70 @@ export default function AdminSettings() {
   };
 
   return (
-    <TrackProLayout>
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+    <KisanConnectLayout>
+      <div className="space-y-6 max-w-[1600px] mx-auto pb-16 font-sans">
 
-        {/* Top Header Card */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* ── Top Header Bar (Clean Slate & Blue Palette - No Black Colors) ── */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center font-black shadow-xs">
-              <Sliders className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center font-black shadow-xs shrink-0">
+              <Building2 className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Organization Control Center</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                  Global Configuration
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organization Control Center</h1>
+                <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Verified SaaS Account
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Configure brand identity, geofencing perimeters, GPS report frequencies, and expense rules.
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Manage organization logo, company identity, GPS intervals, shift policies, and features list.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
+              type="button"
               onClick={fetchSettings}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition shadow-xs disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>Reset</span>
             </button>
+
             <button
+              type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition active:scale-95 disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black shadow-md shadow-blue-500/25 transition active:scale-98 flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              <span>{saving ? 'Saving Changes...' : 'Save Settings'}</span>
+              <span>{saving ? 'Saving Settings...' : 'Save Organization Logo & Settings'}</span>
             </button>
           </div>
         </div>
 
-        {/* Tab Navigation Bar */}
-        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+        {/* ── Category Navigation Tabs ── */}
+        <div className="bg-white p-2 rounded-2xl border border-slate-200/90 shadow-xs flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
           {[
             { id: 'general', label: 'Company & Branding', icon: Building2 },
+            { id: 'features', label: 'Org Feature Matrix', icon: Sparkles },
             { id: 'geofence', label: 'Geofence & Shifts', icon: MapPin },
-            { id: 'tracking', label: 'GPS & Telemetry', icon: Navigation },
-            { id: 'expenses', label: 'Expenses & Reimbursements', icon: Receipt },
-            { id: 'meetings', label: 'Field Visits & Client Rules', icon: Briefcase },
+            { id: 'tracking', label: 'GPS Engine', icon: Navigation },
+            { id: 'expenses', label: 'Expenses & TA/DA', icon: Receipt },
+            { id: 'meetings', label: 'Visits & Client Rules', icon: Briefcase },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                     : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50/60'
@@ -339,24 +350,23 @@ export default function AdminSettings() {
         </div>
 
         {loading ? (
-          <div className="p-16 text-center bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col items-center justify-center space-y-3">
+          <div className="p-16 text-center bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col items-center justify-center space-y-3">
             <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-            <p className="text-slate-600 font-bold text-sm">Loading organization settings...</p>
+            <p className="text-slate-700 font-bold text-sm">Loading organization policies...</p>
           </div>
         ) : (
           <div className="space-y-6">
 
             {/* ========================================================================= */}
-            {/* TAB 1: COMPANY PROFILE & BRANDING */}
+            {/* TAB 1: COMPANY BRANDING & GENERAL PROFILE */}
             {/* ========================================================================= */}
             {activeTab === 'general' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                {/* Left Form (8 Cols) */}
-                <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                {/* Main Branding & Address Card (8 Cols) */}
+                <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
 
                   {/* Logo Brand Upload Box */}
-                  <div className="p-5 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/60 via-slate-50/40 to-white flex flex-col sm:flex-row items-center justify-between gap-5">
+                  <div className="p-5 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/70 via-slate-50/40 to-white flex flex-col sm:flex-row items-center justify-between gap-5">
                     <div className="flex items-center gap-4">
                       <div className="relative group">
                         <div className="w-20 h-20 rounded-2xl border-2 border-blue-200 bg-white shadow-sm overflow-hidden flex items-center justify-center p-1.5">
@@ -373,20 +383,20 @@ export default function AdminSettings() {
                         <button
                           type="button"
                           onClick={() => logoInputRef.current?.click()}
-                          className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md"
-                          title="Change Logo"
+                          className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md cursor-pointer"
+                          title="Upload Brand Logo"
                         >
                           <Camera className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900">Organization Logo & Brand</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Upload PNG, JPG or WEBP logo for mobile portals, tracking reports, and header displays.
+                        <h3 className="text-sm font-black text-slate-900">Organization Logo & Branding</h3>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          Upload PNG, JPG or WEBP logo for mobile portals and reports.
                         </p>
-                        <span className="inline-block mt-1.5 text-[10px] font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md">
-                          Recommended: 250×250 Transparent PNG
+                        <span className="inline-block mt-1.5 text-[10px] font-extrabold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-md">
+                          Recommended: Square Aspect Ratio (250×250 PNG)
                         </span>
                       </div>
                     </div>
@@ -403,22 +413,22 @@ export default function AdminSettings() {
                         type="button"
                         onClick={() => logoInputRef.current?.click()}
                         disabled={uploadingLogo}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm disabled:opacity-50"
+                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         {uploadingLogo ? (
                           <RefreshCw className="w-4 h-4 animate-spin text-white" />
                         ) : (
                           <Upload className="w-4 h-4" />
                         )}
-                        <span>{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                        <span>{uploadingLogo ? 'Uploading...' : 'Upload New Logo'}</span>
                       </button>
 
                       {formData.logo && (
                         <button
                           type="button"
                           onClick={handleRemoveLogo}
-                          className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                          title="Reset to default logo"
+                          className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          title="Reset logo"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -426,19 +436,29 @@ export default function AdminSettings() {
                     </div>
                   </div>
 
-                  {/* Company Details Grid */}
+                  {/* Logo Direct Link & Basic Info */}
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-blue-600" />
-                        Company Details
-                      </h2>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Verified Organization
-                      </span>
-                    </div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-2">
+                      Organization Profile Fields
+                    </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Logo Image URL (Direct Link)
+                        </label>
+                        <div className="relative">
+                          <ImageIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                          <input
+                            type="text"
+                            value={formData.logo}
+                            onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
+                            placeholder="https://ik.imagekit.io/..."
+                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-semibold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">Organization Name</label>
                         <div className="relative">
@@ -447,33 +467,20 @@ export default function AdminSettings() {
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Organization Slug</label>
-                        <div className="relative">
-                          <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                          <input
-                            type="text"
-                            disabled
-                            value={formData.slug}
-                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500 font-mono"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Primary Contact Email</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Primary Support Email</label>
                         <div className="relative">
                           <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                           <input
                             type="email"
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </div>
                       </div>
@@ -486,17 +493,29 @@ export default function AdminSettings() {
                             type="tel"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Organization Tenant Slug</label>
+                        <div className="relative">
+                          <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                          <input
+                            type="text"
+                            disabled
+                            value={formData.slug || 'kisan-choice'}
+                            className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500 font-mono font-semibold"
                           />
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Registered Address Section */}
+                  {/* Registered Headquarters Address */}
                   <div className="space-y-4 pt-3 border-t border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
                       Registered Headquarters Address
                     </h3>
 
@@ -507,7 +526,7 @@ export default function AdminSettings() {
                           type="text"
                           value={formData.address.street}
                           onChange={(e) => updateAddress('street', e.target.value)}
-                          placeholder="e.g. Plot No 42, Kisan Bhavan Road"
+                          placeholder="e.g. Plot 42, Kisan Bhavan Road"
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </div>
@@ -555,70 +574,158 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
-                {/* Right Plan & Summary Card (4 Cols) */}
+                {/* Right Column Plan & License Card (4 Cols) */}
                 <div className="lg:col-span-4 space-y-5">
-                  <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-xl space-y-5">
+                  <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white rounded-3xl p-6 shadow-xl space-y-5">
                     <div className="flex items-center justify-between">
                       <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center font-bold">
                         <ShieldCheck className="w-5 h-5 text-white" />
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
-                        ACTIVE LICENSE
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/25 text-emerald-300 border border-emerald-400/40 uppercase tracking-wider">
+                        {authOrg?.status === 'active' ? 'ACTIVE SUBSCRIPTION' : 'ENTERPRISE PRO'}
                       </span>
                     </div>
 
                     <div>
-                      <h3 className="text-lg font-black tracking-tight">Enterprise Monitoring Plan</h3>
+                      <h3 className="text-lg font-black tracking-tight">
+                        {authOrg?.plan?.planName || authOrg?.name || 'Kisan Choice'} License
+                      </h3>
                       <p className="text-xs text-blue-100 mt-1">
-                        High-availability multi-tenant field monitoring with real-time GPS websocket feeds.
+                        Full multi-tenant field monitoring with real-time GPS telemetry, visit logs, and expense audits.
                       </p>
                     </div>
 
                     <div className="space-y-2.5 border-t border-white/15 pt-4 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-blue-100">Max Field Agents:</span>
-                        <span className="font-bold">50 Seats</span>
+                        <span className="text-blue-100">Field Employee Seats:</span>
+                        <span className="font-bold">{authOrg?.plan?.maxEmployees || 50} Max Seats</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-blue-100">GPS Ping Frequency:</span>
-                        <span className="font-bold text-emerald-300">30s Real-Time</span>
+                        <span className="text-blue-100">Manager Quota:</span>
+                        <span className="font-bold">{authOrg?.plan?.maxManagers || 5} Managers</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-blue-100">Receipts & Storage:</span>
-                        <span className="font-bold">ImageKit Cloud CDN</span>
+                        <span className="text-blue-100">GPS Ping Interval:</span>
+                        <span className="font-bold text-emerald-300">{formData.settings.trackingIntervalSeconds}s Real-Time</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-blue-100">Telemetry Health:</span>
-                        <span className="font-bold text-emerald-300">100% Operational</span>
+                        <span className="text-blue-100">Cloud Storage:</span>
+                        <span className="font-bold">ImageKit CDN</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
-                      <Info className="w-4 h-4 text-blue-600" /> Need Assistance?
+                  {/* Account Logout Card (Light Styled - No Black) */}
+                  <div className="bg-rose-50/70 rounded-3xl border border-rose-200 p-5 shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-rose-900 font-black text-xs uppercase tracking-wider">
+                      <LogOut className="w-4 h-4 text-rose-600" /> Account Controls
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Custom geofence parameters, automated route replay exports, and API webhooks can be tailored for your field operations.
+                    <p className="text-xs text-rose-700/80 font-medium">
+                      Signing out will terminate your current session on this device.
                     </p>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="w-full py-2.5 px-4 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-extrabold text-xs transition border border-rose-300 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Logout from KisanConnect Account</span>
+                    </button>
                   </div>
                 </div>
               </div>
             )}
 
             {/* ========================================================================= */}
-            {/* TAB 2: GEOFENCE & ATTENDANCE */}
+            {/* TAB 2: ORGANIZATION FEATURE MATRIX */}
+            {/* ========================================================================= */}
+            {activeTab === 'features' && (
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
+                <div className="border-b border-slate-100 pb-3">
+                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-blue-600" />
+                    Organization Enabled Features & Service Capabilities
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Complete list of active modules and features configured for your organization profile.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {[
+                    {
+                      title: 'Live GPS Telemetry & Map Replay',
+                      desc: 'Real-time background location updates every 15-30s with polyline route playback.',
+                      icon: Navigation,
+                      color: 'blue',
+                    },
+                    {
+                      title: 'Geofenced Attendance & Selfie',
+                      desc: 'Restrict check-ins within HQ GPS perimeter with compulsory live front camera photos.',
+                      icon: MapPin,
+                      color: 'emerald',
+                    },
+                    {
+                      title: 'Automated TA & DA Travel Calculator',
+                      desc: 'Automatic distance calculation in KM multiplied by configured vehicle rates.',
+                      icon: Fuel,
+                      color: 'purple',
+                    },
+                    {
+                      title: 'Client Visits & Touch Signatures',
+                      desc: 'Field store check-ins with client touch-screen signature and meeting notes.',
+                      icon: Briefcase,
+                      color: 'indigo',
+                    },
+                    {
+                      title: 'Expense Claims & Receipt Auditing',
+                      desc: 'Category-wise expense requests with receipt photo upload and instant approval.',
+                      icon: Receipt,
+                      color: 'amber',
+                    },
+                    {
+                      title: 'Task Orders & Leads Pipeline',
+                      desc: 'Assign field work orders, due dates, priority levels, and prospect tracking.',
+                      icon: CheckSquare,
+                      color: 'rose',
+                    },
+                  ].map((feat, idx) => {
+                    const Icon = feat.icon;
+                    return (
+                      <div
+                        key={idx}
+                        className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-slate-50 transition space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-bold text-blue-600 shadow-xs">
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ACTIVE
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-extrabold text-slate-900">{feat.title}</h4>
+                        <p className="text-xs text-slate-500 font-medium leading-relaxed">{feat.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* TAB 3: GEOFENCE & SHIFTS */}
             {/* ========================================================================= */}
             {activeTab === 'geofence' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
-                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-blue-600" />
+                    <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-blue-600" />
                       Office Geolocation & Shift Timing Policies
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Define headquarters GPS perimeter. Field staff can be restricted to punch in within this perimeter.
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Set official office coordinates and attendance perimeter boundaries.
                     </p>
                   </div>
 
@@ -626,9 +733,9 @@ export default function AdminSettings() {
                     type="button"
                     onClick={handleDetectCurrentLocation}
                     disabled={locatingOffice}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition border border-blue-200"
+                    className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition border border-blue-200 flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Compass className={`w-3.5 h-3.5 ${locatingOffice ? 'animate-spin' : ''}`} />
+                    <Compass className={`w-4 h-4 ${locatingOffice ? 'animate-spin' : ''}`} />
                     <span>{locatingOffice ? 'Detecting...' : 'Auto-Detect Current GPS'}</span>
                   </button>
                 </div>
@@ -677,8 +784,8 @@ export default function AdminSettings() {
 
                 {/* Shift Timings */}
                 <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-600" /> Daily Shift & Attendance Timings
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                    Daily Shift & Attendance Timings
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -714,31 +821,31 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
-                {/* Policy Toggles */}
+                {/* Policy Toggle Switches */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                   <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
                     <div>
-                      <span className="text-xs font-bold text-slate-900 block">Strict Geofence Check-in</span>
-                      <span className="text-[11px] text-slate-500">Block punch-in if user is outside designated perimeter radius</span>
+                      <span className="text-xs font-extrabold text-slate-900 block">Strict Geofence Check-in</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Block punch-in if user is outside designated perimeter</span>
                     </div>
                     <input
                       type="checkbox"
                       checked={formData.settings.strictGeofence}
                       onChange={(e) => updateSetting('strictGeofence', e.target.checked)}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
                   </label>
 
                   <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
                     <div>
-                      <span className="text-xs font-bold text-slate-900 block">Require Selfie on Check-in</span>
-                      <span className="text-[11px] text-slate-500">User must snap a live front-camera photo upon punching in</span>
+                      <span className="text-xs font-extrabold text-slate-900 block">Require Selfie on Check-in</span>
+                      <span className="text-[11px] text-slate-500 font-medium">User must snap a live front photo when punching in</span>
                     </div>
                     <input
                       type="checkbox"
                       checked={formData.settings.requireSelfieAttendance}
                       onChange={(e) => updateSetting('requireSelfieAttendance', e.target.checked)}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
                   </label>
                 </div>
@@ -746,104 +853,103 @@ export default function AdminSettings() {
             )}
 
             {/* ========================================================================= */}
-            {/* TAB 3: TRACKING & GPS TELEMETRY */}
+            {/* TAB 4: GPS ENGINE & TELEMETRY */}
             {/* ========================================================================= */}
             {activeTab === 'tracking' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
                 <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Navigation className="w-4 h-4 text-blue-600" />
-                    GPS Tracking & Battery Optimization Policy
+                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Navigation className="w-5 h-5 text-blue-600" />
+                    Tracking Engine & Geofencing Policies
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Controls how frequently mobile clients report GPS coordinates and filter out jitter.
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Configure high-precision GPS intervals, jitter distance filters, and accuracy thresholds.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Tracking Interval</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">High-Precision GPS Interval</label>
                     <select
                       value={formData.settings.trackingIntervalSeconds}
                       onChange={(e) => updateSetting('trackingIntervalSeconds', parseInt(e.target.value))}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
-                      <option value={15}>15 Seconds (Ultra Precision)</option>
-                      <option value={30}>30 Seconds (Recommended)</option>
+                      <option value={15}>15 Seconds (Capture location every 15s on field)</option>
+                      <option value={30}>30 Seconds (Recommended Standard)</option>
                       <option value={60}>1 Minute (Battery Saver)</option>
-                      <option value={120}>2 Minutes (Low Data)</option>
-                      <option value={300}>5 Minutes (Eco)</option>
+                      <option value={300}>5 Minutes (Eco Low Data)</option>
                     </select>
-                    <p className="text-[10px] text-slate-400 mt-1">Mobile client GPS polling cadence.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Capture frequency for active field staff.</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Minimum Distance Filter (Meters)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Minimum Movement Filter (Meters)</label>
                     <input
                       type="number"
                       value={formData.settings.minDistanceMeters}
                       onChange={(e) => updateSetting('minDistanceMeters', parseInt(e.target.value) || 5)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Filters out GPS jitter if movement is smaller than this.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Discards GPS stationary jitter under this radius.</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Max Accuracy Allowed (Meters)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Max GPS Accuracy Radius (Meters)</label>
                     <input
                       type="number"
                       value={formData.settings.maxAccuracyMeters}
                       onChange={(e) => updateSetting('maxAccuracyMeters', parseInt(e.target.value) || 50)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Discards inaccurate cell tower estimates exceeding this.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Filters out coarse cell-tower position estimates.</p>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                  <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-900 block">Automated Geofence Breach Alerts</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Notify manager immediately when employee leaves assigned site radius</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-900 block">Require OTP / Email Verification</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Enforce OTP verification on password resets and device logins</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
+                    />
+                  </label>
                 </div>
               </div>
             )}
 
             {/* ========================================================================= */}
-            {/* TAB 4: EXPENSES & REIMBURSEMENTS */}
+            {/* TAB 5: EXPENSES & REIMBURSEMENTS */}
             {/* ========================================================================= */}
             {activeTab === 'expenses' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
                 <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-600" />
-                    Expense Audit Rules & Reimbursement Thresholds
+                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-blue-600" />
+                    Expense Rules & Travel Allowance (TA/DA) Formulas
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Set up automatic approval limits and fuel per-kilometer reimbursement formulas.
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Configure reimbursement per KM rates and automatic approval thresholds.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Auto-Approve Claims Under</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        value={formData.settings.autoApproveLimit}
-                        onChange={(e) => updateSetting('autoApproveLimit', parseInt(e.target.value) || 0)}
-                        className="w-full pl-7 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Mandatory Receipt Above</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        value={formData.settings.receiptMandatoryAbove}
-                        onChange={(e) => updateSetting('receiptMandatoryAbove', parseInt(e.target.value) || 0)}
-                        className="w-full pl-7 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
                   <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
                       <Bike className="w-3.5 h-3.5 text-blue-600" /> Bike Rate (₹ / km)
@@ -869,22 +975,48 @@ export default function AdminSettings() {
                       className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
+
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Auto-Approve Claims Under</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                      <input
+                        type="number"
+                        value={formData.settings.autoApproveLimit}
+                        onChange={(e) => updateSetting('autoApproveLimit', parseInt(e.target.value) || 0)}
+                        className="w-full pl-7 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Mandatory Receipt Above</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                      <input
+                        type="number"
+                        value={formData.settings.receiptMandatoryAbove}
+                        onChange={(e) => updateSetting('receiptMandatoryAbove', parseInt(e.target.value) || 0)}
+                        className="w-full pl-7 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* ========================================================================= */}
-            {/* TAB 5: FIELD VISITS & CLIENT RULES */}
+            {/* TAB 6: VISITS & CLIENT RULES */}
             {/* ========================================================================= */}
             {activeTab === 'meetings' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
                 <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-blue-600" />
-                    Field Visits, Client Verification & Meeting Rules
+                  <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-blue-600" />
+                    Field Visits & Customer Verification Rules
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Configure compliance requirements when field executives log customer visits and meetings.
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Configure compliance rules for store check-ins and client meetings.
                   </p>
                 </div>
 
@@ -897,43 +1029,70 @@ export default function AdminSettings() {
                       onChange={(e) => updateSetting('minMeetingDurationMinutes', parseInt(e.target.value) || 0)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Prevents marking instantaneous fake meetings.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Prevents logging instantaneous fake check-ins.</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
                   <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
                     <div>
-                      <span className="text-xs font-bold text-slate-900 block">Require Client Digital Signature</span>
-                      <span className="text-[11px] text-slate-500">Customer must sign on the mobile touch screen to complete visit</span>
+                      <span className="text-xs font-extrabold text-slate-900 block">Require Client Digital Signature</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Customer signs on mobile screen to close visit</span>
                     </div>
                     <input
                       type="checkbox"
                       checked={formData.settings.requireClientSignature}
                       onChange={(e) => updateSetting('requireClientSignature', e.target.checked)}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
                   </label>
 
                   <label className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition">
                     <div>
-                      <span className="text-xs font-bold text-slate-900 block">Require Geo-Selfie with Client</span>
-                      <span className="text-[11px] text-slate-500">Executive must upload photo with customer at the location</span>
+                      <span className="text-xs font-extrabold text-slate-900 block">Require Geo-Selfie with Client</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Executive uploads photo at client store location</span>
                     </div>
                     <input
                       type="checkbox"
                       checked={formData.settings.requireMeetingSelfie}
                       onChange={(e) => updateSetting('requireMeetingSelfie', e.target.checked)}
-                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
                   </label>
                 </div>
               </div>
             )}
 
+            {/* ── Bottom Fixed Action Toolbar (Clean Palette - No Black Buttons) ── */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Ready to apply changes?</h4>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Updates will sync live across web admin and mobile field applications.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 sm:flex-initial py-3.5 px-8 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-blue-500/25 transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{saving ? 'Saving...' : 'Save Organization Logo & Settings'}</span>
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

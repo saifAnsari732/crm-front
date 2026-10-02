@@ -34,7 +34,7 @@ export const initiateRazorpayCheckout = async ({
   userName = '',
   userEmail = '',
   userPhone = '',
-  companyName = 'TrackPro SaaS',
+  companyName = 'KisanConnect SaaS',
   couponCode = '',
   onSuccess = () => {},
   onFailure = () => {},
@@ -86,7 +86,7 @@ export const initiateRazorpayCheckout = async ({
       key: razorpayKey,
       amount: amount,
       currency: currency || 'INR',
-      name: companyName || 'TrackPro SaaS Platform',
+      name: companyName || 'KisanConnect SaaS Platform',
       description: descriptionText,
       image: '/images/superCompanyLOGO.png',
       order_id: orderId,
@@ -94,7 +94,7 @@ export const initiateRazorpayCheckout = async ({
         try {
           // 4. Verify Payment Signature on Backend Server
           const verifyRes = await axios.post(
-            `${API_URL}/payment/verify-payment`,
+            `${API_BASE}/payment/verify-payment`,
             {
               razorpay_order_id: paymentResponse.razorpay_order_id,
               razorpay_payment_id: paymentResponse.razorpay_payment_id,

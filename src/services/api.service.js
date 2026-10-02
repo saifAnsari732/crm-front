@@ -4,7 +4,7 @@ import axios from 'axios';
 // BACKEND API BASE CONFIGURATION (DUAL ENV)
 // ==========================================
 export const DEV_API_URL = 'https://field-backend-monitor-web-ym7d.onrender.com/api';
-
+ 
 const resolveApiBase = () => {
   let url = (import.meta.env?.VITE_API_URL || process.env.REACT_APP_API_URL || '').trim();
 
@@ -140,6 +140,9 @@ export const authAPI = {
   getMe: () => API.get('/auth/me'),
   updateProfile: (data) => API.put('/auth/profile', data),
   changePassword: (data) => API.put('/auth/change-password', data),
+  forgotPassword: (email) => axios.post(`${API_BASE}/auth/forgot-password`, { email }),
+  resetPassword: (data) => axios.post(`${API_BASE}/auth/reset-password`, data),
+  verifyOTP: (data) => axios.post(`${API_BASE}/auth/verify-otp`, data),
 };
 
 // ─── Tracking ──────────────────────────────────────────────────────────────

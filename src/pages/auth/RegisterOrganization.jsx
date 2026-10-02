@@ -320,7 +320,7 @@ export default function RegisterOrganization() {
       </div>
 
       <div className="max-w-[1240px] w-full mx-auto text-center text-xs text-slate-400 font-semibold z-20 relative mt-6">
-        © {new Date().getFullYear()} TrackPro SaaS Platform. All rights reserved.
+        © {new Date().getFullYear()} KisanConnect SaaS Platform. All rights reserved.
       </div>
     </div>
   );

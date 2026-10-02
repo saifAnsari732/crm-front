@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import {
   Users,
   CheckCircle2,
@@ -124,7 +124,7 @@ export default function AdminAttendance() {
   };
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -177,7 +177,7 @@ export default function AdminAttendance() {
           </div>
         </div>
 
-        {/* 6 TrackPro KPI Cards (Large Text) */}
+        {/* 6 KisanConnect KPI Cards (Large Text) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3">
@@ -546,6 +546,6 @@ export default function AdminAttendance() {
           </div>
         </div>
       )}
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

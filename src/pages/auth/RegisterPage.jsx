@@ -251,7 +251,7 @@ export default function RegisterPage() {
       </div>
 
       <div className="max-w-6xl w-full mx-auto text-center text-xs text-slate-400 font-semibold z-20 relative mt-6">
-        © {new Date().getFullYear()} TrackPro SaaS Platform. All rights reserved.
+        © {new Date().getFullYear()} KisanConnect SaaS Platform. All rights reserved.
       </div>
     </div>
   );

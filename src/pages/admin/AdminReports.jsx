@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import {
@@ -54,7 +54,11 @@ export default function AdminReports() {
   const fetchEmployees = async () => {
     try {
       const { data } = await adminAPI.getEmployees({ limit: 100, role: 'all' });
-      setEmployees(data.employees || []);
+      const empList = data.employees || [];
+      setEmployees(empList);
+      if (empList.length > 0 && !selectedEmp) {
+        setSelectedEmp(empList[0]._id);
+      }
     } catch {
       toast.error('Failed to load employee list');
     }
@@ -144,7 +148,7 @@ export default function AdminReports() {
       const summary = reportData.summary;
       const daily = reportData.dailyDistances || [];
 
-      let csv = `TRACKPRO FIELD OPERATIONS REPORT\n`;
+      let csv = `KISANCONNECT FIELD OPERATIONS REPORT\n`;
       csv += `Employee,${emp.name} (${emp.employeeId || 'N/A'})\n`;
       csv += `Department,${emp.department || 'N/A'}\n`;
       csv += `Designation,${emp.designation || 'N/A'}\n`;
@@ -224,7 +228,7 @@ export default function AdminReports() {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('TRACKPRO FIELD OPERATIONS REPORT', 40, 32);
+      doc.text('KISANCONNECT FIELD OPERATIONS REPORT', 40, 32);
 
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
@@ -380,7 +384,7 @@ export default function AdminReports() {
   };
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6 max-w-[1600px] mx-auto pb-12 print:p-0 print:m-0 print:max-w-none">
         {/* ── Top Header & Export Toolbar (Hidden on Print) ── */}
         <div className="no-print print:hidden flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
@@ -555,7 +559,64 @@ export default function AdminReports() {
               </button>
             </div>
           </div>
+          {/* Quick Staff Selection Pills */}
+          {employees.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                Quick Select Field Staff:
+              </span>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+                {employees.map((emp) => {
+                  const isSelected = selectedEmp === emp._id;
+                  return (
+                    <button
+                      key={emp._id}
+                      type="button"
+                      onClick={() => setSelectedEmp(emp._id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                          : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>{emp.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ── Empty State Hero Card (When No Report Generated Yet) ── */}
+        {!reportData && (
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-10 text-center shadow-xs space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100 shadow-xs">
+              <FileText className="w-8 h-8" />
+            </div>
+            <div className="max-w-md mx-auto space-y-1">
+              <h3 className="text-lg font-black text-slate-900">Build a Field Staff Report</h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Choose an employee and a date range from the panel above, then click <strong className="text-blue-600">Generate Report</strong> to inspect consolidated distance, meetings, expenses, and TA/DA totals.
+              </p>
+            </div>
+
+            {employees.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Generate Report for {employees.find((e) => e._id === selectedEmp)?.name || 'Selected Staff'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Printable Report Document Container ── */}
         {reportData && (
@@ -568,7 +629,7 @@ export default function AdminReports() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                    TRACKPRO FIELD OPERATIONS
+                    KISANCONNECT FIELD OPERATIONS
                   </h1>
                   <p className="text-xs font-bold text-slate-600">
                     Consolidated Activity & Distance Audit Report
@@ -1243,6 +1304,6 @@ export default function AdminReports() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

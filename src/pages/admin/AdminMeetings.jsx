@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { meetingAPI, API } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import {
@@ -123,7 +123,7 @@ export function AdminMeetings() {
   });
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -487,7 +487,7 @@ export function AdminMeetings() {
           </div>
         </div>
       )}
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }
 

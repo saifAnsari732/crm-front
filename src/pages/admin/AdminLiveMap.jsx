@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import TrackProLayout from "../../components/layout/TrackProLayout";
+import KisanConnectLayout from "../../components/layout/KisanConnectLayout";
 import { trackingAPI } from "../../services/api.service";
 import { getSocket } from "../../services/socket.service";
 import {
@@ -355,7 +355,7 @@ export default function AdminLiveMap() {
   const isSelectedStationary = selectedIdStr ? stationaryEmps.has(selectedIdStr) : false;
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="p-3 sm:p-4 lg:p-6 space-y-3 max-w-[1800px] mx-auto h-[calc(100vh-56px)] sm:h-[calc(100vh-80px)] flex flex-col">
 
         {/* Header */}
@@ -915,6 +915,6 @@ export default function AdminLiveMap() {
           </div>
         </div>
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

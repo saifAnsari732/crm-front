@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import {
   Zap,
   Check,
@@ -356,7 +356,7 @@ export default function SuperAdminPlans() {
   const displayPlans = plans && plans.length > 0 ? plans : defaultPlanFallbacks;
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6 max-w-7xl mx-auto pb-16 font-sans">
         
         {/* ========================================================================= */}
@@ -976,6 +976,6 @@ export default function SuperAdminPlans() {
         )}
 
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

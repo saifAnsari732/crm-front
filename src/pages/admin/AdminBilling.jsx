@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import {
   CreditCard,
   CheckCircle,
@@ -54,43 +54,43 @@ export default function AdminBilling() {
     starter: {
       id: 'starter',
       name: 'Starter Plan',
-      description: 'Ideal for small teams starting field monitoring',
-      monthlyPrice: 999,
-      yearlyPrice: 11389,
-      yearlyOriginal: 11988,
-      yearlySavings: 599,
+      description: 'Essential telemetry for small field teams up to 10 staff.',
+      monthlyPrice: 399,
+      yearlyPrice: 4548,
+      yearlyOriginal: 4788,
+      yearlySavings: 240,
       maxEmployees: 10,
       maxManagers: 3,
       features: [
-        'Up to 10 Field Employees',
-        '3 Manager Accounts',
-        'Real-time GPS Tracking & Speed',
-        'Daily Punch-In & Attendance',
-        'Attendance Calendar & History',
-        'Standard Email Support',
+        'Up to 10 Field Executives',
+        'Live GPS Telemetry & Replay',
+        'Geofenced Selfie Attendance',
+        'Basic KM Mileage Calculation',
+        '3 Manager Accounts Included',
+        'Standard Email & WhatsApp Support',
       ],
       color: 'blue',
     },
     pro: {
       id: 'pro',
       name: 'Growth Pro Plan',
-      description: 'Full field automation with manager squads & approvals',
-      monthlyPrice: 1999,
-      yearlyPrice: 22789,
-      yearlyOriginal: 23988,
-      yearlySavings: 1199,
-      maxEmployees: 30,
+      description: 'Full multi-tenant feature suite for scaling teams up to 50 staff.',
+      monthlyPrice: 799,
+      yearlyPrice: 9108,
+      yearlyOriginal: 9588,
+      yearlySavings: 480,
+      maxEmployees: 50,
       maxManagers: 10,
       popular: true,
       features: [
-        'Up to 30 Field Employees',
-        '10 Manager Accounts',
-        'Live Route Replay & Geofencing',
-        'Dynamic Manager Squad Assignment',
-        'Expense Claim & Fuel DA Approvals',
-        'Client Meeting Logging & Geocoding',
+        'Up to 50 Field Executives',
+        '1-Sec Telemetry & Stationary Alerts',
+        'Geofence & Shift Grace Control',
+        'Receipt OCR + Fuel KM Rate Audit',
+        'Client Signature & Meeting Log',
+        'Executive PDF & Excel Reports',
+        '10 Manager Accounts Included',
         'Task Assignment & Daily Targets',
-        'Instant Push Notifications',
         'Priority Phone & Chat Support',
       ],
       color: 'emerald',
@@ -98,21 +98,21 @@ export default function AdminBilling() {
     enterprise: {
       id: 'enterprise',
       name: 'Enterprise Plan',
-      description: 'Unlimited power & scaling for high capacity operations',
-      monthlyPrice: 3999,
-      yearlyPrice: 45589,
-      yearlyOriginal: 47988,
-      yearlySavings: 2399,
-      maxEmployees: 50,
+      description: 'Dedicated cloud infrastructure & REST API for 50+ field staff.',
+      monthlyPrice: 1999,
+      yearlyPrice: 22788,
+      yearlyOriginal: 23988,
+      yearlySavings: 1200,
+      maxEmployees: 100,
       maxManagers: 20,
       features: [
-        'Up to 50 Field Employees',
-        '20 Manager Accounts',
-        'Unlimited Geofence Zones & Polling',
+        'Unlimited Field Executives',
+        'Dedicated Cloud Tenant Instance',
+        'REST API & Webhooks Integration',
+        'Meta WhatsApp Cloud API Integration',
         'Automated Payroll & DA Calculator',
-        'Custom Data Exports (Excel, PDF)',
-        'Full Multi-Department Hierarchy',
-        'Dedicated Technical Account Manager',
+        '20 Manager Accounts Included',
+        'Dedicated Account Manager & SLA',
         '24/7 VIP Phone Support & Custom SLA',
       ],
       color: 'purple',
@@ -283,7 +283,7 @@ export default function AdminBilling() {
         userName: user?.name || 'Organization Admin',
         userEmail: user?.email || currentOrg?.email || '',
         userPhone: user?.phone || currentOrg?.phone || '9511450914',
-        companyName: currentOrg?.name || 'TrackPro Organization',
+        companyName: currentOrg?.name || 'KisanConnect Organization',
         onSuccess: async (verifyRes) => {
           setAddonCheckoutLoading(false);
           toast.success(verifyRes?.message || '🎉 Top-up successful! Extra seats added to your account.');
@@ -314,7 +314,7 @@ export default function AdminBilling() {
         userName: user?.name || 'Organization Admin',
         userEmail: user?.email || currentOrg?.email || '',
         userPhone: user?.phone || currentOrg?.phone || '9511450914',
-        companyName: currentOrg?.name || 'TrackPro Organization',
+        companyName: currentOrg?.name || 'KisanConnect Organization',
         couponCode: appliedCoupon ? appliedCoupon.couponCode : '',
         onSuccess: async (verifyRes) => {
           setCheckoutLoading(false);
@@ -351,7 +351,7 @@ export default function AdminBilling() {
   };
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-8 max-w-7xl mx-auto pb-12">
         {/* Page Title */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -889,20 +889,24 @@ export default function AdminBilling() {
                   {/* Price */}
                   <div className="pt-2">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-4xl font-black text-slate-900">₹{price}</span>
-                      <span className="text-xs text-slate-500 font-bold">
-                        / {billingCycle === 'yearly' ? 'year' : 'month'}
+                      <span className="text-4xl font-black text-slate-900">₹{price.toLocaleString()}</span>
+                      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                        / member / {billingCycle === 'yearly' ? 'year' : 'mo'}
                       </span>
                     </div>
 
-                    {billingCycle === 'yearly' && (
-                      <div className="flex items-center gap-2 mt-1">
+                    {billingCycle === 'yearly' ? (
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="text-xs text-slate-400 line-through">
-                          ₹{p.yearlyOriginal}
+                          ₹{p.yearlyOriginal?.toLocaleString()}
                         </span>
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                          Save ₹{p.yearlySavings} (5% OFF)
+                        <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                          ₹{Math.round(p.yearlyPrice / 12).toLocaleString()}/mo • Save ₹{p.yearlySavings?.toLocaleString()} (5% OFF)
                         </span>
+                      </div>
+                    ) : (
+                      <div className="text-xs font-bold text-slate-500 mt-1">
+                        Billed monthly
                       </div>
                     )}
                   </div>
@@ -1167,10 +1171,10 @@ export default function AdminBilling() {
                     </span>
                   </div>
                   <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                    TrackPro Subscription Receipt
+                    KisanConnect Subscription Receipt
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Billed by TrackPro SaaS Services • KisanConnect Inc.
+                    Billed by KisanConnect SaaS Services • KisanConnect Inc.
                   </p>
                 </div>
 
@@ -1303,6 +1307,6 @@ export default function AdminBilling() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

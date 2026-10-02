@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Users,
@@ -387,9 +387,12 @@ export default function AdminEmployees() {
 
   // Distinct departments and managers from loaded data
   const distinctDepts = Array.from(new Set(employees.map((e) => e.department).filter(Boolean)));
-  const distinctManagers = Array.from(new Set(employees.map((e) => e.manager?.name || e.managerName).filter(Boolean)));
+  const userOrgId = String(user?.organizationId?._id || user?.organizationId || user?.organization || '');
 
   const filteredEmployees = employees.filter((emp) => {
+    const empOrgId = String(emp.organizationId?._id || emp.organizationId || emp.organization || '');
+    if (!isSuperAdmin && userOrgId && empOrgId && userOrgId !== empOrgId) return false;
+
     const matchesSearch =
       emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -409,7 +412,7 @@ export default function AdminEmployees() {
   const onlineCount = employees.filter((e) => e.isOnline).length;
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6">
         {/* Header Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -437,7 +440,7 @@ export default function AdminEmployees() {
           </div>
         </div>
 
-        {/* 6 TrackPro KPI Cards (Dynamically Computed from DB) */}
+        {/* 6 KisanConnect KPI Cards (Dynamically Computed from DB) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-2">
@@ -1215,6 +1218,6 @@ export default function AdminEmployees() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

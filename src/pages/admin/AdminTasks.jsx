@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { taskAPI, adminAPI } from '../../services/api.service';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -255,7 +255,7 @@ export default function AdminTasks() {
   const overduePct = totalTasks > 0 ? Math.round((overdueTasks / totalTasks) * 100) : 0;
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="w-full space-y-6">
         {/* Breadcrumb & Header matching Image */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-rose-100">
@@ -915,6 +915,6 @@ export default function AdminTasks() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

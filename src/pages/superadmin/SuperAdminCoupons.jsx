@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import {
   Tag,
   Plus,
@@ -142,7 +142,7 @@ export default function SuperAdminCoupons() {
   });
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6 pb-12">
         {/* Header */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -436,6 +436,6 @@ export default function SuperAdminCoupons() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

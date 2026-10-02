@@ -36,7 +36,7 @@ import Avatar from '../shared/Avatar';
 import BroadcastAlertPopup from '../shared/BroadcastAlertPopup';
 import toast from 'react-hot-toast';
 
-export default function TrackProLayout({ children }) {
+export default function KisanConnectLayout({ children }) {
   const { user, organization, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,7 +99,7 @@ export default function TrackProLayout({ children }) {
         />
       )}
 
-      {/* TrackPro Sidebar */}
+      {/* KisanConnect Sidebar */}
       <aside
         className={`fixed top-0 left-0 bottom-0 w-72 bg-white border-r-2 border-rose-200/90 shadow-sm shadow-rose-100/40 z-50 flex flex-col justify-between transition-transform duration-200 ease-in-out print:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
@@ -143,7 +143,7 @@ export default function TrackProLayout({ children }) {
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex-1 px-3 py-2.5 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-3 py-2.5 space-y-1 overflow-y-auto mt-[10px]">
             {isSuperAdmin ? (
               <div className="space-y-1">
                 <div className="px-3 pb-1.5 text-[10px] font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -172,13 +172,13 @@ export default function TrackProLayout({ children }) {
                       to={item.to}
                       end={item.end}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-2.5 py-2 px-3 rounded-xl text-[13px] transition-all duration-150 group ${
+                      className={`flex items-center gap-2.5 py-2 px-3 rounded-xl text-[18px] transition-all duration-150 group ${
                         isActive
                           ? 'bg-rose-50 text-rose-600 font-bold border-l-4 border-rose-500 pl-3.5 shadow-sm'
                           : 'text-slate-700 font-medium hover:bg-rose-50/60 hover:text-rose-600 pl-3.5 hover:border-l-4 hover:border-rose-300'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-rose-600 stroke-[2.2]' : 'text-slate-500 group-hover:text-rose-500 stroke-[1.8]'}`} />
+                      <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-rose-600 stroke-[2.2]' : 'text-slate-500 group-hover:text-rose-500 stroke-[1.8]'}`} />
                       <span className="tracking-tight">{item.label}</span>
                     </NavLink>
                   );
@@ -196,13 +196,13 @@ export default function TrackProLayout({ children }) {
                     key={item.to}
                     to={item.to}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 py-2 px-3 rounded-xl text-[13px] transition-all duration-150 group ${
+                    className={`flex items-center gap-2.5 py-2.5 px-3 rounded-xl text-[18px] transition-all duration-150 group ${
                       isActive
                         ? 'bg-rose-50 text-rose-600 font-bold border-l-4 border-rose-500 pl-3.5 shadow-sm'
                         : 'text-slate-700 font-medium hover:bg-rose-50/60 hover:text-rose-600 pl-3.5 hover:border-l-4 hover:border-rose-300'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-rose-600 stroke-[2.2]' : 'text-slate-500 group-hover:text-rose-500 stroke-[1.8]'}`} />
+                    <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-rose-600 stroke-[2.2]' : 'text-slate-500 group-hover:text-rose-500 stroke-[1.8]'}`} />
                     <span className="tracking-tight">{item.label}</span>
                     {item.isBilling && !isPlanActive && isOrgAdmin && (
                       <span className="ml-auto text-[9px] font-black uppercase tracking-wider bg-rose-600 text-white px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
@@ -283,7 +283,7 @@ export default function TrackProLayout({ children }) {
             className="flex items-center justify-between p-2 rounded-xl hover:bg-rose-50/80 transition cursor-pointer border border-transparent hover:border-rose-200"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar src={user?.avatar} name={user?.name || (isSuperAdmin ? 'TrackPro Super Admin' : 'Kisan Choice')} size="sm" />
+              <Avatar src={user?.avatar} name={user?.name || (isSuperAdmin ? 'KisanConnect Super Admin' : 'Kisan Choice')} size="sm" />
               <div className="min-w-0">
                 <span className="text-xs font-extrabold text-slate-900 truncate block">{user?.name || (isSuperAdmin ? 'Super Admin' : 'Kisan Choice')}</span>
                 <span className="text-[10px] text-slate-500 font-semibold truncate block capitalize">
@@ -335,7 +335,7 @@ export default function TrackProLayout({ children }) {
           </div>
         )}
 
-        {/* TrackPro Topbar */}
+        {/* KisanConnect Topbar */}
         <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 px-6 flex items-center justify-between print:hidden">
           <div className="flex items-center gap-3 flex-1 max-w-xl">
             <button

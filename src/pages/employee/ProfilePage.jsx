@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { authAPI, API } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import {
@@ -108,7 +108,7 @@ export default function ProfilePage() {
     : 'KC';
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6 max-w-5xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -329,6 +329,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

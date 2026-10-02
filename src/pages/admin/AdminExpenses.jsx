@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { expenseAPI, adminAPI } from '../../services/api.service';
 import toast from 'react-hot-toast';
 import Avatar from '../../components/shared/Avatar';
@@ -160,7 +160,7 @@ export default function AdminExpenses() {
   const rejectedClaimsAmount = serverStats?.rejectedAmount ?? expenses.filter(e => e.status === 'rejected').reduce((a, b) => a + (b.amount || 0), 0);
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="w-full space-y-6">
         {/* Breadcrumb & Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-rose-100">
@@ -726,6 +726,6 @@ export default function AdminExpenses() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

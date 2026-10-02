@@ -217,7 +217,7 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
         initSocket(data.token);
         setupTokenRefresh();
-        toast.success(`Welcome to TrackPro! ${data.organization.name} registered 🎉`);
+        toast.success(`Welcome to KisanConnect! ${data.organization.name} registered 🎉`);
         return { success: true };
       }
     } catch (err) {

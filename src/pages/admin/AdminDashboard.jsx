@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Users,
@@ -131,7 +131,7 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6">
         {/* Top Welcome & Context Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -160,7 +160,7 @@ export default function AdminDashboard() {
 
 
 
-        {/* 6 TrackPro KPI Cards (Real DB Analytics) */}
+        {/* 6 KisanConnect KPI Cards (Real DB Analytics) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Total Employees */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
@@ -682,6 +682,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

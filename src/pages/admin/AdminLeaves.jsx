@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { leaveAPI } from '../../services/api.service';
 import { Calendar, CheckCircle, XCircle, Clock, User, FileText, ChevronRight, Search, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -56,7 +56,7 @@ export default function AdminLeaves() {
   };
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1600px] mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -233,6 +233,6 @@ export default function AdminLeaves() {
           )}
         </div>
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

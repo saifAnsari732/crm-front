@@ -5,7 +5,7 @@ import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import { adminAPI, attendanceAPI, authAPI, meetingAPI, expenseAPI, trackingAPI, employeeAPI, uploadAPI } from '../../services/api.service';
 import {
   MapPin, Users, Receipt, TrendingUp, Clock, ChevronRight,
-  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList, Locate, Upload
+  Navigation, CheckCircle, AlertCircle, Calendar, Zap, ClipboardList, Locate, Upload, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -232,6 +232,10 @@ export default function EmployeeDashboard() {
                   </span>
                   <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10 text-white/80 text-[10px] font-bold uppercase tracking-wider">
                     {user?.designation || 'Field Executive'}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-400/30 text-emerald-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                    <Building2 className="w-3 h-3 text-emerald-300" />
+                    {user?.organizationId?.name || user?.organizationName || user?.organization?.name || user?.organizationCode || "Organization"}
                   </span>
                 </div>
               </div>

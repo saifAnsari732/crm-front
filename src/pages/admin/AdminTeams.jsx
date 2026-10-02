@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Users2,
@@ -151,7 +151,7 @@ export default function AdminTeams() {
   const totalActiveNow = teams.reduce((acc, t) => acc + (t.activeCount || 0), 0);
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6">
         {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -598,6 +598,6 @@ export default function AdminTeams() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

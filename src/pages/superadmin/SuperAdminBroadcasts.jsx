@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import {
   Radio,
   Send,
@@ -71,7 +71,7 @@ export default function SuperAdminBroadcasts() {
       label: 'System Maintenance',
       icon: Server,
       title: 'Scheduled System Maintenance Notice',
-      message: 'TrackPro infrastructure will undergo scheduled database maintenance on Sunday at 2:00 AM IST (approx. 30 mins). Field tracking data syncs automatically.',
+      message: 'KisanConnect infrastructure will undergo scheduled database maintenance on Sunday at 2:00 AM IST (approx. 30 mins). Field tracking data syncs automatically.',
       priority: 'high',
       category: 'maintenance',
       targetRole: 'ALL',
@@ -88,7 +88,7 @@ export default function SuperAdminBroadcasts() {
     {
       label: 'Release Notes v2.4',
       icon: Layers,
-      title: 'TrackPro Update v2.4 Released',
+      title: 'KisanConnect Update v2.4 Released',
       message: 'A new platform update is live featuring optimized battery usage, instant route telemetry, and enhanced visit logging. Please refresh your application.',
       priority: 'info',
       category: 'feature',
@@ -273,7 +273,7 @@ export default function SuperAdminBroadcasts() {
   const priorityCfg = getPriorityTheme(formData.priority);
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="space-y-6 max-w-7xl mx-auto pb-16">
         
         {/* ========================================================================= */}
@@ -710,6 +710,6 @@ export default function SuperAdminBroadcasts() {
         </div>
 
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

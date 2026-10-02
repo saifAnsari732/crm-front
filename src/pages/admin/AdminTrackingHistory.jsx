@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import TrackProLayout from '../../components/layout/TrackProLayout';
+import KisanConnectLayout from '../../components/layout/KisanConnectLayout';
 import { adminAPI, trackingAPI } from '../../services/api.service';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
 import {
@@ -534,7 +534,7 @@ export default function AdminTrackingHistory() {
   };
 
   return (
-    <TrackProLayout>
+    <KisanConnectLayout>
       <div className="p-4 lg:p-6 space-y-6 max-w-[1650px] mx-auto pb-12">
         {/* Top Header & Presets Bar */}
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -1295,6 +1295,6 @@ export default function AdminTrackingHistory() {
           </div>
         )}
       </div>
-    </TrackProLayout>
+    </KisanConnectLayout>
   );
 }

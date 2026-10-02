@@ -19,7 +19,7 @@ import {
   ClipboardList,
   AlertCircle,
   Check,
-
+  Building2
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { taskAPI,leadAPI } from "../../services/api.service";
@@ -154,6 +154,10 @@ export default function EmployeeLayout({ children }) {
               </p>
               <p className="text-[var(--text-muted)] text-xs truncate">
                 {user?.employeeId}
+              </p>
+              <p className="text-primary-400 font-medium text-[11px] truncate flex items-center gap-1 mt-0.5">
+                <Building2 className="w-3 h-3 inline flex-shrink-0" />
+                <span>{user?.organizationId?.name || user?.organizationName || user?.organization?.name || user?.organizationCode || "Organization"}</span>
               </p>
             </div>
           </div>
