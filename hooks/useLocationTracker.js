@@ -340,7 +340,10 @@ export default function useLocationTracker() {
       await storage.setItem('currentTrackingSessionId', sessionId);
       await storage.setItem('tracking_accumulated_session_id', sessionId);
       await storage.setItem('trackingStartTime', session.startTime);
-      await storage.setItem('tracking_accumulated_distance', '0.00');
+      const initialDist = typeof response.data?.totalDistanceToday === 'number'
+        ? response.data.totalDistanceToday.toFixed(2)
+        : '0.00';
+      await storage.setItem('tracking_accumulated_distance', initialDist);
       await scheduleNoMovementNotification(sessionId);
 
       // 3. Connect socket & emit tracking_started

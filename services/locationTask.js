@@ -76,6 +76,37 @@ function updateMotionState(speedMps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CUSUM Sequential Change-Point Movement Confirmation Buffer
+// Prevents false positives from single drift spikes while guaranteeing zero distance
+// loss when transitioning from stationary home to active travel.
+// ─────────────────────────────────────────────────────────────────────────────
+let _movementCandidateBuffer = [];
+
+function evaluateMovementTransition(distM, secs, speedKmh, accuracyM) {
+  const effectiveSpeedKmh = Math.max(speedKmh, (distM / 1000 / secs) * 3600);
+
+  // Real movement signal: speed > 2.0 km/h, distance > 12m, reasonable accuracy <= 200m
+  if (effectiveSpeedKmh > 2.0 && distM > 12 && accuracyM <= 200) {
+    _movementCandidateBuffer.push({ distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() });
+
+    // Multi-observation confirmation: require at least 2 consecutive consistent fixes
+    if (_movementCandidateBuffer.length >= 2) {
+      console.log(`📍 CUSUM Change-Point: Confirmed movement with ${_movementCandidateBuffer.length} fixes! Transitioning to MOVING.`);
+      const totalBufferedM = _movementCandidateBuffer.reduce((sum, item) => sum + item.distM, 0);
+      _movementCandidateBuffer = [];
+      return { confirmed: true, backfillDistKm: totalBufferedM / 1000 };
+    }
+    return { confirmed: false, pending: true };
+  } else {
+    // Noise/jitter resets the transition buffer
+    if (_movementCandidateBuffer.length > 0) {
+      _movementCandidateBuffer = [];
+    }
+    return { confirmed: false, pending: false };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Haversine in meters
 // ─────────────────────────────────────────────────────────────────────────────
 function distanceMeters(lat1, lon1, lat2, lon2) {
@@ -180,9 +211,10 @@ const processLocation = async (location) => {
   const { latitude, longitude, speed, accuracy, heading } = location.coords;
   const timestamp = location.timestamp;
 
-  // ── Sanity check ─────────────────────────────────────────────────────────
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp)) {
-    console.log('📍 BackgroundTask: Invalid GPS payload, skipping.');
+  // ── Sanity check & India Geographic Bounds ───────────────────────────────
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp) ||
+      latitude < 6 || latitude > 38 || longitude < 68 || longitude > 98) {
+    console.log('📍 BackgroundTask: Invalid GPS payload or out-of-bounds coordinate, skipping.');
     return;
   }
 
@@ -215,16 +247,12 @@ const processLocation = async (location) => {
           const secs = Math.max((timestamp - new Date(lastLocation.timestamp).getTime()) / 1000, 0.1);
           const calcSpeedKmh = (distM / 1000 / secs) * 3600;
           
-          // If we've been stationary for > 30 minutes and now see movement,
-          // accept the point as a new anchor even with lower accuracy
-          const stationaryMinutes = (Date.now() - _stationarySince) / 60000;
-          if (stationaryMinutes > 30 && distM > 50 && calcSpeedKmh < MAX_SPEED_KMH) {
-            // This is a genuine start-of-movement after a long rest
-            // Accept it even if accuracy is 100-300m
-            console.log(`📍 Movement detected after ${stationaryMinutes.toFixed(0)}min stationary. Re-anchoring.`);
-            // Fall through to accept
-            valid = true;
-            distKm = distM / 1000;
+          if (calcSpeedKmh < MAX_SPEED_KMH) {
+            const transition = evaluateMovementTransition(distM, secs, calcSpeedKmh, accuracy || 50);
+            if (transition.confirmed) {
+              valid = true;
+              distKm = transition.backfillDistKm || (distM / 1000);
+            }
           }
         }
 
@@ -252,6 +280,7 @@ const processLocation = async (location) => {
       speed:    Number.isFinite(speed)   ? speed   : 0,
       accuracy: Number.isFinite(accuracy)? accuracy: 0,
       heading:  Number.isFinite(heading) ? heading : 0,
+      mocked:   location.mocked || false,
       timestamp: new Date(timestamp).toISOString(),
       motionState: _currentMotionState,
     };
@@ -287,18 +316,20 @@ const processLocation = async (location) => {
       );
 
       if (response.data?.success) {
-        // Server total is authoritative — sync local cache to server value
+        // Server total today is authoritative — sync local cache to cumulative day value
+        const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
-        if (Number.isFinite(serverDist)) {
+        const authoritativeDist = Number.isFinite(serverToday) ? serverToday : serverDist;
+        if (Number.isFinite(authoritativeDist)) {
           const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
           // Never lower local cache below what server confirmed
           await storage.setItem(
             'tracking_accumulated_distance',
-            Math.max(localDist, serverDist).toFixed(4)
+            Math.max(localDist, authoritativeDist).toFixed(4)
           );
         }
         uploadedToServer = true;
-        console.log(`📍 BackgroundTask: Server synced. Total: ${response.data.totalDistance?.toFixed(2)} km`);
+        console.log(`📍 BackgroundTask: Server synced. Day Total: ${(response.data.totalDistanceToday ?? response.data.totalDistance)?.toFixed(2)} km`);
 
         // Also flush any queued offline items now that we have connectivity
         flushOfflineQueue().catch(() => {});

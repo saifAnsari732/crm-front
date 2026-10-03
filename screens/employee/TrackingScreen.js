@@ -114,25 +114,30 @@ export default function ActiveShiftMapScreen() {
 
     const syncDistanceWithBackend = async () => {
       try {
-        const sessionId = await storage.getItem('currentTrackingSessionId');
-        if (!sessionId) return;
-
         const response = await trackingApi.getTodaySessions();
         if (response && response.data && response.data.success) {
-          const activeSession = response.data.sessions.find(s => s.sessionId === sessionId);
-          if (activeSession) {
-            const backendDistance = parseFloat(activeSession.totalDistance) || 0.0;
-            const cachedDistance = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0.0;
-            const cachedSessionId = await storage.getItem('tracking_accumulated_session_id');
-            const synchronizedDistance = cachedSessionId === sessionId
-              ? Math.max(backendDistance, cachedDistance)
-              : backendDistance;
-            console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
-            totalDistanceRef.current = synchronizedDistance;
-            const distStr = synchronizedDistance.toFixed(2);
-            setDistance(distStr);
-            await storage.setItem('tracking_accumulated_distance', distStr);
-          }
+          const totalToday = typeof response.data.totalDistanceToday === 'number'
+            ? response.data.totalDistanceToday
+            : null;
+
+          const sessionId = await storage.getItem('currentTrackingSessionId');
+          const activeSession = sessionId
+            ? response.data.sessions.find(s => s.sessionId === sessionId)
+            : null;
+
+          const backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
+          const cachedDistance = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0.0;
+
+          // Prioritize cumulative today distance so session restarts do not reset KM
+          const synchronizedDistance = totalToday !== null
+            ? Math.max(totalToday, backendDistance, cachedDistance)
+            : Math.max(backendDistance, cachedDistance);
+
+          console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
+          totalDistanceRef.current = synchronizedDistance;
+          const distStr = synchronizedDistance.toFixed(2);
+          setDistance(distStr);
+          await storage.setItem('tracking_accumulated_distance', distStr);
         }
       } catch (err) {
         console.log('📍 Tracking Screen: Failed to sync distance with backend:', err);
@@ -157,8 +162,20 @@ export default function ActiveShiftMapScreen() {
         }
       });
     } else {
-      totalDistanceRef.current = 0.0;
-      setDistance('0.00');
+      // When not tracking, display today's total distance if available instead of resetting to 0.00
+      trackingApi.getTodaySessions().then(response => {
+        if (response?.data?.success && typeof response.data.totalDistanceToday === 'number') {
+          const todayDist = response.data.totalDistanceToday;
+          totalDistanceRef.current = todayDist;
+          setDistance(todayDist.toFixed(2));
+        } else {
+          totalDistanceRef.current = 0.0;
+          setDistance('0.00');
+        }
+      }).catch(() => {
+        totalDistanceRef.current = 0.0;
+        setDistance('0.00');
+      });
     }
 
     return () => {
