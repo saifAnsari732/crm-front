@@ -12,9 +12,10 @@ export const setUnauthorizedCallback = (callback) => {
 // =========================================================================
 // BACKEND API CONFIGURATION
 export const PROD_URL = 'https://kisanteamapp.online/api';
-export const LOCAL_URL = 'http://192.168.0.108:5000/api';
+export const LOCAL_URL = 'http://192.168.0.107:5000/api';
 
-const USE_LOCAL = true;
+// Set to false to use AWS Production Server (fixes Expo Go Network Error)
+const USE_LOCAL = false;
 
 const getBaseUrl = () => {
   if (USE_LOCAL && __DEV__) {
