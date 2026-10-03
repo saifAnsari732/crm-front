@@ -92,9 +92,12 @@ function evaluateMovementTransition(distM, secs, speedKmh, accuracyM) {
     // Multi-observation confirmation: require at least 2 consecutive consistent fixes
     if (_movementCandidateBuffer.length >= 2) {
       console.log(`📍 CUSUM Change-Point: Confirmed movement with ${_movementCandidateBuffer.length} fixes! Transitioning to MOVING.`);
-      const totalBufferedM = _movementCandidateBuffer.reduce((sum, item) => sum + item.distM, 0);
+      // Each buffered fix is measured from the SAME anchor (last_recorded_location),
+      // so displacements overlap — the latest one is the true distance. Summing
+      // them would over-count and inflate the locally cached KM.
+      const latestBufferedM = _movementCandidateBuffer[_movementCandidateBuffer.length - 1].distM;
       _movementCandidateBuffer = [];
-      return { confirmed: true, backfillDistKm: totalBufferedM / 1000 };
+      return { confirmed: true, backfillDistKm: latestBufferedM / 1000 };
     }
     return { confirmed: false, pending: true };
   } else {
@@ -175,23 +178,36 @@ function validateSegment(prev, curr) {
 // ─────────────────────────────────────────────────────────────────────────────
 let _heartbeatTimer = null;
 
+// Throttled heartbeat that can be called from ANY context (JS timer, background
+// GPS task, app-resume). JS timers are frozen by Android in background/Doze, so the
+// OS-driven GPS task must also ping the server, otherwise a stationary employee
+// (home/office for hours) looks "inactive" and the server closes the shift.
+export async function sendHeartbeatNow(force = false) {
+  try {
+    const sessionId = await storage.getItem('currentTrackingSessionId');
+    if (!sessionId) return;
+    const last = parseInt(await storage.getItem('last_heartbeat_ts'), 10) || 0;
+    if (!force && Date.now() - last < HEARTBEAT_INTERVAL_MS - 15000) return;
+    await storage.setItem('last_heartbeat_ts', String(Date.now()));
+    const response = await trackingAPI.heartbeat({ sessionId });
+    if (response.data?.sessionClosed) {
+      console.log('💓 Heartbeat: session closed by server. Saving state for recovery.');
+      await storage.setItem('tracking_session_closed_by_server', 'true');
+    } else {
+      console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
+    }
+  } catch (_) {
+    // best-effort; retried on next GPS tick / interval
+  }
+}
+
 function startHeartbeat(sessionId) {
   stopHeartbeat();
-  _heartbeatTimer = setInterval(async () => {
-    try {
-      if (!sessionId) return;
-      const response = await trackingAPI.heartbeat({ sessionId });
-      if (response.data?.sessionClosed) {
-        console.log('💓 Heartbeat: session closed by server. Saving state for recovery.');
-        await storage.setItem('tracking_session_closed_by_server', 'true');
-        stopHeartbeat();
-      } else {
-        console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
-      }
-    } catch (_) {
-      // Heartbeat is best-effort — network error is OK, next interval will retry
-    }
+  _heartbeatTimer = setInterval(() => {
+    sendHeartbeatNow();
   }, HEARTBEAT_INTERVAL_MS);
+  // Immediate ping so lastActivity is fresh the moment tracking (re)starts
+  sendHeartbeatNow(true);
 }
 
 function stopHeartbeat() {
@@ -356,6 +372,9 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
     return;
   }
   if (!locations || locations.length === 0) return;
+
+  // Keep the server session alive from the OS-driven task (JS timers die in Doze).
+  sendHeartbeatNow().catch(() => {});
 
   // Android may batch fixes (e.g., 3-4 points) when the screen is off.
   // Process ALL in timestamp order — never skip batched fixes.

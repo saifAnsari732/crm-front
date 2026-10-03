@@ -166,6 +166,13 @@ async function flushOfflineQueueUnlocked() {
           await storage.removeItem('last_recorded_location');
         }
       } catch (err) {
+        if (err?.response?.data?.sessionClosed === true) {
+          // Server says this session is permanently closed (manual punch-out).
+          // Retrying forever would block the queue; discard this item.
+          delete retryCounts[item.id];
+          console.log(`📦 OfflineSync: Dropping item ${item.id} — session closed on server.`);
+          continue;
+        }
         // Keep in queue for next retry
         retryCounts[item.id] = retries + 1;
         failedItems.push(item);

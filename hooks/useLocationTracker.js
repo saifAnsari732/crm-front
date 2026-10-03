@@ -7,7 +7,7 @@ import { showCustomAlert } from '../components/GlobalAlert';
 import { storage } from '../services/storage';
 import { trackingApi } from '../services/api';
 import socketService from '../services/socket';
-import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat } from '../services/locationTask';
+import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat, sendHeartbeatNow } from '../services/locationTask';
 import { enqueueCoordinate, enqueueStop } from '../services/offlineSync';
 import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification, sendGpsDisabledNotification } from '../services/trackingNotification';
 import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
@@ -83,6 +83,12 @@ export default function useLocationTracker() {
       
       let serverSessionActive = true;
       try {
+        if (activeSession) {
+          // Heartbeat first: the server re-opens a same-day shift it auto-closed,
+          // so the employee is not forced to punch in again and no KM is lost.
+          await sendHeartbeatNow(true);
+          startHeartbeat(activeSession);
+        }
         const response = await trackingApi.getTodaySessions();
         const serverSession = response.data?.sessions?.find((session) => session.sessionId === activeSession);
         if (serverSession && serverSession.isActive === false) {
