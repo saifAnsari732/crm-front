@@ -11,44 +11,20 @@ export const setUnauthorizedCallback = (callback) => {
 
 // =========================================================================
 // BACKEND API CONFIGURATION
-// =========================================================================
-// export const PROD_URL = 'https://kisanteamapp.online/api';
-export const PROD_URL = 'https://field-backend-monitor-web-ym7d.onrender.com/api';
+export const PROD_URL = 'https://kisanteamapp.online/api';
+export const LOCAL_URL = 'http://192.168.0.108:5000/api';
+
+const USE_LOCAL = true;
+
 const getBaseUrl = () => {
-  // Production / Release Build (EAS Production / Release APK / AAB) -> Always use production server!
-  if (!__DEV__ || process.env.NODE_ENV === 'production' || Constants.executionEnvironment === 'standalone') {
-    return PROD_URL;
+  if (USE_LOCAL && __DEV__) {
+    return LOCAL_URL;
   }
-
-  // Web (admin panel) → use same hostname so it works on any machine
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.location?.hostname) {
-      return `http://${window.location.hostname}:5000/api`;
-    }
-    return 'http://localhost:5000/api';
-  }
-
-  // Mobile Local Dev (Expo Go / Physical Device / Emulator)
-  // Automatically extract current computer's LAN IP address from Expo Constants
-  try {
-    const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.debuggerHost || Constants?.manifest2?.extra?.expoGo?.developer?.tool;
-    if (hostUri) {
-      const ip = hostUri.split(':')[0];
-      if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
-        return `http://${ip}:5000/api`;
-      }
-    }
-  } catch (e) {
-    console.log('Expo host IP auto-detect error:', e);
-  }
-
-  // Fallback to local dev IP
-  return 'http://192.168.0.108:5000/api';
+  return PROD_URL;
 };
 
 export const BASE_URL = getBaseUrl();
-export const DEV_URL  = BASE_URL; // backward compat alias
-
+export const DEV_URL = BASE_URL;
 export const getAvatarUrl = (avatar) => {
   if (!avatar || typeof avatar !== 'string') return null;
   const clean = avatar.trim();
@@ -138,7 +114,7 @@ API.interceptors.response.use(
   }
 );
 
-// ─── Auth ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const authAPI = {
   login: (data) => API.post('/auth/login', data),
   register: (data) => API.post('/auth/register', data),
@@ -152,7 +128,7 @@ export const authAPI = {
 };
 
 
-// ─── Tracking ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const trackingAPI = {
   start:             (data)           => API.post('/tracking/start', data),
   update:            (data)           => API.post('/tracking/update', data),
@@ -170,7 +146,7 @@ export const trackingAPI = {
                                          API.post('/tracking/start', { lat, lng, selfieUrl }),
 };
 
-// ─── Meetings ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Meetings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const meetingAPI = {
   create: (data) => API.post('/meetings', data),
   getMy: (params) => API.get('/meetings/my', { params }),
@@ -178,7 +154,7 @@ export const meetingAPI = {
   getAll: (params) => API.get('/meetings/all', { params }),
 };
 
-// ─── Expenses ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Expenses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const expenseAPI = {
   create: (data) => API.post('/expenses', data),
   claimDA: (data) => API.post('/expenses/claim-da', data),
@@ -187,7 +163,7 @@ export const expenseAPI = {
   approve: (id, data) => API.put(`/expenses/${id}/approve`, data),
 };
 
-// ─── Admin ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
   getEmployees: (params) => API.get('/admin/employees', { params }),
@@ -204,7 +180,7 @@ export const adminAPI = {
   updateOrganization: (data) => API.put('/admin/organization', data),
 };
 
-// ─── Employees ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Employees â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const employeeAPI = {
   getAll: () => API.get('/employees'),
   getById: (id) => API.get(`/employees/${id}`),
@@ -212,19 +188,19 @@ export const employeeAPI = {
   delete: (id) => API.delete(`/employees/${id}`),
 };
 
-// ─── Attendance ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Attendance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const attendanceAPI = {
   getMy: () => API.get('/attendance/my'),
   getToday: () => API.get('/attendance/today'),
 };
 
-// ─── Notifications ────────────────────────────────────────────────────────
+// â”€â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const notificationAPI = {
   getAll: () => API.get('/notifications'),
   readAll: () => API.put('/notifications/read-all'),
 };
 
-// ─── Upload ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const uploadAPI = {
   getAuth: () => API.get('/upload/auth'),
   uploadImage: (data) => API.post('/upload/image', data),
@@ -323,7 +299,7 @@ export const uploadAPI = {
   },
 };
 
-// ─── Leaves ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Leaves â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const leaveAPI = {
   apply: (data) => API.post('/leaves/apply', data),
   getMy: () => API.get('/leaves/my'),
@@ -331,7 +307,7 @@ export const leaveAPI = {
   updateStatus: (id, data) => API.patch(`/leaves/${id}/status`, data),
 };
 
-// ─── Tasks ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const taskAPI = {
   create: (data) => API.post('/tasks', data),
   getAll: (params) => API.get('/tasks/all', { params }),
@@ -339,7 +315,7 @@ export const taskAPI = {
   updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
 };
 
-// ─── Leads ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const leadAPI = {
   create: (data) => API.post('/leads', data),
   getAll: () => API.get('/leads'),
@@ -347,19 +323,19 @@ export const leadAPI = {
   delete: (id) => API.delete(`/leads/${id}`),
 };
 
-// ─── Travel ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Travel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const travelAPI = {
   create: (data) => API.post('/travel', data),
   getAll: (params) => API.get('/travel', { params }),
   delete: (id) => API.delete(`/travel/${id}`),
 };
 
-// ─── Dashboard Stats APIs (Extra compatibility) ───────────────────────────
+// â”€â”€â”€ Dashboard Stats APIs (Extra compatibility) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const dashboardAPI = {
   getStats: () => API.get('/dashboard/stats'),
 };
 
-// ─── BACKWARD COMPATIBILITY MAPPINGS FOR SCREEN IMPORTS ────────────────────
+// â”€â”€â”€ BACKWARD COMPATIBILITY MAPPINGS FOR SCREEN IMPORTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const authApi = {
   login: (email, password) => (typeof email === 'object' && email !== null ? authAPI.login(email) : authAPI.login({ email, password })),
   register: (data) => authAPI.register(data),
@@ -380,7 +356,7 @@ export const trackingApi = {
   stopTracking: (sessionId, endTime, endAddress = '', totalDistance = 0) => {
     return trackingAPI.stop({ sessionId, endTime, endAddress, totalDistance });
   },
-  heartbeat: (data) => trackingAPI.heartbeat(data),          // ← NEW: keepalive ping
+  heartbeat: (data) => trackingAPI.heartbeat(data),          // â† NEW: keepalive ping
   getTodaySessions: () => trackingAPI.getToday(),
   getLiveEmployees:  () => trackingAPI.getLive(),
   getSessionRoute:   (id) => trackingAPI.getSession(id),

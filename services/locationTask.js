@@ -36,10 +36,44 @@ const STATIONARY_DRIFT_LIMIT = 120;  // If stationary AND jump < 120 m → GPS d
 
 // Heartbeat: send a ping every N ms so server's 3-hour inactivity clock resets
 // even if the employee is standing at a location without moving.
-const HEARTBEAT_INTERVAL_MS  = 8 * 60 * 1000; // 8 minutes
+const HEARTBEAT_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes
 
 // Upload retry: re-queue if the network call takes longer than this
 const UPLOAD_TIMEOUT_MS      = 9000;
+
+// Motion state tracking for AGTRIE-X v7
+let _currentMotionState = 'STATIONARY';
+let _lastMovementTime = Date.now();
+let _stationarySince = Date.now();
+
+function updateMotionState(speedMps) {
+  const speedKmh = speedMps * 3.6;
+  const prevState = _currentMotionState;
+  
+  if (speedKmh < 1) {
+    if (_currentMotionState !== 'STATIONARY') {
+      _stationarySince = Date.now();
+    }
+    _currentMotionState = 'STATIONARY';
+  } else if (speedKmh < 7) {
+    _currentMotionState = 'WALKING';
+    _lastMovementTime = Date.now();
+  } else if (speedKmh < 15) {
+    _currentMotionState = 'RUNNING';
+    _lastMovementTime = Date.now();
+  } else if (speedKmh < 40) {
+    _currentMotionState = 'BIKE';
+    _lastMovementTime = Date.now();
+  } else {
+    _currentMotionState = 'VEHICLE';
+    _lastMovementTime = Date.now();
+  }
+  
+  // Log state transitions
+  if (prevState !== _currentMotionState) {
+    console.log(`📍 Motion State: ${prevState} → ${_currentMotionState}`);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Haversine in meters
@@ -117,8 +151,8 @@ function startHeartbeat(sessionId) {
       if (!sessionId) return;
       const response = await trackingAPI.heartbeat({ sessionId });
       if (response.data?.sessionClosed) {
-        // Server auto-closed session — stop beating and let UI know on next AppState change
-        console.log('💓 Heartbeat: session closed on server, stopping heartbeat.');
+        console.log('💓 Heartbeat: session closed by server. Saving state for recovery.');
+        await storage.setItem('tracking_session_closed_by_server', 'true');
         stopHeartbeat();
       } else {
         console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
@@ -163,16 +197,36 @@ const processLocation = async (location) => {
     if (!sessionId) return; // No active session
 
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
+    updateMotionState(Number.isFinite(speed) ? speed : 0);
+    
     const lastLocationStr = await storage.getItem('last_recorded_location');
     let lastLocation = null;
 
     if (lastLocationStr) {
       try {
         lastLocation = JSON.parse(lastLocationStr);
-        const { valid, distKm } = validateSegment(lastLocation, {
+        let { valid, distKm } = validateSegment(lastLocation, {
           lat: latitude, lng: longitude,
           speed, accuracy, timestamp: new Date(timestamp).toISOString(),
         });
+
+        if (!valid) {
+          const distM = distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude);
+          const secs = Math.max((timestamp - new Date(lastLocation.timestamp).getTime()) / 1000, 0.1);
+          const calcSpeedKmh = (distM / 1000 / secs) * 3600;
+          
+          // If we've been stationary for > 30 minutes and now see movement,
+          // accept the point as a new anchor even with lower accuracy
+          const stationaryMinutes = (Date.now() - _stationarySince) / 60000;
+          if (stationaryMinutes > 30 && distM > 50 && calcSpeedKmh < MAX_SPEED_KMH) {
+            // This is a genuine start-of-movement after a long rest
+            // Accept it even if accuracy is 100-300m
+            console.log(`📍 Movement detected after ${stationaryMinutes.toFixed(0)}min stationary. Re-anchoring.`);
+            // Fall through to accept
+            valid = true;
+            distKm = distM / 1000;
+          }
+        }
 
         if (!valid) {
           // Not a valid movement — heartbeat will keep session alive
@@ -199,6 +253,7 @@ const processLocation = async (location) => {
       accuracy: Number.isFinite(accuracy)? accuracy: 0,
       heading:  Number.isFinite(heading) ? heading : 0,
       timestamp: new Date(timestamp).toISOString(),
+      motionState: _currentMotionState,
     };
 
     // Update last recorded location IMMEDIATELY so next tick has correct reference

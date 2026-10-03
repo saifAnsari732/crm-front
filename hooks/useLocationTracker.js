@@ -120,6 +120,17 @@ export default function useLocationTracker() {
     }
   };
 
+  // Check if server auto-closed our session
+  const checkSessionRecovery = async () => {
+    const wasClosed = await storage.getItem('tracking_session_closed_by_server');
+    if (wasClosed === 'true') {
+      await storage.removeItem('tracking_session_closed_by_server');
+      // The session was auto-closed, UI should show punch-in button
+      return true;
+    }
+    return false;
+  };
+
   /**
    * Request precise foreground and background permissions sequentially
    */
@@ -481,19 +492,21 @@ export default function useLocationTracker() {
 
       // Upload the final fix before stopping the native feed so the last ride segment is not lost.
       if (finalLat && finalLng) {
+        const finalCoordinate = {
+          eventId: `${sessionId}:final:${Date.now()}`,
+          lat: finalLat,
+          lng: finalLng,
+          speed: Number.isFinite(finalSpeed) && finalSpeed >= 0 ? finalSpeed : 0,
+          accuracy: Number.isFinite(finalAccuracy) && finalAccuracy >= 0 ? finalAccuracy : 999,
+          heading: 0,
+          timestamp: finalTimestamp ? new Date(finalTimestamp).toISOString() : new Date().toISOString(),
+        };
         try {
-          const finalCoordinate = {
-            eventId: `${sessionId}:final:${Date.now()}`,
-            lat: finalLat,
-            lng: finalLng,
-            speed: Number.isFinite(finalSpeed) && finalSpeed >= 0 ? finalSpeed : 0,
-            accuracy: Number.isFinite(finalAccuracy) && finalAccuracy >= 0 ? finalAccuracy : 999,
-            heading: 0,
-            timestamp: finalTimestamp ? new Date(finalTimestamp).toISOString() : new Date().toISOString(),
-          };
           const finalResponse = await trackingApi.updateLocation(sessionId, [finalCoordinate]);
           if (finalResponse.data?.success) {
-            await storage.setItem('tracking_accumulated_distance', String(finalResponse.data.totalDistance || 0));
+            const currentAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+            const confirmedDist = Number(finalResponse.data.totalDistance) || 0;
+            await storage.setItem('tracking_accumulated_distance', String(Math.max(currentAcc, confirmedDist)));
           }
         } catch (finalErr) {
           console.log('⚠️ useLocationTracker: Final coordinate upload deferred:', finalErr.message);
@@ -514,7 +527,8 @@ export default function useLocationTracker() {
       let totalDistance = 0;
       try {
         const response = await trackingApi.stopTracking(sessionId, new Date().toISOString());
-        totalDistance = response.data.totalDistance || 0;
+        const localAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+        totalDistance = Math.max(Number(response.data?.totalDistance) || 0, localAcc);
       } catch (netErr) {
         console.log('⚠️ useLocationTracker: Backend unreachable during stop, queueing stop for retry.');
         await enqueueStop(sessionId, new Date().toISOString());
@@ -591,5 +605,6 @@ export default function useLocationTracker() {
     requestPermissions,
     startTracking,
     stopTracking,
+    checkSessionRecovery,
   };
 }
