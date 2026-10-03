@@ -794,9 +794,19 @@ export default function AdminTrackingHistory() {
                             >
                               {session.employee?.name || 'Field Employee'}
                             </h4>
-                            <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex-shrink-0">
-                              {dist} KM
-                            </span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                {dist} KM
+                              </span>
+                              {session.manualDistanceAdded > 0 && (
+                                <span
+                                  title={`Includes +${session.manualDistanceAdded} KM Admin Credit`}
+                                  className="text-[9px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1 py-0.5 rounded"
+                                >
+                                  +{session.manualDistanceAdded}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold mt-1">
