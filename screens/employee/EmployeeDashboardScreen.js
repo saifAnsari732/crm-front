@@ -68,6 +68,12 @@ export default function EmployeeDashboardScreen() {
   const [unreadCount, setUnreadCount] = useState(4);
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // Selfie Custom Resize & Punch In Modal States
+  const [pendingSelfieUri, setPendingSelfieUri] = useState(null);
+  const [selfieAspectMode, setSelfieAspectMode] = useState('half'); // 'half' (1:1) or 'full' (3:4)
+  const [selfieModalVisible, setSelfieModalVisible] = useState(false);
+  const [submittingPunchIn, setSubmittingPunchIn] = useState(false);
+
   const [stats, setStats] = useState({
     distanceToday: "0.00",
     meetingCount: 0,
@@ -154,6 +160,19 @@ export default function EmployeeDashboardScreen() {
 
   const handleClockToggle = async () => {
     if (isTracking) {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.confirm('Are you sure you want to end your active operational tracking shift?')) {
+          const res = await stopTracking();
+          if (res.success) {
+            alert(`Shift Ended. Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`);
+            loadDashboardData();
+          } else {
+            alert(res.error || "Failed to stop tracking session.");
+          }
+        }
+        return;
+      }
+
       Alert.alert(
         "Confirm Clock Out",
         "Are you sure you want to end your active operational tracking shift?",
@@ -178,60 +197,75 @@ export default function EmployeeDashboardScreen() {
         ],
       );
     } else {
-      try {
-        setIsUploadingSelfie(true);
+      capturePunchInSelfie();
+    }
+  };
 
-        // 1. Ensure all permissions (Foreground, Background, Camera, Notifications) are granted
-        const hasAllPermissions = await requestPermissions();
-        if (!hasAllPermissions) {
-          setIsUploadingSelfie(false);
-          return;
-        }
-
-        const photoResult = await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.6,
-          cameraType: ImagePicker.CameraType?.front || 'front',
-        });
-
-        if (photoResult.canceled || !photoResult.assets?.length) {
-          Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
-          setIsUploadingSelfie(false);
-          return;
-        }
-
-        const selfieAsset = photoResult.assets[0];
-        let uploadRes;
-
-        if (Platform.OS === 'web') {
-          const formData = new FormData();
-          const filename = selfieAsset.uri.split('/').pop() || 'selfie.jpg';
-          const resp = await fetch(selfieAsset.uri);
-          const blob = await resp.blob();
-          formData.append('image', blob, filename);
-          uploadRes = await uploadAPI.uploadImageFormData(formData);
-        } else {
-          // Native Platforms (iOS/Android): pass URI directly to let api.js handle FileSystem.uploadAsync
-          uploadRes = await uploadAPI.uploadImageFormData(selfieAsset.uri);
-        }
-
-        const selfieUrl = uploadRes.data?.url || '';
-
-        // 2. Start tracking session with uploaded selfie
-        const res = await startTracking(selfieUrl);
-        if (res.success) {
-          loadDashboardData();
-          router.replace("/(employee)/tracking");
-        } else {
-          Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
-        }
-      } catch (err) {
-        console.log('Selfie capture error:', err.message);
-        Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
-      } finally {
+  const capturePunchInSelfie = async () => {
+    try {
+      setIsUploadingSelfie(true);
+      const hasAllPermissions = await requestPermissions();
+      if (!hasAllPermissions) {
         setIsUploadingSelfie(false);
+        return;
       }
+
+      const photoResult = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+        cameraType: ImagePicker.CameraType?.front || 'front',
+      });
+
+      if (photoResult.canceled || !photoResult.assets?.length) {
+        Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
+        setIsUploadingSelfie(false);
+        return;
+      }
+
+      setPendingSelfieUri(photoResult.assets[0].uri);
+      setSelfieAspectMode('full');
+      setSelfieModalVisible(true);
+    } catch (err) {
+      console.log('Selfie capture error:', err.message);
+      Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
+    } finally {
+      setIsUploadingSelfie(false);
+    }
+  };
+
+  const confirmAndPunchIn = async () => {
+    if (!pendingSelfieUri) return;
+    try {
+      setSubmittingPunchIn(true);
+      let uploadRes;
+
+      if (Platform.OS === 'web') {
+        const formData = new FormData();
+        const filename = pendingSelfieUri.split('/').pop() || 'selfie.jpg';
+        const resp = await fetch(pendingSelfieUri);
+        const blob = await resp.blob();
+        formData.append('image', blob, filename);
+        uploadRes = await uploadAPI.uploadImageFormData(formData);
+      } else {
+        uploadRes = await uploadAPI.uploadImageFormData(pendingSelfieUri);
+      }
+
+      const selfieUrl = uploadRes.data?.url || '';
+      const res = await startTracking(selfieUrl);
+
+      if (res.success) {
+        setSelfieModalVisible(false);
+        setPendingSelfieUri(null);
+        loadDashboardData();
+        router.replace("/(employee)/tracking");
+      } else {
+        Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
+      }
+    } catch (err) {
+      console.log('Punch in error:', err.message);
+      Alert.alert("Error", "Could not submit selfie check-in. Please try again.");
+    } finally {
+      setSubmittingPunchIn(false);
     }
   };
 
@@ -683,6 +717,81 @@ export default function EmployeeDashboardScreen() {
                 ))
               )}
             </ScrollView>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* Selfie Custom Resize & Punch In Preview Modal */}
+      <Modal visible={selfieModalVisible} transparent animationType="slide" onRequestClose={() => setSelfieModalVisible(false)}>
+        <View style={styles.selfieModalOverlay}>
+          <Surface style={styles.selfieModalContent} elevation={5}>
+            <View style={styles.selfieModalHeader}>
+              <View>
+                <Text style={styles.selfieModalTitle}>Selfie Check-In Verification</Text>
+                <Text style={styles.selfieModalSub}>Select photo frame size (Full / Half)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelfieModalVisible(false)} style={styles.closeSelfieModalBtn}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Frame Size Selector Toggle */}
+            <View style={styles.aspectToggleRow}>
+              <TouchableOpacity
+                style={[styles.aspectOptionBtn, selfieAspectMode === 'full' && styles.aspectOptionBtnActive]}
+                onPress={() => setSelfieAspectMode('full')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.aspectOptionText, selfieAspectMode === 'full' && styles.aspectOptionTextActive]}>
+                  Full Photo (3:4)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.aspectOptionBtn, selfieAspectMode === 'half' && styles.aspectOptionBtnActive]}
+                onPress={() => setSelfieAspectMode('half')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.aspectOptionText, selfieAspectMode === 'half' && styles.aspectOptionTextActive]}>
+                  Half Photo (1:1)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Live Selfie Image Preview Box */}
+            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 240 : 180 }]}>
+              {pendingSelfieUri ? (
+                <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="contain" />
+              ) : null}
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.selfieModalActionRow}>
+              <TouchableOpacity
+                style={styles.retakeSelfieBtn}
+                onPress={() => {
+                  setSelfieModalVisible(false);
+                  capturePunchInSelfie();
+                }}
+                disabled={submittingPunchIn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retakeSelfieText}>Retake Photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmPunchInBtn}
+                onPress={confirmAndPunchIn}
+                disabled={submittingPunchIn}
+                activeOpacity={0.85}
+              >
+                {submittingPunchIn ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmPunchInText}>Confirm & Punch In</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </Surface>
         </View>
       </Modal>
@@ -1291,4 +1400,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.3,
   },
+
+  // Selfie Custom Resize Modal Styles
+  selfieModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
+  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  selfieModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  selfieModalTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  selfieModalSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  closeSelfieModalBtn: { padding: 4, borderRadius: 20, backgroundColor: '#f1f5f9' },
+  aspectToggleRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  aspectOptionBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center' },
+  aspectOptionBtnActive: { backgroundColor: '#059669', borderColor: '#059669' },
+  aspectOptionText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  aspectOptionTextActive: { color: '#ffffff' },
+  selfiePreviewFrame: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#cbd5e1', marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
+  selfiePreviewImg: { width: '100%', height: '100%', resizeMode: 'contain' },
+  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginBottom: Platform.OS === 'ios' ? 20 : 10 },
+  retakeSelfieBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc', alignItems: 'center' },
+  retakeSelfieText: { fontSize: 13, fontWeight: '800', color: '#475569' },
+  confirmPunchInBtn: { flex: 1.4, paddingVertical: 13, borderRadius: 14, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center' },
+  confirmPunchInText: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
 });

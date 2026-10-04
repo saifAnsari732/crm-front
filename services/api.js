@@ -14,7 +14,7 @@ export const setUnauthorizedCallback = (callback) => {
 export const PROD_URL = 'https://kisanteamapp.online/api';
 export const LOCAL_URL = 'http://192.168.0.107:5000/api';
 
-// Set to false to use AWS Production Server (fixes Expo Go Network Error)
+// Set to false for Production Server
 const USE_LOCAL = false;
 
 const getBaseUrl = () => {
@@ -24,14 +24,29 @@ const getBaseUrl = () => {
   return PROD_URL;
 };
 
+
 export const BASE_URL = getBaseUrl();
 export const DEV_URL = BASE_URL;
-export const getAvatarUrl = (avatar) => {
+export const getAvatarUrl = (avatarOrObj) => {
+  if (!avatarOrObj) return null;
+  let avatar = avatarOrObj;
+  if (typeof avatarOrObj === 'object') {
+    avatar = avatarOrObj.emp_profile_pic || 
+             avatarOrObj.managerPro_pic || 
+             avatarOrObj.avatar || 
+             avatarOrObj.selfieUrl ||
+             avatarOrObj.checkInImage ||
+             avatarOrObj.receiptUrl ||
+             avatarOrObj.daReceipt ||
+             avatarOrObj.Org_logo || 
+             avatarOrObj.companyLogo || 
+             avatarOrObj.logo || null;
+  }
   if (!avatar || typeof avatar !== 'string') return null;
   const clean = avatar.trim();
   if (clean === '' || clean === 'null' || clean === 'undefined') return null;
 
-  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image/')) {
     return clean;
   }
 
@@ -135,6 +150,7 @@ export const trackingAPI = {
   update:            (data)           => API.post('/tracking/update', data),
   stop:              (data)           => API.post('/tracking/stop', data),
   heartbeat:         (data)           => API.post('/tracking/heartbeat', data),   // keepalive
+  reconcile:         (sessionId)      => API.post('/tracking/reconcile', { sessionId }),
   getToday:          ()               => API.get('/tracking/today'),
   getTodaySessions:  ()               => API.get('/tracking/today'),              // alias
   getLive:           ()               => API.get('/tracking/live'),
@@ -358,6 +374,7 @@ export const trackingApi = {
     return trackingAPI.stop({ sessionId, endTime, endAddress, totalDistance });
   },
   heartbeat: (data) => trackingAPI.heartbeat(data),          // â† NEW: keepalive ping
+  reconcile: (sessionId) => trackingAPI.reconcile(sessionId),
   getTodaySessions: () => trackingAPI.getToday(),
   getLiveEmployees:  () => trackingAPI.getLive(),
   getSessionRoute:   (id) => trackingAPI.getSession(id),

@@ -11,11 +11,20 @@ import {
 import { Text, Surface } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { meetingAPI, uploadAPI } from '../../services/api';
+import { meetingAPI, uploadAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const statusOptions = ['all', 'scheduled', 'completed', 'follow-up', 'cancelled'];
+
+const formatFullName = (str) => {
+  if (!str) return 'Field Executive';
+  return String(str)
+    .trim()
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+};
 
 const formatDate = (value) => value
   ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -56,6 +65,8 @@ export default function AdminVisitsScreen() {
   const [selfieImage, setSelfieImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [fetchingLocation, setFetchingLocation] = useState(false);
+
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
 
   const fetchVisits = useCallback(async () => {
     try {
@@ -261,8 +272,20 @@ export default function AdminVisitsScreen() {
           </View>
         )}
         ListEmptyComponent={<View style={styles.empty}><BriefcaseBusiness size={38} color={C.sub} /><Text style={[styles.emptyTitle, { color: C.text }]}>No visits found</Text><Text style={[styles.emptyText, { color: C.sub }]}>Try changing the date, status, or search filter.</Text></View>}
-        renderItem={({ item }) => <VisitCard visit={item} colors={C} />}
+        renderItem={({ item }) => <VisitCard visit={item} colors={C} onPreviewPhoto={(url) => setPreviewPhotoUrl(url)} />}
       />
+
+      {/* Photo Preview Modal Overlay */}
+      <Modal visible={!!previewPhotoUrl} transparent animationType="fade" onRequestClose={() => setPreviewPhotoUrl(null)}>
+        <View style={styles.previewOverlay}>
+          <TouchableOpacity style={styles.previewCloseBtn} onPress={() => setPreviewPhotoUrl(null)} activeOpacity={0.8}>
+            <X size={26} color="#fff" />
+          </TouchableOpacity>
+          {previewPhotoUrl ? (
+            <Image source={{ uri: previewPhotoUrl }} style={styles.previewFullImage} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
 
       {/* Log Visit Modal Overlay */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
@@ -376,16 +399,23 @@ function Summary({ label, value, color }) {
   return <View style={styles.summaryCard}><Text style={[styles.summaryValue, { color }]}>{value}</Text><Text style={styles.summaryLabel}>{label}</Text></View>;
 }
 
-function VisitCard({ visit, colors }) {
+function VisitCard({ visit, colors, onPreviewPhoto }) {
   const config = statusConfig[visit.status] || statusConfig.scheduled;
   const StatusIcon = config.icon;
   const [expanded, setExpanded] = useState(false);
+  const selfieUri = getAvatarUrl(visit.selfieUrl);
 
   return (
     <Surface style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
       <TouchableOpacity onPress={() => setExpanded(!expanded)} activeOpacity={0.8}>
         <View style={styles.cardTop}>
-          <View style={styles.clientIcon}><BriefcaseBusiness size={18} color="#2563eb" /></View>
+          {selfieUri ? (
+            <TouchableOpacity onPress={() => onPreviewPhoto && onPreviewPhoto(selfieUri)} activeOpacity={0.85}>
+              <Image source={{ uri: selfieUri }} style={styles.cardSelfieThumb} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.clientIcon}><BriefcaseBusiness size={18} color="#2563eb" /></View>
+          )}
           <View style={styles.cardMain}>
             <Text style={[styles.clientName, { color: colors.text }]}>{visit.clientName || 'Unnamed client'}</Text>
             <Text style={[styles.company, { color: colors.sub }]}>{visit.companyName || 'Independent visit'}</Text>
@@ -400,7 +430,7 @@ function VisitCard({ visit, colors }) {
 
         <View style={styles.detailRow}>
           <Text style={[styles.detailLabel, { color: colors.sub }]}>Staff Member</Text>
-          <Text style={[styles.detailValue, { color: colors.text }]}>{visit.employee?.name || 'Unknown employee'}</Text>
+          <Text style={[styles.detailValue, { color: colors.text }]}>{formatFullName(visit.employee?.name || visit.employeeName || 'Field Executive')}</Text>
         </View>
 
         <View style={styles.detailRow}>
@@ -443,11 +473,11 @@ function VisitCard({ visit, colors }) {
                 <Text style={[styles.notesText, { color: colors.text }]}>{visit.meetingNotes}</Text>
               </View>
             )}
-            {visit.selfieUrl && (
-              <View style={styles.selfieBox}>
-                <Text style={[styles.notesLabel, { color: colors.sub, marginBottom: 6 }]}>Visit Selfie</Text>
-                <Image source={{ uri: visit.selfieUrl }} style={styles.visitSelfie} />
-              </View>
+            {selfieUri && (
+              <TouchableOpacity style={styles.selfieBox} onPress={() => onPreviewPhoto && onPreviewPhoto(selfieUri)} activeOpacity={0.85}>
+                <Text style={[styles.notesLabel, { color: colors.sub, marginBottom: 6 }]}>Visit Selfie (Tap to Preview)</Text>
+                <Image source={{ uri: selfieUri }} style={styles.visitSelfie} />
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -506,7 +536,12 @@ const styles = StyleSheet.create({
   notesLabel: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
   notesText: { fontFamily: FONT, fontSize: 11, lineHeight: 16 },
   selfieBox: { marginTop: 12 },
-  visitSelfie: { width: '100%', height: 180, borderRadius: 10, resizeMode: 'cover', backgroundColor: '#e2e8f0' },
+  cardSelfieThumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1' },
+
+  // Preview Image Modal Styles
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  previewCloseBtn: { position: 'absolute', top: 44, right: 20, zIndex: 10, padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
+  previewFullImage: { width: '92%', height: '80%' },
 
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },

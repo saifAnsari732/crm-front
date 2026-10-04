@@ -193,7 +193,7 @@ export default function ProfileScreen() {
           const imageUrl = uploadRes.data.url;
           
           // 2. Update user profile with new avatar URL
-          const updateRes = await authAPI.updateProfile({ avatar: imageUrl });
+          const updateRes = await authAPI.updateProfile({ emp_profile_pic: imageUrl, avatar: imageUrl });
           if (updateRes.data && updateRes.data.success) {
             // Update auth context / user info
             await updateUser(updateRes.data.user);

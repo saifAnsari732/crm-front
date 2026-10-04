@@ -18,13 +18,22 @@ import {
   Wallet, UserPlus, CheckSquare
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
-import { adminAPI, trackingAPI, uploadAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
+import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
 import useLocationTracker from '../../hooks/useLocationTracker';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+
+const formatFullName = (str) => {
+  if (!str) return 'Field Executive';
+  return String(str)
+    .trim()
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+};
 
 const formatAddress = (addr, fallback = '') => {
   if (!addr) return fallback;
@@ -61,14 +70,14 @@ const formatAddress = (addr, fallback = '') => {
   return String(parsed || '').trim() || fallback;
 };
 
-// ── UI/UX Pro Max Colors (No Black Colors!) ──
+// ── UI/UX Pro Max Colors (Professional Emerald & Forest Palette) ──
 const COLORS = {
-  primary: '#2563EB',
-  primaryDark: '#1D4ED8',
-  primaryLight: '#DBEAFE',
-  primaryMuted: '#EFF6FF',
-  secondary: '#3B82F6',
-  accent: '#EA580C',
+  primary: '#0f766e',
+  primaryDark: '#064e3b',
+  primaryLight: '#ccfbf1',
+  primaryMuted: '#f0fdfa',
+  secondary: '#059669',
+  accent: '#d97706',
   background: '#F8FAFC',
   card: '#FFFFFF',
   surface: '#F1F5F9',
@@ -85,10 +94,10 @@ const COLORS = {
   dangerLight: '#FEF2F2',
   purple: '#7C3AED',
   purpleLight: '#F5F3FF',
-  indigo: '#4F46E5',
-  indigoLight: '#EEF2FF',
-  headerStart: '#2563EB',
-  headerEnd: '#4F46E5',
+  indigo: '#0d9488',
+  indigoLight: '#f0fdfa',
+  headerStart: '#064e3b',
+  headerEnd: '#0f766e',
 };
 
 const cardShadow = Platform.OS === 'web'
@@ -105,11 +114,23 @@ export default function ManagerDashboardScreen() {
 
   const [teamMembers, setTeamMembers] = useState([]);
   const [liveLocations, setLiveLocations] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [orgData, setOrgData] = useState(null);
+  const [recentVisits, setRecentVisits] = useState([]);
+  const [selectedVisit, setSelectedVisit] = useState(null);
+  const [visitModalVisible, setVisitModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Selfie Custom Resize & Punch In Modal States
+  const [pendingSelfieUri, setPendingSelfieUri] = useState(null);
+  const [selfieAspectMode, setSelfieAspectMode] = useState('half'); // 'half' (1:1) or 'full' (3:4)
+  const [selfieModalVisible, setSelfieModalVisible] = useState(false);
+  const [submittingPunchIn, setSubmittingPunchIn] = useState(false);
 
   const handleClockToggle = async () => {
     if (isTracking) {
@@ -149,82 +170,102 @@ export default function ManagerDashboardScreen() {
         );
       }
     } else {
-      try {
-        setIsUploadingSelfie(true);
-
-        const hasAllPermissions = await requestPermissions();
-        if (!hasAllPermissions) {
-          setIsUploadingSelfie(false);
-          return;
-        }
-
-        if (Platform.OS !== 'web') {
-          const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-          if (cameraStatus !== 'granted') {
-            Alert.alert("Camera Permission Required", "Camera permission is required to log selfie check-in.");
-            setIsUploadingSelfie(false);
-            return;
-          }
-        }
-
-        const photoResult = await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.6,
-          cameraType: ImagePicker.CameraType?.front || 'front',
-        });
-
-        if (photoResult.canceled || !photoResult.assets?.length) {
-          if (Platform.OS === 'web') alert("Shift Not Started: Selfie check-in is mandatory to punch in.");
-          else Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
-          setIsUploadingSelfie(false);
-          return;
-        }
-
-        const selfieAsset = photoResult.assets[0];
-        let selfieUrl = '';
-
-        try {
-          if (Platform.OS === 'web') {
-            const formData = new FormData();
-            const filename = selfieAsset.uri.split('/').pop() || 'selfie.jpg';
-            const resp = await fetch(selfieAsset.uri);
-            const blob = await resp.blob();
-            formData.append('image', blob, filename);
-            const uploadRes = await uploadAPI.uploadImageFormData(formData);
-            selfieUrl = uploadRes.data?.url || '';
-          } else {
-            const uploadRes = await uploadAPI.uploadImageFormData(selfieAsset.uri);
-            selfieUrl = uploadRes.data?.url || '';
-          }
-        } catch (uploadErr) {
-          console.log('Selfie upload note:', uploadErr.message);
-        }
-
-        const res = await startTracking(selfieUrl);
-        if (res.success) {
-          fetchData(false);
-        } else {
-          if (Platform.OS === 'web') alert(res.error || "Failed to start shift.");
-          else Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
-        }
-      } catch (err) {
-        console.log('Manager selfie capture error:', err.message);
-        if (Platform.OS === 'web') alert("Could not complete selfie check-in. Please try again.");
-        else Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
-      } finally {
-        setIsUploadingSelfie(false);
-      }
+      capturePunchInSelfie();
     }
   };
+
+  const capturePunchInSelfie = async () => {
+    try {
+      setIsUploadingSelfie(true);
+      const hasAllPermissions = await requestPermissions();
+      if (!hasAllPermissions) {
+        setIsUploadingSelfie(false);
+        return;
+      }
+
+      if (Platform.OS !== 'web') {
+        const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+        if (cameraStatus !== 'granted') {
+          Alert.alert("Camera Permission Required", "Camera permission is required to log selfie check-in.");
+          setIsUploadingSelfie(false);
+          return;
+        }
+      }
+
+      const photoResult = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+        cameraType: ImagePicker.CameraType?.front || 'front',
+      });
+
+      if (photoResult.canceled || !photoResult.assets?.length) {
+        if (Platform.OS === 'web') alert("Shift Not Started: Selfie check-in is mandatory to punch in.");
+        else Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
+        setIsUploadingSelfie(false);
+        return;
+      }
+
+      setPendingSelfieUri(photoResult.assets[0].uri);
+      setSelfieAspectMode('full');
+      setSelfieModalVisible(true);
+    } catch (err) {
+      console.log('Manager selfie capture error:', err.message);
+      if (Platform.OS === 'web') alert("Could not complete selfie check-in. Please try again.");
+      else Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
+    } finally {
+      setIsUploadingSelfie(false);
+    }
+  };
+
+  const confirmAndPunchIn = async () => {
+    if (!pendingSelfieUri) return;
+    try {
+      setSubmittingPunchIn(true);
+      let selfieUrl = '';
+
+      if (Platform.OS === 'web') {
+        const formData = new FormData();
+        const filename = pendingSelfieUri.split('/').pop() || 'selfie.jpg';
+        const resp = await fetch(pendingSelfieUri);
+        const blob = await resp.blob();
+        formData.append('image', blob, filename);
+        const uploadRes = await uploadAPI.uploadImageFormData(formData);
+        selfieUrl = uploadRes.data?.url || '';
+      } else {
+        const uploadRes = await uploadAPI.uploadImageFormData(pendingSelfieUri);
+        selfieUrl = uploadRes.data?.url || '';
+      }
+
+      const res = await startTracking(selfieUrl);
+      if (res.success) {
+        setSelfieModalVisible(false);
+        setPendingSelfieUri(null);
+        fetchData(false);
+      } else {
+        if (Platform.OS === 'web') alert(res.error || "Failed to start shift.");
+        else Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
+      }
+    } catch (err) {
+      console.log('Manager punch in error:', err.message);
+      if (Platform.OS === 'web') alert("Could not submit selfie check-in. Please try again.");
+      else Alert.alert("Error", "Could not submit selfie check-in. Please try again.");
+    } finally {
+      setSubmittingPunchIn(false);
+    }
+  };
+
+  const [managerKm, setManagerKm] = useState('0.00');
 
   const fetchData = useCallback(async (isInitial = false) => {
     try {
       if (isInitial) setLoading(true);
-      const [empRes, locRes, orgRes] = await Promise.all([
+      const [empRes, locRes, orgRes, visitRes, attRes, myStatsRes] = await Promise.all([
         adminAPI.getEmployees({ limit: 200 }).catch(() => ({ data: { success: false } })),
         trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
         adminAPI.getOrganization().catch(() => ({ data: { success: false } })),
+        meetingAPI.getAll({ limit: 30 }).catch(() => ({ data: { success: false } })),
+        adminAPI.getAttendance({ date: todayStr }).catch(() => ({ data: { success: false } })),
+        dashboardAPI.getStats().catch(() => ({ data: { success: false } })),
       ]);
 
       if (empRes.data?.success) {
@@ -236,12 +277,21 @@ export default function ManagerDashboardScreen() {
       if (orgRes.data?.success && orgRes.data.organization) {
         setOrgData(orgRes.data.organization);
       }
+      if (visitRes.data?.success) {
+        setRecentVisits(visitRes.data.meetings || visitRes.data.data || []);
+      }
+      if (attRes.data?.success) {
+        setAttendanceRecords(attRes.data.records || attRes.data.attendance || []);
+      }
+      if (myStatsRes.data?.success && myStatsRes.data.stats) {
+        setManagerKm(parseFloat(myStatsRes.data.stats.distanceToday || 0).toFixed(2));
+      }
     } catch (e) {
       console.log('Manager dashboard fetch error:', e.message);
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, []);
+  }, [todayStr]);
 
   useEffect(() => {
     fetchData(true);
@@ -313,10 +363,31 @@ export default function ManagerDashboardScreen() {
     };
   });
 
-  // Metrics
+  // Metrics with Real Attendance Cross-Validation
   const totalTeam = directoryStaff.length;
   const activeLive = directoryStaff.filter(m => m.isTracking).length;
-  const presentCount = directoryStaff.filter(m => m.isOnline).length;
+
+  const todayRecords = attendanceRecords || [];
+  const realPresentEmpIds = new Set(
+    todayRecords
+      .filter(r => ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn)
+      .map(r => String(r.employee?._id || r.employee || ''))
+  );
+
+  const managerLiveLoc = liveLocations.find((l) =>
+    (l.employeeId && String(l.employeeId) === String(user?._id || user?.id)) ||
+    (l.employeeIdCode && user?.employeeId && String(l.employeeIdCode) === String(user?.employeeId)) ||
+    (l.name && user?.name && l.name.toLowerCase() === user?.name.toLowerCase())
+  );
+  const myTodayKm = Math.max(parseFloat(managerKm || 0), parseFloat(managerLiveLoc?.totalDistance || 0)).toFixed(2);
+
+  const presentCount = todayRecords.length > 0
+    ? realPresentEmpIds.size
+    : directoryStaff.filter(m => m.isOnline || m.isTracking).length;
+
+  const absentCount = Math.max(0, totalTeam - presentCount);
+  const lateCount = todayRecords.filter(r => (r.status || '').toLowerCase() === 'late').length;
+
   const totalKmToday = directoryStaff.reduce((sum, item) => sum + (parseFloat(item.totalDistance) || 0), 0);
   const totalVisitsToday = directoryStaff.reduce((sum, item) => sum + (parseInt(item.totalMeetings) || 0), 0);
 
@@ -371,7 +442,7 @@ export default function ManagerDashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
 
       {/* ── TOP HEADER SECTION WITH ORG LOGO & NAME (No Black Colors) ── */}
       <LinearGradient
@@ -453,6 +524,11 @@ export default function ManagerDashboardScreen() {
               <Text style={[styles.trackingMainTitle, { color: '#000000' }]}>
                 {isTracking ? 'Your Field Duty Shift Is Active' : 'Start Your Field Shift (Punch In)'}
               </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start', marginBottom: 12, gap: 6 }}>
+              <Route size={15} color={COLORS.primary} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.text }}>My Today's KM: {myTodayKm} KM</Text>
             </View>
 
             <TouchableOpacity
@@ -605,7 +681,18 @@ export default function ManagerDashboardScreen() {
             <Text style={styles.metricVal}>{activeLive} Staff</Text>
           </Surface>
 
-          {/* Today Distance KM */}
+          {/* Manager My Today KM */}
+          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
+            <View style={styles.metricCardTop}>
+              <View style={[styles.metricIconBox, { backgroundColor: COLORS.successLight }]}>
+                <Route size={18} color={COLORS.success} />
+              </View>
+            </View>
+            <Text style={styles.metricLabel}>My Today KM</Text>
+            <Text style={styles.metricVal}>{myTodayKm} <Text style={{ fontSize: 13, fontWeight: '700' }}>KM</Text></Text>
+          </Surface>
+
+          {/* Team Today Distance KM */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
             <View style={styles.metricCardTop}>
               <View style={[styles.metricIconBox, { backgroundColor: COLORS.purpleLight }]}>
@@ -618,13 +705,15 @@ export default function ManagerDashboardScreen() {
 
           {/* Field Visits Today */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <View style={styles.metricCardTop}>
-              <View style={[styles.metricIconBox, { backgroundColor: COLORS.indigoLight }]}>
-                <Briefcase size={18} color={COLORS.indigo} />
+            <TouchableOpacity onPress={() => goTo('/(admin)/visits')} activeOpacity={0.85}>
+              <View style={styles.metricCardTop}>
+                <View style={[styles.metricIconBox, { backgroundColor: COLORS.indigoLight }]}>
+                  <Briefcase size={18} color={COLORS.indigo} />
+                </View>
               </View>
-            </View>
-            <Text style={styles.metricLabel}>Visits Today</Text>
-            <Text style={styles.metricVal}>{totalVisitsToday} Visits</Text>
+              <Text style={styles.metricLabel}>Visits Today</Text>
+              <Text style={styles.metricVal}>{totalVisitsToday} Visits</Text>
+            </TouchableOpacity>
           </Surface>
         </View>
 
@@ -713,21 +802,22 @@ export default function ManagerDashboardScreen() {
             ) : (
               [...directoryStaff].sort((a, b) => (b.isTracking ? 1 : 0) - (a.isTracking ? 1 : 0)).map((emp, idx) => {
                 const kmVal = (parseFloat(emp.totalDistance) || 0).toFixed(1);
+                const fullName = formatFullName(emp.name);
                 return (
                   <TouchableOpacity
                     key={emp._id || idx}
                     style={[styles.memberItemRow, idx < directoryStaff.length - 1 && styles.memberBorder]}
                     onPress={() => setSelectedEmp(emp)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
                   >
                     <View style={{ position: 'relative' }}>
                       {getAvatarUrl(emp.avatar) ? (
-                        <Avatar.Image size={42} source={{ uri: getAvatarUrl(emp.avatar) }} />
+                        <Avatar.Image size={44} source={{ uri: getAvatarUrl(emp.avatar) }} />
                       ) : (
                         <Avatar.Text
-                          size={42}
+                          size={44}
                           label={getUserInitials(emp.name)}
-                          style={{ backgroundColor: COLORS.primary }}
+                          style={{ backgroundColor: emp.isTracking ? COLORS.primary : COLORS.textMuted }}
                           labelStyle={{ color: '#fff', fontWeight: 'bold' }}
                         />
                       )}
@@ -735,7 +825,7 @@ export default function ManagerDashboardScreen() {
                     </View>
 
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.memberName}>{emp.name}</Text>
+                      <Text style={styles.memberName}>{fullName}</Text>
                       <Text style={styles.memberDept} numberOfLines={1}>
                         {emp.isTracking ? formatAddress(emp.address, 'Active On Field') : formatAddress(emp.department, 'Field Executive')}
                       </Text>
@@ -744,7 +834,7 @@ export default function ManagerDashboardScreen() {
                       <View style={styles.memberMetricsRow}>
                         <View style={styles.metricBadgeSmall}>
                           <Route size={10} color={COLORS.primary} />
-                          <Text style={styles.metricBadgeText}>{kmVal} KM</Text>
+                          <Text style={styles.metricBadgeText}>{kmVal} KM Today</Text>
                         </View>
                         <View style={styles.metricBadgeSmall}>
                           <Briefcase size={10} color={COLORS.indigo} />
@@ -753,7 +843,7 @@ export default function ManagerDashboardScreen() {
                       </View>
                     </View>
 
-                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
                       <View style={[styles.statusPill, emp.isTracking ? styles.pillPresent : styles.pillOffline]}>
                         <Text style={[styles.statusPillText, emp.isTracking ? styles.textPresent : styles.textOffline]}>
                           {emp.isTracking ? 'Active' : 'Offline'}
@@ -818,34 +908,43 @@ export default function ManagerDashboardScreen() {
             <SafeAreaView style={{ flex: 1 }}>
               {/* Drawer Header with Org Logo & Name */}
               <View style={styles.drawerHeader}>
-                <View style={styles.drawerBrandRow}>
-                  {orgLogoUrl ? (
-                    <Image source={{ uri: orgLogoUrl }} style={styles.drawerLogoImg} resizeMode="contain" />
-                  ) : (
-                    <View style={styles.drawerLogoFallback}>
-                      <Building2 size={18} color="#fff" />
+                <LinearGradient
+                  colors={['#064e3b', '#0f766e']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.drawerHeaderGradient}
+                >
+                  <View style={styles.drawerBrandRow}>
+                    {orgLogoUrl ? (
+                      <Image source={{ uri: orgLogoUrl }} style={styles.drawerLogoImg} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.drawerLogoFallback}>
+                        <Building2 size={18} color="#0f766e" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.drawerBrandTitle} numberOfLines={1}>{orgName}</Text>
+                      <View style={styles.drawerSubBadge}>
+                        <Text style={styles.drawerBrandSub}>MANAGER CONSOLE</Text>
+                      </View>
                     </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.drawerBrandTitle} numberOfLines={1}>{orgName}</Text>
-                    <Text style={styles.drawerBrandSub}>MANAGER CONSOLE</Text>
                   </View>
-                </View>
 
-                {/* Manager Profile Info */}
-                <View style={styles.drawerUserBox}>
-                  {getAvatarUrl(user?.avatar) ? (
-                    <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.drawerUserAvatar} />
-                  ) : (
-                    <View style={styles.drawerUserAvatarFallback}>
-                      <Text style={styles.drawerUserAvatarText}>{getUserInitials(user?.name)}</Text>
+                  {/* Manager Profile Info */}
+                  <View style={styles.drawerUserBox}>
+                    {getAvatarUrl(user?.avatar) ? (
+                      <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.drawerUserAvatar} />
+                    ) : (
+                      <View style={styles.drawerUserAvatarFallback}>
+                        <Text style={styles.drawerUserAvatarText}>{getUserInitials(user?.name)}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Manager'}</Text>
+                      <Text style={styles.drawerUserEmail} numberOfLines={1}>{user?.email || ''}</Text>
                     </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Manager'}</Text>
-                    <Text style={styles.drawerUserEmail} numberOfLines={1}>{user?.email || ''}</Text>
                   </View>
-                </View>
+                </LinearGradient>
               </View>
 
               {/* Drawer Menu Items */}
@@ -1044,6 +1143,173 @@ export default function ManagerDashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── CLIENT VISIT DETAIL INSPECTION MODAL ──────────────────────── */}
+      <Modal
+        visible={visitModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVisitModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setVisitModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { maxHeight: '75%' }]}>
+            <View style={styles.sheetHandle} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Briefcase size={20} color={COLORS.primary} />
+                <Text style={{ fontSize: 17, fontWeight: '800', color: COLORS.text }}>Visit Record Details</Text>
+              </View>
+              <TouchableOpacity onPress={() => setVisitModalVisible(false)} style={styles.closeBtn}>
+                <X size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedVisit && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <View style={{ backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textSecondary }}>
+                      Agent: {formatFullName(selectedVisit.employee?.name || selectedVisit.employeeName || 'Field Executive')}
+                    </Text>
+                  </View>
+                  <View style={[styles.visitStatusPill, { backgroundColor: COLORS.successLight }]}>
+                    <Text style={[styles.visitStatusText, { color: COLORS.success }]}>
+                      {(selectedVisit.status || 'COMPLETED').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <Surface style={{ backgroundColor: COLORS.background, borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: COLORS.border }} elevation={0}>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: COLORS.text }}>{selectedVisit.clientName}</Text>
+                  {selectedVisit.companyName ? (
+                    <Text style={{ fontSize: 13, color: COLORS.textMuted, fontWeight: '600', marginTop: 2 }}>{selectedVisit.companyName}</Text>
+                  ) : null}
+
+                  {selectedVisit.mobileNumber ? (
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}
+                      onPress={() => Linking.openURL(`tel:${selectedVisit.mobileNumber}`)}
+                    >
+                      <Phone size={14} color={COLORS.primary} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.primary }}>{selectedVisit.mobileNumber}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {selectedVisit.meetingAddress ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <MapPin size={14} color={COLORS.textMuted} />
+                      <Text style={{ fontSize: 12, color: COLORS.textSecondary, flex: 1 }}>{selectedVisit.meetingAddress}</Text>
+                    </View>
+                  ) : null}
+                </Surface>
+
+                {selectedVisit.meetingNotes ? (
+                  <View style={{ backgroundColor: COLORS.warningLight, borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#fde68a' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.warning, marginBottom: 4 }}>Visit Notes / Remarks:</Text>
+                    <Text style={{ fontSize: 12, color: '#78350f', lineHeight: 18 }}>{selectedVisit.meetingNotes}</Text>
+                  </View>
+                ) : null}
+
+                {Number(selectedVisit.dealAmount) > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.successLight, borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: COLORS.successBorder }}>
+                    <DollarSign size={18} color={COLORS.success} />
+                    <View>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: COLORS.success }}>Closed Deal Value</Text>
+                      <Text style={{ fontSize: 16, fontWeight: '900', color: COLORS.success }}>₹{Number(selectedVisit.dealAmount).toLocaleString('en-IN')}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Clock size={14} color={COLORS.textMuted} />
+                  <Text style={{ fontSize: 11, color: COLORS.textMuted }}>
+                    Logged on {selectedVisit.date || selectedVisit.createdAt ? new Date(selectedVisit.date || selectedVisit.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Today'}
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── SELFIE CUSTOM RESIZE & PUNCH IN PREVIEW MODAL ── */}
+      <Modal visible={selfieModalVisible} transparent animationType="slide" onRequestClose={() => setSelfieModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <Surface style={styles.selfieModalContent} elevation={5}>
+            <View style={styles.selfieModalHeader}>
+              <View>
+                <Text style={styles.selfieModalTitle}>Manager Selfie Verification</Text>
+                <Text style={styles.selfieModalSub}>Select photo frame size (Full / Half)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelfieModalVisible(false)} style={styles.closeBtn}>
+                <X size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Frame Size Selector Toggle */}
+            <View style={styles.aspectToggleRow}>
+              <TouchableOpacity
+                style={[styles.aspectOptionBtn, selfieAspectMode === 'full' && styles.aspectOptionBtnActive]}
+                onPress={() => setSelfieAspectMode('full')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.aspectOptionText, selfieAspectMode === 'full' && styles.aspectOptionTextActive]}>
+                  Full Photo (3:4)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.aspectOptionBtn, selfieAspectMode === 'half' && styles.aspectOptionBtnActive]}
+                onPress={() => setSelfieAspectMode('half')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.aspectOptionText, selfieAspectMode === 'half' && styles.aspectOptionTextActive]}>
+                  Half Photo (1:1)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Live Selfie Image Preview Box */}
+            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 240 : 180 }]}>
+              {pendingSelfieUri ? (
+                <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="contain" />
+              ) : null}
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.selfieModalActionRow}>
+              <TouchableOpacity
+                style={styles.retakeSelfieBtn}
+                onPress={() => {
+                  setSelfieModalVisible(false);
+                  capturePunchInSelfie();
+                }}
+                disabled={submittingPunchIn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retakeSelfieText}>Retake Photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmPunchInBtn}
+                onPress={confirmAndPunchIn}
+                disabled={submittingPunchIn}
+                activeOpacity={0.85}
+              >
+                {submittingPunchIn ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmPunchInText}>Confirm & Punch In</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1053,15 +1319,21 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontFamily: FONT, fontSize: 13, color: COLORS.primary, marginTop: 10, fontWeight: '700' },
 
-  // Header Gradient (Clean Blue - No Black!)
+  // Header Gradient (Professional Emerald)
   headerGradient: {
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     paddingHorizontal: 16,
-    paddingBottom: 34,
-    paddingTop: Platform.OS === 'android' ? 14 : 10,
+    paddingBottom: 28,
+    paddingTop: Platform.OS === 'web' ? 14 : 0,
   },
-  topNavRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 10 },
+  topNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    marginTop: Platform.OS === 'ios' ? 4 : 8,
+  },
   headerBtn: {
     width: 36,
     height: 36,
@@ -1293,26 +1565,28 @@ const styles = StyleSheet.create({
   tabBarLabelActive: { color: COLORS.primary, fontWeight: '800' },
   activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.primary, marginTop: 2 },
 
-  // Side Drawer Modal
-  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', flexDirection: 'row' },
+  // Side Drawer Modal (UI/UX Pro Max Clean Light Theme)
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', flexDirection: 'row' },
   drawerDismissArea: { flex: 1 },
   drawerContainer: { width: width * 0.82, backgroundColor: '#ffffff', height: '100%', borderTopRightRadius: 28, borderBottomRightRadius: 28 },
-  drawerHeader: { padding: 20, backgroundColor: COLORS.primaryMuted, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  drawerHeader: { overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  drawerHeaderGradient: { padding: 20, paddingTop: Platform.OS === 'ios' ? 12 : 20 },
   drawerBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  drawerLogoImg: { width: 36, height: 36, borderRadius: 10 },
-  drawerLogoFallback: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  drawerBrandTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, fontFamily: FONT },
-  drawerBrandSub: { fontSize: 10, fontWeight: '700', color: COLORS.primary, letterSpacing: 0.5 },
-  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#ffffff', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border },
+  drawerLogoImg: { width: 40, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' },
+  drawerLogoFallback: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  drawerBrandTitle: { fontSize: 18, fontWeight: '800', color: '#ffffff', fontFamily: FONT },
+  drawerSubBadge: { backgroundColor: '#ccfbf1', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 2 },
+  drawerBrandSub: { fontSize: 9, fontWeight: '800', color: '#0f766e', letterSpacing: 0.5 },
+  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#ffffff', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, elevation: 2 },
   drawerUserAvatar: { width: 40, height: 40, borderRadius: 20 },
-  drawerUserAvatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  drawerUserAvatarText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  drawerUserAvatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primaryMuted, alignItems: 'center', justifyContent: 'center' },
+  drawerUserAvatarText: { color: COLORS.primary, fontSize: 14, fontWeight: '800' },
   drawerUserName: { fontSize: 14, fontWeight: '800', color: COLORS.text },
   drawerUserEmail: { fontSize: 11, color: COLORS.textMuted },
   drawerMenuSectionHeader: { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.8, marginBottom: 12, textTransform: 'uppercase' },
-  drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12, marginBottom: 6 },
-  drawerMenuItemActive: { backgroundColor: COLORS.primaryMuted },
-  drawerMenuText: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, fontFamily: FONT },
+  drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, marginBottom: 6, backgroundColor: '#ffffff' },
+  drawerMenuItemActive: { backgroundColor: COLORS.primaryMuted, borderLeftWidth: 4, borderLeftColor: COLORS.primary },
+  drawerMenuText: { fontSize: 13, fontWeight: '700', color: COLORS.text, fontFamily: FONT },
   drawerMenuTextActive: { color: COLORS.primary, fontWeight: '800' },
 
   // Employee Detail Modal
@@ -1349,4 +1623,47 @@ const styles = StyleSheet.create({
   modalActionRow: { flexDirection: 'row', gap: 10, marginTop: 10, marginBottom: 10 },
   modalActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 6 },
   modalActionBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+
+  /* CLIENT VISIT RECORDS STYLES */
+  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  countBadgeText: { fontSize: 11, fontWeight: '800' },
+  visitKpiRow: { flexDirection: 'row', gap: 8, marginVertical: 12 },
+  visitKpiCard: { flex: 1, borderRadius: 14, padding: 10, borderWidth: 1, alignItems: 'center' },
+  visitKpiNum: { fontSize: 16, fontWeight: '900' },
+  visitKpiLabel: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  visitCardItem: { backgroundColor: COLORS.background, borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border },
+  visitMainCol: { gap: 6 },
+  visitTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  visitUserPill: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  miniAvatarFallback: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
+  miniAvatarText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
+  visitEmpName: { fontSize: 12, fontWeight: '800', color: COLORS.text },
+  visitStatusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  visitStatusText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  clientNameText: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginTop: 2 },
+  visitLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  visitLocText: { fontSize: 11, color: COLORS.textSecondary, flex: 1 },
+  visitFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: COLORS.border },
+  visitTimePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.card, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
+  visitTimeText: { fontSize: 10, color: COLORS.textSecondary, fontWeight: '700' },
+  dealPill: { backgroundColor: COLORS.successLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: COLORS.successBorder },
+  dealPillText: { fontSize: 10, fontWeight: '800', color: COLORS.success },
+
+  // Selfie Custom Resize Modal Styles
+  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  selfieModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  selfieModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  selfieModalSub: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  aspectToggleRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  aspectOptionBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  aspectOptionBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  aspectOptionText: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary },
+  aspectOptionTextActive: { color: '#ffffff' },
+  selfiePreviewFrame: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
+  selfiePreviewImg: { width: '100%', height: '100%', resizeMode: 'contain' },
+  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginBottom: Platform.OS === 'ios' ? 20 : 10 },
+  retakeSelfieBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center' },
+  retakeSelfieText: { fontSize: 13, fontWeight: '800', color: COLORS.textSecondary },
+  confirmPunchInBtn: { flex: 1.4, paddingVertical: 13, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  confirmPunchInText: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
 });

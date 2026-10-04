@@ -55,6 +55,41 @@ import { cleanTrackingRoute } from '../../utils/trackingRoute';
 const { width, height } = Dimensions.get('window');
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
+const formatAddress = (addr, fallback = '') => {
+  if (!addr) return fallback;
+
+  let parsed = addr;
+  if (typeof addr === 'string') {
+    const trimmed = addr.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (e) {
+        return trimmed || fallback;
+      }
+    } else {
+      return trimmed || fallback;
+    }
+  }
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    if (parsed.street || parsed.city || parsed.state || parsed.pincode) {
+      const parts = [parsed.street, parsed.city, parsed.state, parsed.pincode]
+        .filter(Boolean)
+        .map(s => String(s).trim())
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join(', ');
+    }
+    if (parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address) {
+      const val = parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address;
+      if (typeof val === 'string' && val.trim()) return val.trim();
+    }
+    return fallback;
+  }
+
+  return String(parsed || '').trim() || fallback;
+};
+
 export default function AdminMonitoringScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -397,14 +432,14 @@ export default function AdminMonitoringScreen() {
       _id: emp._id || emp.employeeId,
       name: emp.name || 'Field Agent',
       avatar: emp.avatar || liveLoc?.avatar,
-      department: emp.department || liveLoc?.department || 'Field Services',
+      department: formatAddress(emp.department || liveLoc?.department, 'Field Services'),
       phone: emp.phone,
       isTracking: !!liveLoc || emp.isTracking,
       isOnline: emp.isOnline,
       lat: liveLoc?.lat || emp.lat || null,
       lng: liveLoc?.lng || emp.lng || null,
       totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
-      address: liveLoc?.address || emp.address || (liveLoc ? 'Tracking Active' : 'Not Punched In'),
+      address: formatAddress(liveLoc?.address || emp.address, liveLoc ? 'Tracking Active' : 'Not Punched In'),
       sessionId: liveLoc?.sessionId || emp.sessionId || null,
       startTime: liveLoc?.startTime || emp.startTime || null,
       updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
@@ -417,7 +452,7 @@ export default function AdminMonitoringScreen() {
 
   const filteredDirectory = directoryStaff.filter((emp) => {
     const matchesSearch = (emp.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (emp.address || '').toLowerCase().includes(search.toLowerCase());
+      formatAddress(emp.address).toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
 
     if (mapFilter === 'ACTIVE') return emp.isTracking;

@@ -149,6 +149,8 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [email] = useState(user?.email || '');
+  const [managerAvatar, setManagerAvatar] = useState(user?.managerPro_pic || user?.avatar || '');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -163,6 +165,53 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
   const [punchAlerts, setPunchAlerts] = useState(true);
 
   const orgName = authOrg?.name || user?.organizationId?.name || user?.organization?.name || 'KISAN CHOICE';
+
+  const handlePickManagerAvatar = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Permission to access gallery is required to upload profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        setUploadingAvatar(true);
+        const imageUri = result.assets[0].uri;
+
+        let uploadRes;
+        if (Platform.OS === 'web') {
+          const response = await fetch(imageUri);
+          const blob = await response.blob();
+          const formData = new FormData();
+          formData.append('image', blob, 'manager_profile.jpg');
+          uploadRes = await uploadAPI.uploadImageFormData(formData);
+        } else {
+          uploadRes = await uploadAPI.uploadImageFormData(imageUri);
+        }
+
+        if (uploadRes.data && uploadRes.data.success) {
+          const imageUrl = uploadRes.data.url;
+          setManagerAvatar(imageUrl);
+          const updateRes = await authAPI.updateProfile({ managerPro_pic: imageUrl, avatar: imageUrl });
+          if (updateRes.data && updateRes.data.success) {
+            setSaveSuccess('Manager profile picture updated successfully!');
+            setTimeout(() => setSaveSuccess(''), 3000);
+          }
+        }
+      }
+    } catch (err) {
+      Alert.alert('Upload Error', err.message || 'Failed to update profile picture');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleGoBack = () => {
     if (router.canGoBack()) router.back();
@@ -269,15 +318,26 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
 
           {/* Manager Profile Header Card */}
           <View style={styles.managerProfileCard}>
-            <View style={styles.managerAvatarBox}>
-              {getAvatarUrl(user?.avatar) ? (
-                <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.managerAvatarImg} />
+            <TouchableOpacity 
+              style={styles.managerAvatarBox} 
+              onPress={handlePickManagerAvatar}
+              activeOpacity={0.8}
+            >
+              {uploadingAvatar ? (
+                <View style={[styles.managerAvatarFallback, { backgroundColor: '#e0f2fe' }]}>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                </View>
+              ) : getAvatarUrl(managerAvatar || user?.managerPro_pic || user?.avatar) ? (
+                <Image source={{ uri: getAvatarUrl(managerAvatar || user?.managerPro_pic || user?.avatar) }} style={styles.managerAvatarImg} />
               ) : (
                 <View style={styles.managerAvatarFallback}>
                   <Text style={styles.managerAvatarText}>{getUserInitials(user?.name)}</Text>
                 </View>
               )}
-            </View>
+              <View style={[styles.cameraBadge, { position: 'absolute', bottom: -2, right: -2, backgroundColor: COLORS.primary, borderRadius: 12, padding: 4, borderWidth: 1.5, borderColor: '#fff' }]}>
+                <Camera size={12} color="#fff" />
+              </View>
+            </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.managerProfileName}>{user?.name || 'Manager'}</Text>
               <Text style={styles.managerProfileEmail}>{user?.email || ''}</Text>
@@ -559,7 +619,8 @@ export default function AdminSettingsScreen() {
       if (res.data?.success && res.data.organization) {
         const org = res.data.organization;
         if (org.name) setOrgName(org.name);
-        if (org.logo) setOrgLogo(org.logo);
+        const resolvedLogo = org.Org_logo || org.companyLogo || org.logo || '';
+        if (resolvedLogo) setOrgLogo(resolvedLogo);
         if (org.email) setOrgEmail(org.email);
         if (org.phone) setOrgPhone(org.phone);
         if (org.slug) setOrgSlug(org.slug);
@@ -642,7 +703,7 @@ export default function AdminSettingsScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'images',
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -684,6 +745,8 @@ export default function AdminSettingsScreen() {
       const res = await adminAPI.updateOrganization({
         name: orgName,
         logo: orgLogo,
+        Org_logo: orgLogo,
+        companyLogo: orgLogo,
         email: orgEmail,
         phone: orgPhone,
         slug: orgSlug,
@@ -752,7 +815,7 @@ export default function AdminSettingsScreen() {
         {loading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading Organization Policies...</Text>
+            <Text style={styles.loadingText}>Loading Organization Settings...</Text>
           </View>
         ) : (
           <>
@@ -763,36 +826,14 @@ export default function AdminSettingsScreen() {
               </View>
             )}
 
-            {/* Overview Metric Row */}
-            <View style={styles.overviewGrid}>
-              <View style={styles.overviewMetric}>
-                <Text style={styles.overviewVal}>{authOrg?.plan?.maxEmployees || 50}</Text>
-                <Text style={styles.overviewLbl}>Max Staff</Text>
+            {/* 1. ORGANIZATION BRANDING & LOGO */}
+            <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
+              <View style={styles.cleanSectionHeader}>
+                <Building2 size={20} color={COLORS.primary} />
+                <Text style={styles.cleanSectionTitle}>Organization Identity & Branding</Text>
               </View>
-              <View style={styles.overviewMetric}>
-                <Text style={styles.overviewVal}>{highAccuracy ? '15s' : '60s'}</Text>
-                <Text style={styles.overviewLbl}>GPS Ping</Text>
-              </View>
-              <View style={styles.overviewMetric}>
-                <Text style={styles.overviewVal}>150m</Text>
-                <Text style={styles.overviewLbl}>Geofence</Text>
-              </View>
-              <View style={styles.overviewMetric}>
-                <Text style={[styles.overviewVal, { color: COLORS.success }]}>Active</Text>
-                <Text style={styles.overviewLbl}>Status</Text>
-              </View>
-            </View>
 
-            {/* 1. ORGANIZATION BRANDING */}
-            <CollapsibleSection
-              icon={Building2}
-              iconColor={COLORS.primary}
-              title="Organization Branding & Logo"
-              subtitle="Company identity, logo & contact details"
-              badge="VERIFIED"
-            >
               <View style={styles.logoSection}>
-                <Text style={styles.inputLabel}>Organization Logo</Text>
                 <View style={styles.logoPreviewRow}>
                   <View style={styles.logoBox}>
                     {orgLogo ? (
@@ -812,16 +853,15 @@ export default function AdminSettingsScreen() {
                     ) : (
                       <>
                         <Camera size={16} color="#fff" />
-                        <Text style={styles.uploadLogoText}>Upload New Logo</Text>
+                        <Text style={styles.uploadLogoText}>Upload Logo</Text>
                       </>
                     )}
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.logoHelpText}>PNG or JPG, square aspect ratio (250x250 recommended)</Text>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Organization Name</Text>
+                <Text style={styles.inputLabel}>ORGANIZATION NAME</Text>
                 <View style={styles.inputWrap}>
                   <Building2 size={16} color={COLORS.textMuted} style={styles.inputIcon} />
                   <TextInput
@@ -835,7 +875,7 @@ export default function AdminSettingsScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Support Email</Text>
+                <Text style={styles.inputLabel}>SUPPORT EMAIL</Text>
                 <View style={styles.inputWrap}>
                   <Mail size={16} color={COLORS.textMuted} style={styles.inputIcon} />
                   <TextInput
@@ -850,7 +890,7 @@ export default function AdminSettingsScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Contact Phone</Text>
+                <Text style={styles.inputLabel}>CONTACT PHONE</Text>
                 <View style={styles.inputWrap}>
                   <Phone size={16} color={COLORS.textMuted} style={styles.inputIcon} />
                   <TextInput
@@ -863,192 +903,37 @@ export default function AdminSettingsScreen() {
                   />
                 </View>
               </View>
+            </Surface>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Tenant Slug</Text>
-                <View style={styles.inputWrap}>
-                  <Globe size={16} color={COLORS.textMuted} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.textInput}
-                    value={orgSlug}
-                    onChangeText={setOrgSlug}
-                    placeholder="kisan-choice"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                  />
-                </View>
+            {/* 2. FIELD TRACKING & ATTENDANCE POLICIES */}
+            <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
+              <View style={styles.cleanSectionHeader}>
+                <Navigation size={20} color={COLORS.secondary} />
+                <Text style={styles.cleanSectionTitle}>Tracking & Attendance Rules</Text>
               </View>
-            </CollapsibleSection>
 
-            {/* 2. TRACKING & GEOFENCING */}
-            <CollapsibleSection
-              icon={Navigation}
-              iconColor={COLORS.secondary}
-              title="Tracking Engine & Geofencing"
-              subtitle="GPS intervals, accuracy & breach alerts"
-            >
               <ToggleRow
                 icon={Compass}
                 iconColor={COLORS.primary}
-                label="High-Precision GPS Interval"
-                subtitle="Capture location every 15 seconds on field"
+                label="High-Precision GPS Interval (15s)"
                 value={highAccuracy}
                 onValueChange={setHighAccuracy}
               />
               <ToggleRow
-                icon={Bell}
-                iconColor={COLORS.amber}
-                label="Automated Geofence Breach Alerts"
-                subtitle="Notify manager when employee leaves site radius"
-                value={geofenceAlerts}
-                onValueChange={setGeofenceAlerts}
-              />
-              <ToggleRow
                 icon={MapPin}
                 iconColor={COLORS.success}
-                label="Strict Geofence Check-in"
-                subtitle="Block attendance if user is outside designated perimeter"
+                label="Strict Geofence Attendance Check-in"
                 value={strictGeofence}
                 onValueChange={setStrictGeofence}
               />
-
-              <View style={styles.geoPillRow}>
-                <View style={styles.geoPill}>
-                  <Text style={styles.geoPillVal}>10m</Text>
-                  <Text style={styles.geoPillLbl}>Min Distance</Text>
-                </View>
-                <View style={styles.geoPill}>
-                  <Text style={styles.geoPillVal}>500m</Text>
-                  <Text style={styles.geoPillLbl}>Max Accuracy</Text>
-                </View>
-                <View style={styles.geoPill}>
-                  <Text style={styles.geoPillVal}>150m</Text>
-                  <Text style={styles.geoPillLbl}>Geofence Radius</Text>
-                </View>
-              </View>
-            </CollapsibleSection>
-
-            {/* 3. SHIFT & ATTENDANCE POLICIES */}
-            <CollapsibleSection
-              icon={Clock}
-              iconColor={COLORS.purple}
-              title="Shift & Attendance Policies"
-              subtitle="Shift timings, grace period & selfie rules"
-              defaultOpen={false}
-            >
               <ToggleRow
                 icon={Camera}
                 iconColor={COLORS.rose}
-                label="Mandatory Selfie Punch-in"
-                subtitle="Require live photo verification during check-in"
+                label="Mandatory Live Selfie Check-in"
                 value={requireSelfie}
                 onValueChange={setRequireSelfie}
               />
-            </CollapsibleSection>
-
-            {/* 4. SECURITY & AUTHENTICATION */}
-            <CollapsibleSection
-              icon={Shield}
-              iconColor={COLORS.rose}
-              title="Security & Authentication"
-              subtitle="OTP verification, email digests & access control"
-            >
-              <ToggleRow
-                icon={Lock}
-                iconColor={COLORS.rose}
-                label="Require OTP / Email Verification"
-                subtitle="Enforce verification on password resets"
-                value={requireOTP}
-                onValueChange={setRequireOTP}
-              />
-              <ToggleRow
-                icon={Mail}
-                iconColor={COLORS.purple}
-                label="Email Activity Digest"
-                subtitle="Daily summary of team check-ins & reports"
-                value={emailNotify}
-                onValueChange={setEmailNotify}
-              />
-            </CollapsibleSection>
-
-            {/* 5. EXPENSE RULES & TA/DA */}
-            <CollapsibleSection
-              icon={Fuel}
-              iconColor={COLORS.amber}
-              title="Expense Rules & TA/DA"
-              subtitle="Fuel rates, auto-approve limits & receipt policy"
-              defaultOpen={false}
-            >
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Fuel Travel Rate (per KM)</Text>
-                <View style={styles.inputWrap}>
-                  <Text style={{ fontWeight: 'bold', color: COLORS.textMuted, marginRight: 4 }}>₹</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value="2.50"
-                    editable={false}
-                  />
-                  <Text style={{ fontSize: 11, color: COLORS.textMuted }}>/ km</Text>
-                </View>
-              </View>
-            </CollapsibleSection>
-
-            {/* 6. VISITS & CLIENT RULES */}
-            <CollapsibleSection
-              icon={Briefcase}
-              iconColor={COLORS.indigo}
-              title="Visits & Client Rules"
-              subtitle="Meeting duration, signatures & geo-selfies"
-              defaultOpen={false}
-            >
-              <ToggleRow
-                icon={CheckCircle2}
-                iconColor={COLORS.indigo}
-                label="Require Client Signature"
-                subtitle="Collect digital signature upon visit completion"
-                value={requireSignature}
-                onValueChange={setRequireSignature}
-              />
-              <ToggleRow
-                icon={Camera}
-                iconColor={COLORS.primary}
-                label="Require Visit Photo"
-                subtitle="Capture client site photo before marking complete"
-                value={requireMeetingSelfie}
-                onValueChange={setRequireMeetingSelfie}
-              />
-            </CollapsibleSection>
-
-            {/* 7. FEATURE MATRIX */}
-            <CollapsibleSection
-              icon={Zap}
-              iconColor={COLORS.accent}
-              title="Organization Feature Matrix"
-              subtitle="Active modules & service capabilities"
-              defaultOpen={false}
-            >
-              <FeatureCard
-                icon={MapPin}
-                iconColor={COLORS.primary}
-                bgColor={COLORS.primaryMuted}
-                title="Realtime GPS Telemetry"
-                description="Live background location tracking with battery optimization"
-              />
-              <FeatureCard
-                icon={Receipt}
-                iconColor={COLORS.purple}
-                bgColor={COLORS.purpleLight}
-                title="Automated TA/DA Expense Calculator"
-                description="Instant distance-to-allowance payout calculations"
-              />
-              <FeatureCard
-                icon={Users}
-                iconColor={COLORS.success}
-                bgColor={COLORS.successLight}
-                title="Multi-Level Hierarchy & Teams"
-                description="Manager and Super-Admin role scoping for staff governance"
-              />
-            </CollapsibleSection>
+            </Surface>
 
             {/* SAVE BUTTON */}
             <TouchableOpacity
@@ -1067,7 +952,7 @@ export default function AdminSettingsScreen() {
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <>
-                    <Save size={18} color="#fff" />
+                    <Save size={18} color="#fff" style={{ marginRight: 8 }} />
                     <Text style={styles.saveBtnText}>Save Organization Settings</Text>
                   </>
                 )}
@@ -1081,7 +966,7 @@ export default function AdminSettingsScreen() {
               activeOpacity={0.8}
             >
               <LogOut size={16} color={COLORS.danger} />
-              <Text style={styles.logoutFullBtnText}>Logout from KisanConnect Account</Text>
+              <Text style={styles.logoutFullBtnText}>Logout from Account</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1260,6 +1145,22 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textTransform: 'uppercase',
     marginTop: 2,
+    fontFamily: FONT,
+  },
+
+  cleanSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  cleanSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
     fontFamily: FONT,
   },
 

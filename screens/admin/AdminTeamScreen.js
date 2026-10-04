@@ -9,27 +9,44 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Users, Search, UserCheck, Ban, Pencil, X, Check, ShieldCheck,
   ArrowLeft, Filter, Phone, Mail, CheckCircle2, ChevronRight,
-  LayoutDashboard, MapPin, FileText, Settings, UserPlus, UserX, Building2
+  LayoutDashboard, MapPin, FileText, Settings, UserPlus, UserX, Building2,
+  Briefcase, Sparkles
 } from 'lucide-react-native';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 
 const { width, height } = Dimensions.get('window');
-
-const NAVY_DARK = '#0f172a';
-const CARD_BG = '#1e293b';
-const BG_COLOR = '#0f172a';
+const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
 const cardShadow = Platform.OS === 'web'
-  ? { boxShadow: '0px 6px 20px rgba(15, 26, 46, 0.12)' }
-  : { elevation: 3, shadowColor: '#0f172a', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } };
+  ? { boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.08)' }
+  : { elevation: 2, shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } };
 
 const getEmployeeId = (e) => e?._id || e?.employeeId || e?.id || '';
 
 export default function AdminTeamScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { theme } = useSettings();
+  const isDark = theme === 'dark';
+
+  const C = {
+    bg: isDark ? '#0f172a' : '#f8fafc',
+    surface: isDark ? '#1e293b' : '#ffffff',
+    surfaceSecondary: isDark ? '#172033' : '#f1f5f9',
+    text: isDark ? '#f8fafc' : '#0f172a',
+    textSub: isDark ? '#94a3b8' : '#64748b',
+    textMuted: isDark ? '#64748b' : '#94a3b8',
+    border: isDark ? '#334155' : '#e2e8f0',
+    borderLight: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+    primary: '#0f766e',
+    primaryDark: '#0a3d3c',
+    primaryLight: isDark ? '#134e4a' : '#ccfbf1',
+    primaryText: isDark ? '#2dd4bf' : '#0f766e',
+    accent: '#059669',
+  };
 
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
@@ -143,28 +160,28 @@ export default function AdminTeamScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: BG_COLOR }]}>
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingText}>Loading KisanConnect Team Roster…</Text>
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
+        <ActivityIndicator size="large" color={C.primary} />
+        <Text style={[styles.loadingText, { color: C.textSub }]}>Loading Workforce Directory…</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#064e3b" />
 
-      {/* TOP HEADER */}
+      {/* TOP HEADER - Premium Emerald Gradient */}
       <LinearGradient
-        colors={['#074e26', '#065a29']}
+        colors={['#064e3b', '#0f766e']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNav}>
-            <TouchableOpacity style={styles.navCircleBtn} onPress={() => router.back()} activeOpacity={0.7}>
-              <ArrowLeft size={20} color="#f8fafc" />
+            <TouchableOpacity style={styles.navCircleBtn} onPress={() => router.back()} activeOpacity={0.75}>
+              <ArrowLeft size={20} color="#ffffff" />
             </TouchableOpacity>
 
             <View style={styles.brandContainer}>
@@ -183,28 +200,28 @@ export default function AdminTeamScreen() {
 
             <View style={styles.topNavRight}>
               <View style={styles.countBadgeHeader}>
-                <Users size={14} color="#34d399" />
-                <Text style={styles.countBadgeTextHeader}>{employees.length}</Text>
+                <Users size={14} color="#a7f3d0" />
+                <Text style={styles.countBadgeTextHeader}>{employees.length} Staff</Text>
               </View>
             </View>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* SEARCH BAR & ROLE FILTER TABS */}
-      <View style={styles.filterSection}>
-        <View style={styles.searchBox}>
-          <Search size={17} color="#94a3b8" />
+      {/* SEARCH BAR & FILTER PILLS */}
+      <View style={[styles.filterSection, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
+        <View style={[styles.searchBox, { backgroundColor: C.surfaceSecondary, borderColor: C.border }]}>
+          <Search size={18} color={C.textMuted} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: C.text }]}
             placeholder="Search by name, phone, dept..."
-            placeholderTextColor="#64748b"
+            placeholderTextColor={C.textMuted}
             value={search}
             onChangeText={setSearch}
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <X size={16} color="#94a3b8" />
+              <X size={16} color={C.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -221,15 +238,32 @@ export default function AdminTeamScreen() {
             return (
               <TouchableOpacity
                 key={item.key}
-                style={[styles.roleChip, isActive && styles.roleChipActive]}
+                style={[
+                  styles.roleChip,
+                  {
+                    backgroundColor: isActive ? C.primary : C.surfaceSecondary,
+                    borderColor: isActive ? C.primary : C.border,
+                  }
+                ]}
                 onPress={() => setFilterRole(item.key)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>
+                <Text style={[
+                  styles.roleChipText,
+                  { color: isActive ? '#ffffff' : C.textSub, fontWeight: isActive ? '700' : '600' }
+                ]}>
                   {item.label}
                 </Text>
-                <View style={[styles.chipCountBadge, isActive && styles.chipCountBadgeActive]}>
-                  <Text style={[styles.chipCountText, isActive && styles.chipCountTextActive]}>{count}</Text>
+                <View style={[
+                  styles.chipCountBadge,
+                  { backgroundColor: isActive ? 'rgba(255, 255, 255, 0.25)' : isDark ? '#334155' : '#e2e8f0' }
+                ]}>
+                  <Text style={[
+                    styles.chipCountText,
+                    { color: isActive ? '#ffffff' : C.textSub }
+                  ]}>
+                    {count}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -241,13 +275,15 @@ export default function AdminTeamScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item, idx) => getEmployeeId(item) || String(idx)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#10b981']} tintColor="#10b981" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} />}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <UserX size={44} color="#475569" />
-            <Text style={styles.emptyText}>No workforce members found</Text>
-            <Text style={styles.emptySubText}>Try adjusting search query or role filters</Text>
+            <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+              <UserX size={36} color={C.textMuted} />
+            </View>
+            <Text style={[styles.emptyText, { color: C.text }]}>No workforce members found</Text>
+            <Text style={[styles.emptySubText, { color: C.textSub }]}>Try adjusting your search query or role filter</Text>
           </View>
         }
         renderItem={({ item: emp }) => {
@@ -257,67 +293,86 @@ export default function AdminTeamScreen() {
           const isBlocked = !!emp.isBlocked;
           const isLive = emp.isTracking || emp.isOnline;
 
-          let roleBadgeBg = 'rgba(2, 132, 199, 0.15)';
-          let roleBadgeText = '#38bdf8';
+          // Semantic Role Styling
+          let roleBg = isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff';
+          let roleColor = isDark ? '#60a5fa' : '#2563eb';
+          let roleBorder = isDark ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe';
+
           if (roleUpper === 'MANAGER') {
-            roleBadgeBg = 'rgba(16, 185, 129, 0.15)';
-            roleBadgeText = '#34d399';
+            roleBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5';
+            roleColor = isDark ? '#34d399' : '#059669';
+            roleBorder = isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0';
           } else if (['SUPER_ADMIN', 'SUPERADMIN', 'ORG_ADMIN', 'ORGADMIN', 'ADMIN'].includes(roleUpper)) {
-            roleBadgeBg = 'rgba(139, 92, 246, 0.15)';
-            roleBadgeText = '#c084fc';
+            roleBg = isDark ? 'rgba(139, 92, 246, 0.15)' : '#f5f3ff';
+            roleColor = isDark ? '#c084fc' : '#7c3aed';
+            roleBorder = isDark ? 'rgba(139, 92, 246, 0.3)' : '#ddd6fe';
           }
 
           return (
-            <Surface style={[styles.card, cardShadow]} elevation={2}>
+            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]} elevation={1}>
               <View style={styles.cardHeaderRow}>
-                {/* Left Avatar & Status */}
+                {/* Left Avatar & Status Dot */}
                 <View style={styles.avatarWrap}>
                   {getAvatarUrl(emp.avatar) ? (
                     <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={styles.avatarImg} />
                   ) : (
-                    <View style={[styles.avatarFallback, { backgroundColor: isBlocked ? '#ef4444' : '#0ea5e9' }]}>
+                    <View style={[styles.avatarFallback, { backgroundColor: isBlocked ? '#f43f5e' : isLive ? '#0f766e' : '#64748b' }]}>
                       <Text style={styles.avatarInitials}>{getUserInitials(emp.name)}</Text>
                     </View>
                   )}
-                  <View style={[styles.statusDot, { backgroundColor: isBlocked ? '#ef4444' : isLive ? '#10b981' : '#64748b' }]} />
+                  <View style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor: isBlocked ? '#ef4444' : isLive ? '#10b981' : '#94a3b8',
+                      borderColor: C.surface
+                    }
+                  ]} />
                 </View>
 
-                {/* Info Column */}
+                {/* Staff Info */}
                 <View style={styles.infoCol}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <Text style={styles.empNameText} numberOfLines={1}>{emp.name || 'Unnamed Staff'}</Text>
-                    <View style={[styles.roleBadgePill, { backgroundColor: roleBadgeBg }]}>
-                      <Text style={[styles.roleBadgeText, { color: roleBadgeText }]}>{roleUpper}</Text>
+                  <View style={styles.nameRow}>
+                    <Text style={[styles.empNameText, { color: C.text }]} numberOfLines={1}>
+                      {emp.name || 'Unnamed Staff'}
+                    </Text>
+                    <View style={[styles.roleBadgePill, { backgroundColor: roleBg, borderColor: roleBorder }]}>
+                      <Text style={[styles.roleBadgeText, { color: roleColor }]}>{roleUpper}</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.empDeptText} numberOfLines={1}>
-                    {emp.department || 'Field Operations'} • {emp.designation || 'Field Executive'}
+                  <Text style={[styles.empDeptText, { color: C.textSub }]} numberOfLines={1}>
+                    {emp.department || 'Field Services'} • {emp.designation || 'Field Executive'}
                   </Text>
 
                   {emp.phone ? (
                     <View style={styles.metaRow}>
-                      <Phone size={12} color="#64748b" />
-                      <Text style={styles.empMetaText}>{emp.phone}</Text>
+                      <Phone size={12} color={C.textMuted} />
+                      <Text style={[styles.empMetaText, { color: C.textSub }]}>{emp.phone}</Text>
                     </View>
                   ) : null}
                 </View>
 
-                {/* Right Status Badge */}
+                {/* Right Status Indicator */}
                 <View style={styles.rightStatusCol}>
                   {isBlocked ? (
-                    <View style={[styles.statusTagPill, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
-                      <Ban size={10} color="#f87171" />
-                      <Text style={[styles.statusTagText, { color: '#f87171' }]}>BLOCKED</Text>
+                    <View style={[styles.statusTagPill, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca' }]}>
+                      <Ban size={11} color="#ef4444" />
+                      <Text style={[styles.statusTagText, { color: '#ef4444' }]}>BLOCKED</Text>
                     </View>
                   ) : !isApproved ? (
-                    <View style={[styles.statusTagPill, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-                      <Text style={[styles.statusTagText, { color: '#fbbf24' }]}>PENDING</Text>
+                    <View style={[styles.statusTagPill, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb', borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : '#fde68a' }]}>
+                      <Text style={[styles.statusTagText, { color: '#d97706' }]}>PENDING</Text>
                     </View>
                   ) : (
-                    <View style={[styles.statusTagPill, { backgroundColor: isLive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)' }]}>
-                      <View style={[styles.livePulseDot, { backgroundColor: isLive ? '#10b981' : '#64748b' }]} />
-                      <Text style={[styles.statusTagText, { color: isLive ? '#34d399' : '#94a3b8' }]}>
+                    <View style={[
+                      styles.statusTagPill,
+                      {
+                        backgroundColor: isLive ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5') : (isDark ? 'rgba(148, 163, 184, 0.15)' : '#f1f5f9'),
+                        borderColor: isLive ? (isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0') : (isDark ? 'rgba(148, 163, 184, 0.3)' : '#e2e8f0')
+                      }
+                    ]}>
+                      <View style={[styles.livePulseDot, { backgroundColor: isLive ? '#10b981' : '#94a3b8' }]} />
+                      <Text style={[styles.statusTagText, { color: isLive ? (isDark ? '#34d399' : '#059669') : C.textSub }]}>
                         {isLive ? 'ACTIVE' : 'OFFLINE'}
                       </Text>
                     </View>
@@ -325,35 +380,48 @@ export default function AdminTeamScreen() {
                 </View>
               </View>
 
-              {/* Bottom Action Buttons Row */}
-              <View style={styles.cardFooterDivider} />
+              {/* Action Buttons Row */}
+              <View style={[styles.cardFooterDivider, { backgroundColor: C.border }]} />
               <View style={styles.cardFooterActions}>
                 {!isApproved && (
-                  <TouchableOpacity style={[styles.actionBtn, styles.approveBtn]} onPress={() => handleApprove(empId)}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.approveBtn]}
+                    onPress={() => handleApprove(empId)}
+                    activeOpacity={0.8}
+                  >
                     <CheckCircle2 size={13} color="#ffffff" />
-                    <Text style={styles.approveBtnText}>Approve Staff</Text>
+                    <Text style={styles.approveBtnText}>Approve</Text>
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity style={[styles.actionBtn, styles.editBtn]} onPress={() => openEdit(emp)} activeOpacity={0.75}>
-                  <Pencil size={13} color="#60a5fa" />
-                  <Text style={styles.editBtnText}>Edit Info</Text>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: C.surfaceSecondary, borderColor: C.border }]}
+                  onPress={() => openEdit(emp)}
+                  activeOpacity={0.75}
+                >
+                  <Pencil size={13} color={C.primaryText} />
+                  <Text style={[styles.editBtnText, { color: C.primaryText }]}>Edit Info</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionBtn, isBlocked ? styles.unblockBtn : styles.blockBtn]}
+                  style={[
+                    styles.actionBtn,
+                    isBlocked
+                      ? { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0' }
+                      : { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca' }
+                  ]}
                   onPress={() => handleToggleBlock(empId)}
                   activeOpacity={0.75}
                 >
                   {isBlocked ? (
                     <>
-                      <UserCheck size={13} color="#34d399" />
-                      <Text style={styles.unblockBtnText}>Unblock</Text>
+                      <UserCheck size={13} color="#059669" />
+                      <Text style={[styles.blockBtnText, { color: '#059669' }]}>Unblock</Text>
                     </>
                   ) : (
                     <>
-                      <Ban size={13} color="#f43f5e" />
-                      <Text style={styles.blockBtnText}>Block</Text>
+                      <Ban size={13} color="#ef4444" />
+                      <Text style={[styles.blockBtnText, { color: '#ef4444' }]}>Block</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -363,43 +431,43 @@ export default function AdminTeamScreen() {
         }}
       />
 
-      {/* FLOATING BOTTOM TAB BAR (UI/UX PRO MAX) */}
+      {/* BOTTOM TAB BAR */}
       <View style={styles.bottomTabBarContainer}>
-        <Surface style={styles.bottomTabBarSurface} elevation={5}>
+        <Surface style={[styles.bottomTabBarSurface, { backgroundColor: C.surface, borderTopColor: C.border }]} elevation={5}>
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <LayoutDashboard size={20} color="#94a3b8" />
+              <LayoutDashboard size={20} color={C.textMuted} />
             </View>
-            <Text style={styles.tabBarLabel}>Home</Text>
+            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Home</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <MapPin size={20} color="#94a3b8" />
+              <MapPin size={20} color={C.textMuted} />
             </View>
-            <Text style={styles.tabBarLabel}>Live Map</Text>
+            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Live Map</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/team')} activeOpacity={0.7}>
-            <View style={[styles.tabBarIconBox, styles.tabBarIconBoxActive]}>
-              <Users size={20} color="#10b981" />
+            <View style={[styles.tabBarIconBox, { backgroundColor: C.primaryLight }]}>
+              <Users size={20} color={C.primary} />
             </View>
-            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>Workforce</Text>
-            <View style={styles.activeTabDot} />
+            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive, { color: C.primary }]}>Workforce</Text>
+            <View style={[styles.activeTabDot, { backgroundColor: C.primary }]} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <FileText size={20} color="#94a3b8" />
+              <FileText size={20} color={C.textMuted} />
             </View>
-            <Text style={styles.tabBarLabel}>Reports</Text>
+            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Reports</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
-              <Settings size={20} color="#94a3b8" />
+              <Settings size={20} color={C.textMuted} />
             </View>
-            <Text style={styles.tabBarLabel}>Settings</Text>
+            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Settings</Text>
           </TouchableOpacity>
         </Surface>
       </View>
@@ -407,46 +475,84 @@ export default function AdminTeamScreen() {
       {/* EDIT EMPLOYEE MODAL */}
       <Modal visible={!!editEmp} transparent animationType="slide" onRequestClose={() => setEditEmp(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditEmp(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
-            <View style={styles.sheetHandle} />
+          <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={styles.modalIconBox}>
-                  <Pencil size={18} color="#38bdf8" />
+                <View style={[styles.modalIconBox, { backgroundColor: C.primaryLight }]}>
+                  <Pencil size={18} color={C.primary} />
                 </View>
-                <Text style={styles.modalTitle}>Edit Staff Details</Text>
+                <Text style={[styles.modalTitle, { color: C.text }]}>Edit Staff Details</Text>
               </View>
               <TouchableOpacity onPress={() => setEditEmp(null)}>
-                <X size={20} color="#94a3b8" />
+                <X size={20} color={C.textMuted} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={{ maxHeight: height * 0.6 }} showsVerticalScrollIndicator={false}>
-              <Text style={styles.fieldLabel}>FULL NAME *</Text>
-              <TextInput style={styles.fieldInput} value={editName} onChangeText={setEditName} placeholder="Enter full name" placeholderTextColor="#64748b" />
+              <Text style={[styles.fieldLabel, { color: C.textSub }]}>FULL NAME *</Text>
+              <TextInput
+                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Enter full name"
+                placeholderTextColor={C.textMuted}
+              />
 
-              <Text style={styles.fieldLabel}>PHONE NUMBER *</Text>
-              <TextInput style={styles.fieldInput} value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#64748b" />
+              <Text style={[styles.fieldLabel, { color: C.textSub }]}>PHONE NUMBER *</Text>
+              <TextInput
+                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
+                value={editPhone}
+                onChangeText={setEditPhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor={C.textMuted}
+              />
 
-              <Text style={styles.fieldLabel}>DEPARTMENT</Text>
-              <TextInput style={styles.fieldInput} value={editDepartment} onChangeText={setEditDepartment} placeholder="Field Sales / Operations" placeholderTextColor="#64748b" />
+              <Text style={[styles.fieldLabel, { color: C.textSub }]}>DEPARTMENT</Text>
+              <TextInput
+                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
+                value={editDepartment}
+                onChangeText={setEditDepartment}
+                placeholder="Field Sales / Operations"
+                placeholderTextColor={C.textMuted}
+              />
 
-              <Text style={styles.fieldLabel}>ASSIGNED ROLE</Text>
+              <Text style={[styles.fieldLabel, { color: C.textSub }]}>ASSIGNED ROLE</Text>
               <View style={styles.rolePickerRow}>
-                {['EMPLOYEE', 'MANAGER', 'ADMIN'].map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.rolePickBtn, editRole.toUpperCase() === r && styles.rolePickBtnActive]}
-                    onPress={() => setEditRole(r)}
-                  >
-                    <Text style={[styles.rolePickText, editRole.toUpperCase() === r && styles.rolePickTextActive]}>{r}</Text>
-                  </TouchableOpacity>
-                ))}
+                {['EMPLOYEE', 'MANAGER', 'ADMIN'].map((r) => {
+                  const isRoleActive = editRole.toUpperCase() === r;
+                  return (
+                    <TouchableOpacity
+                      key={r}
+                      style={[
+                        styles.rolePickBtn,
+                        {
+                          backgroundColor: isRoleActive ? C.primary : C.surfaceSecondary,
+                          borderColor: isRoleActive ? C.primary : C.border,
+                        }
+                      ]}
+                      onPress={() => setEditRole(r)}
+                    >
+                      <Text style={[
+                        styles.rolePickText,
+                        { color: isRoleActive ? '#ffffff' : C.textSub, fontWeight: isRoleActive ? '800' : '600' }
+                      ]}>
+                        {r}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </ScrollView>
 
-            <TouchableOpacity style={[styles.saveBtn, editSaving && { opacity: 0.6 }]} onPress={handleSaveEdit} disabled={editSaving}>
-              {editSaving ? <ActivityIndicator color="#0f172a" size="small" /> : <Check size={18} color="#0f172a" />}
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: C.primary }, editSaving && { opacity: 0.6 }]}
+              onPress={handleSaveEdit}
+              disabled={editSaving}
+              activeOpacity={0.8}
+            >
+              {editSaving ? <ActivityIndicator color="#ffffff" size="small" /> : <Check size={18} color="#ffffff" />}
               <Text style={styles.saveBtnText}>{editSaving ? 'Updating Staff…' : 'Save Changes'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -457,12 +563,12 @@ export default function AdminTeamScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG_COLOR },
+  root: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#94a3b8', fontSize: 13, marginTop: 10 },
+  loadingText: { fontSize: 13, marginTop: 10, fontFamily: FONT },
 
   // Header
-  headerGradient: { paddingTop: Platform.OS === 'ios' ? 0 : 0, paddingBottom: 16 },
+  headerGradient: { paddingBottom: 16 },
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,7 +580,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -487,43 +593,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   navbarAppIcon: { width: '100%', height: '100%' },
-  appName: { fontSize: 17, fontWeight: '800', color: '#ffffff', letterSpacing: 0.3 },
-  appTag: { fontSize: 9, fontWeight: '700', color: '#6ee7b7', letterSpacing: 0.8 },
+  appName: { fontSize: 17, fontWeight: '800', color: '#ffffff', letterSpacing: 0.3, fontFamily: FONT },
+  appTag: { fontSize: 9, fontWeight: '700', color: '#a7f3d0', letterSpacing: 0.8, fontFamily: FONT },
   topNavRight: { flexDirection: 'row', alignItems: 'center' },
   countBadgeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 14,
   },
-  countBadgeTextHeader: { color: '#34d399', fontSize: 12, fontWeight: '800' },
+  countBadgeTextHeader: { color: '#ffffff', fontSize: 12, fontWeight: '800', fontFamily: FONT },
 
   // Filter & Search Section
   filterSection: {
-    backgroundColor: '#0f172a',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     gap: 12,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 14,
     paddingHorizontal: 14,
     height: 44,
     gap: 10,
   },
-  searchInput: { flex: 1, fontSize: 13, color: '#f8fafc', paddingVertical: 0 },
+  searchInput: { flex: 1, fontSize: 13, paddingVertical: 0, fontFamily: FONT },
   roleScroller: { flexGrow: 0 },
   roleChip: {
     flexDirection: 'row',
@@ -532,30 +639,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: '#1e293b',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  roleChipActive: { backgroundColor: '#059669', borderColor: '#10b981' },
-  roleChipText: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
-  roleChipTextActive: { color: '#ffffff', fontWeight: '700' },
+  roleChipText: { fontSize: 12, fontFamily: FONT },
   chipCountBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 8,
   },
-  chipCountBadgeActive: { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
-  chipCountText: { fontSize: 10, fontWeight: '700', color: '#94a3b8' },
-  chipCountTextActive: { color: '#ffffff' },
+  chipCountText: { fontSize: 10, fontWeight: '700', fontFamily: FONT },
 
   // List Container
   listContainer: { padding: 14, paddingBottom: 110 },
   card: {
-    backgroundColor: '#1e293b',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
     padding: 14,
     marginBottom: 12,
   },
@@ -569,7 +667,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitials: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+  avatarInitials: { color: '#ffffff', fontSize: 15, fontWeight: '800', fontFamily: FONT },
   statusDot: {
     position: 'absolute',
     bottom: -2,
@@ -578,15 +676,15 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#1e293b',
   },
   infoCol: { flex: 1, justifyContent: 'center' },
-  empNameText: { fontSize: 15, fontWeight: '800', color: '#f8fafc' },
-  roleBadgePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  empDeptText: { fontSize: 11, color: '#94a3b8', marginTop: 3, fontWeight: '500' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  empNameText: { fontSize: 15, fontWeight: '800', fontFamily: FONT },
+  roleBadgePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
+  roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3, fontFamily: FONT },
+  empDeptText: { fontSize: 11, marginTop: 3, fontWeight: '500', fontFamily: FONT },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  empMetaText: { fontSize: 11, color: '#64748b' },
+  empMetaText: { fontSize: 11, fontFamily: FONT },
 
   rightStatusCol: { alignItems: 'flex-end', justifyContent: 'center' },
   statusTagPill: {
@@ -596,11 +694,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
   },
   livePulseDot: { width: 6, height: 6, borderRadius: 3 },
-  statusTagText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+  statusTagText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4, fontFamily: FONT },
 
-  cardFooterDivider: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.06)', marginVertical: 12 },
+  cardFooterDivider: { height: 1, marginVertical: 12 },
   cardFooterActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
 
   actionBtn: {
@@ -610,19 +709,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
+    borderWidth: 1,
   },
-  approveBtn: { backgroundColor: '#10b981', flex: 1, justifyContent: 'center' },
-  approveBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
-  editBtn: { backgroundColor: 'rgba(59, 130, 246, 0.15)' },
-  editBtnText: { color: '#60a5fa', fontSize: 11, fontWeight: '700' },
-  blockBtn: { backgroundColor: 'rgba(244, 63, 94, 0.15)' },
-  blockBtnText: { color: '#f43f5e', fontSize: 11, fontWeight: '700' },
-  unblockBtn: { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
-  unblockBtnText: { color: '#34d399', fontSize: 11, fontWeight: '700' },
+  approveBtn: { backgroundColor: '#059669', borderColor: '#059669', flex: 1, justifyContent: 'center' },
+  approveBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '800', fontFamily: FONT },
+  editBtnText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
+  blockBtnText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
 
   emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyText: { color: '#f8fafc', fontSize: 15, fontWeight: '700', marginTop: 12 },
-  emptySubText: { color: '#64748b', fontSize: 12, marginTop: 4 },
+  emptyIconCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  emptyText: { fontSize: 15, fontWeight: '700', fontFamily: FONT },
+  emptySubText: { fontSize: 12, marginTop: 4, fontFamily: FONT },
 
   // Bottom Navigation Bar
   bottomTabBarContainer: {
@@ -636,52 +733,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: '#ffffff',
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 34,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 28,
     paddingHorizontal: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(15, 23, 42, 0.08)',
     shadowColor: '#0f172a',
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
     elevation: 16,
   },
   tabBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  tabBarIconBoxActive: { backgroundColor: '#ecfdf5' },
-  tabBarLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 2 },
-  tabBarLabelActive: { color: '#059669', fontWeight: '800' },
-  activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#059669', marginTop: 2 },
+  tabBarLabel: { fontSize: 10, fontWeight: '600', marginTop: 2, fontFamily: FONT },
+  tabBarLabelActive: { fontWeight: '800' },
+  activeTabDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#1e293b',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
     padding: 20,
     paddingBottom: Platform.OS === 'ios' ? 36 : 24,
   },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#475569', alignSelf: 'center', marginBottom: 16 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(56, 189, 248, 0.15)', alignItems: 'center', justifyContent: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#f8fafc' },
-  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: '#94a3b8', marginTop: 14, marginBottom: 6 },
+  modalIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '800', fontFamily: FONT },
+  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 14, marginBottom: 6, fontFamily: FONT },
   fieldInput: {
     height: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: '#0f172a',
     paddingHorizontal: 14,
     fontSize: 14,
-    color: '#f8fafc',
+    fontFamily: FONT,
   },
   rolePickerRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   rolePickBtn: {
@@ -689,22 +779,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: '#0f172a',
     alignItems: 'center',
   },
-  rolePickBtnActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
-  rolePickText: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
-  rolePickTextActive: { color: '#ffffff' },
+  rolePickText: { fontSize: 11, fontFamily: FONT },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#10b981',
     borderRadius: 14,
     paddingVertical: 14,
     marginTop: 20,
   },
-  saveBtnText: { color: '#0f172a', fontWeight: '800', fontSize: 14 },
+  saveBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 14, fontFamily: FONT },
 });

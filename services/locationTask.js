@@ -139,10 +139,26 @@ function validateSegment(prev, curr) {
   // ── Gate 1: Minimum movement ─────────────────────────────────────────
   if (distM < MIN_MOVE_METERS) return { valid: false, distKm: 0 };
 
-  // ── Gate 2: Teleport protection ──────────────────────────────────────
   const prevTs = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
   const currTs = curr.timestamp ? new Date(curr.timestamp).getTime() : Date.now();
-  const secs   = Math.max((currTs - prevTs) / 1000, 0.1);
+  const rawSecs = Math.max((currTs - prevTs) / 1000, 0.1);
+
+  // ── Gate 2: 5-Hour / Long Stationary Transition Guard ────────────────
+  // If the user was stationary for a long time (e.g. at home for 5 hours),
+  // rawSecs is huge (e.g. 18000s). We MUST NOT divide distM by 18000s, because that
+  // produces a false speed of 0.005 m/s and wrongly discards real movement as drift.
+  // If the user moved >= 12m from the stationary anchor or reportedSpeed >= 0.4 m/s:
+  const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
+  
+  if (rawSecs > 60) {
+    if (distM >= 12 || reportedSpeedMps >= 0.4) {
+      console.log(`📍 Movement detected after ${(rawSecs / 60).toFixed(1)}min stationary: ${distM.toFixed(0)}m! Accepting transition.`);
+      return { valid: true, distKm };
+    }
+  }
+
+  // Normal consecutive fixes (< 60s)
+  const secs = Math.min(rawSecs, 60);
   const calcSpeedKmh = (distKm / secs) * 3600;
 
   if (calcSpeedKmh > MAX_SPEED_KMH) {
@@ -151,23 +167,16 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 3: Stationary drift filter ──────────────────────────────────
-  // Reported speed from Android (m/s) — often null/0 when phone is in pocket
-  const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
   const calcSpeedMps     = (distM / secs);
-  // Use the HIGHER of the two speed estimates (better for pocket mode)
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
 
   // If the phone is clearly stationary AND the jump is within GPS noise range → ignore
   if (effectiveSpeedMps < MIN_WALKING_SPEED_MPS && distM < STATIONARY_DRIFT_LIMIT) {
-    // Use accuracy trust: if GPS accuracy is very poor, be more lenient
     const trust = accuracyTrustWeight(curr.accuracy || 100);
-    // If trust is high (good GPS) and speed is near-zero → definitely stationary drift
-    // If trust is low (poor GPS / pocket) → allow; real movement might be happening
     if (trust > 0.3) {
       console.log(`📍 Stationary drift ignored: ${distM.toFixed(0)}m at ${effectiveSpeedMps.toFixed(2)} m/s`);
       return { valid: false, distKm: 0 };
     }
-    // Low-trust GPS but moved > MIN_MOVE_METERS → accept with caution
   }
 
   return { valid: true, distKm };

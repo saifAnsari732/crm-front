@@ -208,12 +208,36 @@ export default function AdminTrackingScreen() {
 
   const baseStaffList = allEmployeesList.length > 0 ? allEmployeesList : liveLocations;
   const directoryStaff = useMemo(() => {
-    if (baseStaffList.length === 0) return [];
-
     const seen = new Set();
     const result = [];
 
-    for (const emp of baseStaffList) {
+    // 1. Process all live locations first (active GPS sessions)
+    for (const loc of liveLocations) {
+      const idStr = String(loc.employeeId || loc.employee?._id || loc.employee || loc._id || '');
+      if (!idStr || seen.has(idStr)) continue;
+      seen.add(idStr);
+
+      const empMatch = allEmployeesList.find(e => String(e._id) === idStr);
+      result.push({
+        _id: idStr,
+        name: empMatch?.name || loc.name || loc.employeeName || loc.employee?.name || 'Field Executive',
+        avatar: empMatch?.avatar || loc.avatar,
+        department: empMatch?.department || loc.department || 'Field Operations',
+        phone: empMatch?.phone || loc.phone,
+        status: 'ON_FIELD',
+        isTracking: true,
+        isOnline: true,
+        lat: loc.lat || loc.latitude,
+        lng: loc.lng || loc.longitude,
+        totalDistance: loc.totalDistance || 0,
+        address: normalizeAddress(loc.address || 'Tracking Active'),
+        sessionId: loc.sessionId || loc._id,
+        updatedAt: loc.updatedAt || new Date().toISOString(),
+      });
+    }
+
+    // 2. Add remaining staff from employees directory
+    for (const emp of allEmployeesList) {
       const idStr = String(emp._id || emp.employeeId || '');
       if (idStr && seen.has(idStr)) continue;
       if (idStr) seen.add(idStr);
@@ -242,16 +266,16 @@ export default function AdminTrackingScreen() {
     }
 
     return result;
-  }, [baseStaffList, liveLocationIndex]);
+  }, [allEmployeesList, liveLocations, liveLocationIndex]);
 
-  const activeCount = directoryStaff.filter((s) => s.isTracking).length;
+  const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD').length;
   const totalKm = directoryStaff.reduce((sum, s) => sum + (parseFloat(s.totalDistance) || 0), 0);
 
   const filteredDirectory = useMemo(() => {
     const query = search.toLowerCase();
     return directoryStaff.filter((emp) => {
-      // Only show tracking/online employees
-      if (emp.status === 'OFFLINE') return false;
+      // By default list active/tracking staff
+      if (!emp.isTracking && emp.status === 'OFFLINE') return false;
       
       if (!query) return true;
       return (emp.name || '').toLowerCase().includes(query)
@@ -428,6 +452,46 @@ export default function AdminTrackingScreen() {
 
   return (
     <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+
+      {/* ── FULL-WIDTH EXECUTIVE HEADER ──────────────────────────── */}
+      <LinearGradient
+        colors={['#074e26', '#065a29']}
+        style={styles.fullWidthHeader}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.headerBackBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={20} color="#ffffff" />
+            </TouchableOpacity>
+
+            <View style={styles.headerTitleWrap}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.headerTitleText}>Live Map Tracking</Text>
+                <View style={styles.activePillBadge}>
+                  <View style={styles.liveGreenDot} />
+                  <Text style={styles.activePillText}>{activeCount} Active</Text>
+                </View>
+              </View>
+              <Text style={styles.headerSubText}>Real-Time Field Operations & Trajectory</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.headerRefreshBtn}
+              onPress={onRefresh}
+              disabled={refreshing}
+              activeOpacity={0.8}
+            >
+              {refreshing ? <ActivityIndicator size="small" color="#ffffff" /> : <RefreshCw size={17} color="#ffffff" />}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
       {/* ── FULL SCREEN MAP ────────────────────────────────────── */}
       <View style={styles.mapWrap}>
         <MapViewComponent
@@ -439,44 +503,13 @@ export default function AdminTrackingScreen() {
           onSelectEmployee={handleSelectEmployee}
         />
 
-        {/* ── FLOATING BACK NAVIGATION & LIVE BADGE ─────────────── */}
-        <SafeAreaView edges={['top']} style={styles.floatingHeaderContainer} pointerEvents="box-none">
-          <View style={styles.floatingHeaderRow}>
-            <TouchableOpacity
-              style={styles.floatingBackBtn}
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
-              activeOpacity={0.8}
-            >
-              <ArrowLeft size={20} color="#ffffff" />
-            </TouchableOpacity>
-
-            <View style={styles.floatingTitlePill}>
-              <View style={styles.liveGreenDot} />
-              <Text style={styles.floatingTitleText}>Live Map</Text>
-              <View style={styles.floatingCountBadge}>
-                <Text style={styles.floatingCountText}>{activeCount} Active</Text>
-              </View>
-            </View>
-          </View>
-        </SafeAreaView>
-
-
-
         {/* Floating controls */}
         <View style={styles.mapControls}>
           <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={recenterMap} accessibilityLabel="My location">
-            <LocateFixed size={17} color={GREEN} />
+            <LocateFixed size={18} color={GREEN} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={fitRoute} accessibilityLabel="Fit route">
-            <Route size={17} color={GREEN} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.mapCtrlBtn, cardShadow]}
-            onPress={onRefresh}
-            disabled={refreshing}
-            accessibilityLabel="Refresh"
-          >
-            {refreshing ? <ActivityIndicator size="small" color={GREEN} /> : <RefreshCw size={16} color={GREEN} />}
+            <Route size={18} color={GREEN} />
           </TouchableOpacity>
         </View>
 
@@ -670,71 +703,71 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f6f4' },
   loadingText: { fontFamily: FONT, fontSize: 12, color: '#64748b', marginTop: 8 },
 
-  floatingHeaderContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 90,
+  fullWidthHeader: {
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+    zIndex: 100,
   },
-  floatingHeaderRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) + 8 : 8,
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingTop: 4,
   },
-  floatingBackBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
   },
-  floatingTitlePill: {
+  headerTitleWrap: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  headerTitleText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  headerSubText: {
+    color: '#a7f3d0',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  activePillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(15, 23, 42, 0.78)',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 21,
+    gap: 5,
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    borderColor: 'rgba(52, 211, 153, 0.4)',
+  },
+  activePillText: {
+    color: '#34d399',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  headerRefreshBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   liveGreenDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#10b981',
-  },
-  floatingTitleText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  floatingCountBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.25)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  floatingCountText: {
-    color: '#34d399',
-    fontSize: 11,
-    fontWeight: '800',
   },
 
   mapWrap: { flex: 1, position: 'relative' },
@@ -754,13 +787,13 @@ const styles = StyleSheet.create({
   distanceValue: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 1 },
 
   mapControls: { position: 'absolute', right: 12, bottom: 14, gap: 8 },
-  mapCtrlBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  mapCtrlBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
 
-  routeLoader: { position: 'absolute', top: 58, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.94)', paddingHorizontal: 13, paddingVertical: 7, borderRadius: 18, gap: 7 },
-  routeLoaderText: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', color: GREEN },
+  routeLoader: { position: 'absolute', top: 58, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  routeLoaderText: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: GREEN },
 
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 14, paddingTop: 10, maxHeight: '65%', flexShrink: 0 },
-  sheetCollapsed: { maxHeight: 74 },
+  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 10, maxHeight: '82%', flexShrink: 0 },
+  sheetCollapsed: { maxHeight: 68 },
   sheetHandleWrap: { alignItems: 'center', paddingVertical: 8 },
   sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },

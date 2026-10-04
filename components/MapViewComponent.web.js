@@ -121,12 +121,29 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
   useEffect(() => {
     if (!mapRef.current || !window.google?.maps) return;
     const maps = window.google.maps;
-    markersRef.current.forEach((marker) => marker.setMap(null));
+    if (markersRef.current) markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = directoryStaff.filter((emp) => emp.lat && emp.lng).map((emp) => {
+      const lat = Number(emp.lat);
+      const lng = Number(emp.lng);
+      const isLive = emp.isTracking || emp.status === 'ON_FIELD';
+      const pinColor = isLive ? '#10b981' : '#64748b';
+      const kmText = `${parseFloat(emp.totalDistance || 0).toFixed(1)} km`;
+
+      const svgPin = {
+        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+        fillColor: pinColor,
+        fillOpacity: 1,
+        strokeWeight: 2,
+        strokeColor: '#ffffff',
+        scale: 1.8,
+        anchor: new maps.Point(12, 22),
+      };
+
       const marker = new maps.Marker({
         map: mapRef.current,
-        position: { lat: Number(emp.lat), lng: Number(emp.lng) },
-        title: emp.name,
+        position: { lat, lng },
+        title: `${emp.name} (${kmText}) - ${emp.address}`,
+        icon: svgPin,
       });
       marker.addListener('click', () => onSelectEmployee?.(emp));
       return marker;

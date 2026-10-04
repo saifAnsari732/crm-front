@@ -12,7 +12,7 @@ import {
   Phone, Mail, X, MessageSquare, ChevronDown, FileText, PieChart, AlertCircle, Building2,
   LogOut, User, Settings, Search, Home, LayoutDashboard, Briefcase, Plus, Layers
 } from 'lucide-react-native';
-import { adminAPI, trackingAPI, getAvatarUrl } from '../../services/api';
+import { adminAPI, trackingAPI, meetingAPI, getAvatarUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { stopHeartbeat } from '../../services/locationTask';
@@ -26,6 +26,15 @@ const BG_COLOR = '#f8fafc';
 const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0px 6px 20px rgba(15, 26, 46, 0.06)' }
   : { elevation: 3, shadowColor: '#0f1a2e', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } };
+
+const formatFullName = (name) => {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
 
 export default function OrgAdminDashboardScreen() {
   const router = useRouter();
@@ -61,18 +70,24 @@ export default function OrgAdminDashboardScreen() {
   const [creatingEmp, setCreatingEmp] = useState(false);
   const [creatingMgr, setCreatingMgr] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterTab, setFilterTab] = useState('ALL');
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [recentVisits, setRecentVisits] = useState([]);
+  const [selectedVisit, setSelectedVisit] = useState(null);
+  const [visitModalVisible, setVisitModalVisible] = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [statsRes, empRes, locRes, orgRes, mgrRes] = await Promise.all([
+      const [statsRes, empRes, locRes, orgRes, mgrRes, visitRes, attRes] = await Promise.all([
         adminAPI.getDashboard().catch(() => ({ data: { success: false } })),
         adminAPI.getEmployees({ limit: 200, role: 'all' }).catch(() => ({ data: { success: false } })),
         trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
         adminAPI.getOrganization().catch(() => ({ data: { success: false } })),
         adminAPI.getManagers().catch(() => ({ data: { success: false } })),
+        meetingAPI.getAll({ limit: 30 }).catch(() => ({ data: { success: false } })),
+        adminAPI.getAttendance({ date: todayStr }).catch(() => ({ data: { success: false } })),
       ]);
 
       if (statsRes.data?.success) setStats(statsRes.data.stats || statsRes.data);
@@ -80,12 +95,14 @@ export default function OrgAdminDashboardScreen() {
       if (locRes.data?.success) setLiveLocations(locRes.data.locations || locRes.data.data || []);
       if (orgRes.data?.success) setOrganization(orgRes.data.organization || orgRes.data.data || null);
       if (mgrRes.data?.success) setManagersList(mgrRes.data.managers || []);
+      if (visitRes.data?.success) setRecentVisits(visitRes.data.meetings || visitRes.data.data || []);
+      if (attRes.data?.success) setAttendanceRecords(attRes.data.records || attRes.data.attendance || []);
     } catch (e) {
       console.log('Org Admin dashboard fetch error:', e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [todayStr]);
 
   useEffect(() => {
     fetchData();
@@ -167,13 +184,27 @@ export default function OrgAdminDashboardScreen() {
   };
 
   const totalEmp = stats?.totalEmployees ?? (employees.length || 0);
-  const presentCount = employees.length > 0
-    ? employees.filter(e => e.isOnline || e.isTracking || liveLocations.some(l => (l.employeeId || l.employee || l._id) === e._id)).length
-    : (stats?.todayAttendance ?? 0);
-  const liveCount = liveLocations.length || (stats?.trackingNow ?? 0);
-  const attendanceRate = totalEmp > 0 ? Math.round((presentCount / totalEmp) * 100) : 0;
+
+  const todayRecords = attendanceRecords || [];
+  const realPresentEmpIds = new Set(
+    todayRecords
+      .filter(r => ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn)
+      .map(r => String(r.employee?._id || r.employee || ''))
+  );
+
+  const presentCount = stats?.presentEmployees ?? (
+    todayRecords.length > 0
+      ? realPresentEmpIds.size
+      : employees.filter(e => e.isOnline || e.isTracking || liveLocations.some(l => (l.employeeId || l.employee || l._id) === e._id)).length
+  );
+
+  const lateCount = stats?.lateEmployees ?? (
+    todayRecords.filter(r => (r.status || '').toLowerCase() === 'late').length
+  );
+
   const absentCount = stats?.absentEmployees ?? Math.max(0, totalEmp - presentCount);
-  const lateCount = stats?.lateEmployees ?? Math.max(0, Math.floor(presentCount * 0.05));
+  const attendanceRate = totalEmp > 0 ? Math.round((presentCount / totalEmp) * 100) : 0;
+  const liveCount = liveLocations.length || (stats?.trackingNow ?? 0);
   const pendingApprovals = stats?.pendingExpenses ?? stats?.pendingLeaves ?? stats?.pendingApprovals ?? 0;
 
   const goTo = (path) => {
@@ -261,21 +292,6 @@ export default function OrgAdminDashboardScreen() {
       sub: e.department ? `${e.department} • Field Executive` : 'Field Executive',
       time: e.lastCheckIn ? new Date(e.lastCheckIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM'
     };
-  });
-
-  const filteredActivities = realActivities.filter((act) => {
-    const isLive = act.status === 'Tracking Active' || act.isTracking || act.isOnline;
-    if (filterTab === 'LIVE' && !isLive) return false;
-    if (filterTab === 'OFFLINE' && isLive) return false;
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const nameMatch = (act.name || '').toLowerCase().includes(q);
-      const phoneMatch = (act.phone || '').toLowerCase().includes(q);
-      const deptMatch = (act.sub || act.department || '').toLowerCase().includes(q);
-      return nameMatch || phoneMatch || deptMatch;
-    }
-    return true;
   });
 
   const orgLogoUrl = getAvatarUrl(organization?.logo || user?.organizationLogo || user?.organizationId?.logo || user?.organization?.logo);
@@ -371,13 +387,6 @@ export default function OrgAdminDashboardScreen() {
       >
         {/* COMPANY PULSE KPI GRID */}
         <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
-          <View style={styles.cardHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Activity size={18} color="#059669" />
-              <Text style={styles.cardSectionTitle}>Company Pulse</Text>
-            </View>
-          </View>
-
           <View style={styles.kpiGridRow}>
             {/* Performance Ring Chart Box */}
             <View style={styles.ringCardBox}>
@@ -394,50 +403,56 @@ export default function OrgAdminDashboardScreen() {
             <View style={styles.metricsQuadrant}>
               {/* Row 1 */}
               <View style={styles.metricPairRow}>
-                <View style={styles.miniMetricBox}>
+                <TouchableOpacity
+                  style={[styles.miniMetricBox, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}
+                  onPress={() => goTo('/(admin)/monitoring')}
+                  activeOpacity={0.75}
+                >
                   <View style={styles.miniHeader}>
-                    <Users size={14} color="#64748b" />
-                    <Text style={styles.miniTitle}>Total..</Text>
+                    <Users size={14} color="#0284c7" />
+                    <Text style={styles.miniTitle}>Total Staff</Text>
                   </View>
                   <Text style={styles.miniValueNum}>{totalEmp}</Text>
-                  <Text style={styles.miniTrendUp}>↑ 12%</Text>
-                </View>
+                </TouchableOpacity>
 
-                <View style={styles.miniMetricBox}>
+                <TouchableOpacity
+                  style={[styles.miniMetricBox, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}
+                  onPress={() => goTo('/(admin)/history')}
+                  activeOpacity={0.75}
+                >
                   <View style={styles.miniHeader}>
                     <CheckCircle2 size={14} color="#16a34a" />
-                    <Text style={styles.miniTitle}>Present..</Text>
+                    <Text style={[styles.miniTitle, { color: '#15803d' }]}>Present</Text>
                   </View>
-                  <Text style={styles.miniValueNum}>{presentCount}</Text>
-                  <View style={styles.greenTagPill}>
-                    <Text style={styles.greenTagText}>{attendanceRate}%</Text>
-                  </View>
-                </View>
+                  <Text style={[styles.miniValueNum, { color: '#16a34a' }]}>{presentCount}</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Row 2 */}
               <View style={styles.metricPairRow}>
-                <View style={styles.miniMetricBox}>
+                <TouchableOpacity
+                  style={[styles.miniMetricBox, { backgroundColor: '#e0f2fe', borderColor: '#bae6fd' }]}
+                  onPress={() => goTo('/(admin)/tracking')}
+                  activeOpacity={0.75}
+                >
                   <View style={styles.miniHeader}>
                     <Navigation size={14} color="#0284c7" />
-                    <Text style={styles.miniTitle}>Live..</Text>
+                    <Text style={[styles.miniTitle, { color: '#0369a1' }]}>On Field</Text>
                   </View>
-                  <Text style={styles.miniValueNum}>{liveCount}</Text>
-                  <View style={styles.blueTagPill}>
-                    <Text style={styles.blueTagText}>On Field</Text>
-                  </View>
-                </View>
+                  <Text style={[styles.miniValueNum, { color: '#0284c7' }]}>{liveCount}</Text>
+                </TouchableOpacity>
 
-                <View style={styles.miniMetricBox}>
+                <TouchableOpacity
+                  style={[styles.miniMetricBox, { backgroundColor: '#fff7ed', borderColor: '#fed7aa' }]}
+                  onPress={() => goTo('/(admin)/reports')}
+                  activeOpacity={0.75}
+                >
                   <View style={styles.miniHeader}>
                     <AlertCircle size={14} color="#d97706" />
-                    <Text style={styles.miniTitle}>Pending..</Text>
+                    <Text style={[styles.miniTitle, { color: '#c2410c' }]}>Pending</Text>
                   </View>
-                  <Text style={styles.miniValueNum}>{pendingApprovals}</Text>
-                  <View style={styles.roseTagPill}>
-                    <Text style={styles.roseTagText}>Needs Approval</Text>
-                  </View>
-                </View>
+                  <Text style={[styles.miniValueNum, { color: '#d97706' }]}>{pendingApprovals}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -480,18 +495,18 @@ export default function OrgAdminDashboardScreen() {
         <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
           <Text style={styles.cardSectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.quickCardBtn} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.quickCardBtn} onPress={() => goTo('/(admin)/visits')} activeOpacity={0.8}>
               <View style={[styles.quickIconBox, { backgroundColor: '#e0f2fe' }]}>
-                <UserPlus size={18} color="#0284c7" />
+                <Briefcase size={18} color="#0284c7" />
               </View>
-              <Text style={styles.quickBtnTitle}>Add Employee</Text>
+              <Text style={styles.quickBtnTitle}>Visit Records</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickCardBtn} onPress={() => setAddMgrModalVisible(true)} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.quickCardBtn} onPress={() => goTo('/(admin)/monitoring')} activeOpacity={0.8}>
               <View style={[styles.quickIconBox, { backgroundColor: '#ecfdf5' }]}>
-                <UserCheck size={18} color="#10b981" />
+                <Users size={18} color="#10b981" />
               </View>
-              <Text style={styles.quickBtnTitle}>Add Manager</Text>
+              <Text style={styles.quickBtnTitle}>Workforce List</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.quickCardBtn} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.8}>
@@ -524,68 +539,23 @@ export default function OrgAdminDashboardScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar & Filters */}
-          <View style={styles.searchFilterWrap}>
-            <View style={styles.searchBar}>
-              <Search size={16} color="#64748b" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search staff by name, phone, dept..."
-                placeholderTextColor="#94a3b8"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <X size={16} color="#64748b" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.filterPillsRow}>
-              <TouchableOpacity
-                style={[styles.filterPill, filterTab === 'ALL' && styles.filterPillActive]}
-                onPress={() => setFilterTab('ALL')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.filterPillText, filterTab === 'ALL' && styles.filterPillTextActive]}>
-                  All ({staffOnly.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.filterPill, filterTab === 'LIVE' && styles.filterPillActiveLive]}
-                onPress={() => setFilterTab('LIVE')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.livePulseDot, { width: 6, height: 6, marginRight: 4 }]} />
-                <Text style={[styles.filterPillText, filterTab === 'LIVE' && styles.filterPillTextLiveActive]}>
-                  Live Tracking ({staffOnly.filter(e => e.isTracking || e.isOnline || liveLocations.some(l => (l.employeeId || l.employee || l._id) === e._id)).length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.filterPill, filterTab === 'OFFLINE' && styles.filterPillActive]}
-                onPress={() => setFilterTab('OFFLINE')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.filterPillText, filterTab === 'OFFLINE' && styles.filterPillTextActive]}>
-                  Offline ({staffOnly.filter(e => !e.isTracking && !e.isOnline && !liveLocations.some(l => (l.employeeId || l.employee || l._id) === e._id)).length})
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
           {/* Roster Cards List */}
-          {filteredActivities.length === 0 ? (
+          {realActivities.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyText}>No field staff matches current filter.</Text>
+              <Text style={styles.emptyText}>No field staff registered yet.</Text>
             </View>
           ) : (
-            filteredActivities.map((emp) => {
+            realActivities.map((emp) => {
               const isLive = emp.status === 'Tracking Active' || emp.isTracking || emp.isOnline;
+              const liveLoc = liveLocations.find(l => String(l.employeeId || l.employee || l._id) === String(emp._id));
+              const kmVal = parseFloat(emp.totalDistance || liveLoc?.totalDistance || 0).toFixed(2);
               return (
-                <View key={emp._id} style={styles.rosterCardItem}>
+                <TouchableOpacity
+                  key={emp._id}
+                  style={styles.rosterCardItem}
+                  onPress={() => goTo(`/(admin)/tracking?employeeId=${emp._id}`)}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.rosterLeft}>
                     <View style={styles.avatarWrap}>
                       {getAvatarUrl(emp.avatar) ? (
@@ -600,7 +570,7 @@ export default function OrgAdminDashboardScreen() {
 
                     <View style={styles.empInfoCol}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.empNameText} numberOfLines={1}>{emp.name}</Text>
+                        <Text style={styles.empNameText} numberOfLines={1}>{formatFullName(emp.name)}</Text>
                         {isLive && (
                           <View style={styles.livePulsePill}>
                             <View style={styles.livePulseDot} />
@@ -608,27 +578,19 @@ export default function OrgAdminDashboardScreen() {
                           </View>
                         )}
                       </View>
-                      <Text style={styles.empSubText}>{emp.sub}</Text>
-                      <Text style={styles.empTimeText}>Last Ping: {emp.time}</Text>
+                      <View style={styles.empMetaRow}>
+                        <Text style={styles.empTimeText}>Last Ping: {emp.time}</Text>
+                        <View style={styles.distPill}>
+                          <Text style={styles.distPillText}>{kmVal} KM Today</Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
 
-                  <View style={styles.rosterActions}>
-                    <TouchableOpacity style={styles.actionIconBtn} onPress={() => goTo(`/(admin)/tracking?employeeId=${emp._id}`)}>
-                      <Navigation size={15} color="#0284c7" />
-                    </TouchableOpacity>
-                    {emp.phone && (
-                      <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleCall(emp.phone)}>
-                        <Phone size={15} color="#16a34a" />
-                      </TouchableOpacity>
-                    )}
-                    {emp.phone && (
-                      <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleWhatsApp(emp.phone)}>
-                        <MessageSquare size={15} color="#25d366" />
-                      </TouchableOpacity>
-                    )}
+                  <View style={styles.rosterRightClick}>
+                    <ChevronRight size={18} color="#0284c7" />
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -694,77 +656,86 @@ export default function OrgAdminDashboardScreen() {
             <SafeAreaView style={{ flex: 1 }}>
               {/* Drawer User Header */}
               <View style={styles.drawerHeader}>
-                <View style={styles.drawerBrandRow}>
-                  <Image source={require('../../assets/splash.png')} style={styles.drawerLogoImg} resizeMode="contain" />
-                  <View>
-                    <Text style={styles.drawerBrandTitle}>KisanConnect</Text>
-                    <Text style={styles.drawerBrandSub}>{isSuperAdmin ? 'SUPER ADMIN CONSOLE' : 'ORGANIZATION CONSOLE'}</Text>
+                <LinearGradient
+                  colors={['#064e3b', '#059669']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.drawerHeaderGradient}
+                >
+                  <View style={styles.drawerBrandRow}>
+                    <Image source={require('../../assets/splash.png')} style={styles.drawerLogoImg} resizeMode="contain" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.drawerBrandTitle}>KisanConnect</Text>
+                      <View style={styles.drawerSubBadge}>
+                        <Text style={styles.drawerBrandSub}>{isSuperAdmin ? 'SUPER ADMIN CONSOLE' : 'ORGANIZATION CONSOLE'}</Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
 
-                <View style={styles.drawerUserBox}>
-                  {getAvatarUrl(user?.avatar) ? (
-                    <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.drawerUserAvatar} />
-                  ) : (
-                    <View style={styles.drawerUserAvatarFallback}>
-                      <Text style={styles.drawerUserAvatarText}>{getUserInitials(user?.name)}</Text>
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Admin'}</Text>
-                    <Text style={styles.drawerUserEmail} numberOfLines={1}>{user?.email || ''}</Text>
-                    <View style={styles.drawerBadgeRow}>
-                      <Building2 size={11} color="#34d399" />
-                      <Text style={styles.drawerOrgText} numberOfLines={1}>{orgName}</Text>
+                  <View style={styles.drawerUserBox}>
+                    {getAvatarUrl(user?.avatar) ? (
+                      <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.drawerUserAvatar} />
+                    ) : (
+                      <View style={styles.drawerUserAvatarFallback}>
+                        <Text style={styles.drawerUserAvatarText}>{getUserInitials(user?.name)}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Admin'}</Text>
+                      <Text style={styles.drawerUserEmail} numberOfLines={1}>{user?.email || ''}</Text>
+                      <View style={styles.drawerBadgeRow}>
+                        <Building2 size={11} color="#059669" />
+                        <Text style={styles.drawerOrgText} numberOfLines={1}>{orgName}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
+                </LinearGradient>
               </View>
 
               {/* Drawer Menu List */}
               <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
                 <Text style={styles.drawerMenuSectionHeader}>NAVIGATION MENU</Text>
 
-                <TouchableOpacity style={[styles.drawerMenuItem, styles.drawerMenuItemActive]} onPress={() => goTo('/(admin)/dashboard')}>
-                  <LayoutDashboard size={18} color="#34d399" />
+                <TouchableOpacity style={[styles.drawerMenuItem, styles.drawerMenuItemActive]} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.75}>
+                  <LayoutDashboard size={18} color="#059669" />
                   <Text style={[styles.drawerMenuText, styles.drawerMenuTextActive]}>Executive Dashboard</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tracking')}>
-                  <MapPin size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.75}>
+                  <MapPin size={18} color="#0284c7" />
                   <Text style={styles.drawerMenuText}>Live Map Tracking</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/monitoring')}>
-                  <Users size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/monitoring')} activeOpacity={0.75}>
+                  <Users size={18} color="#10b981" />
                   <Text style={styles.drawerMenuText}>Field Workforce</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/team')}>
-                  <UserCheck size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/team')} activeOpacity={0.75}>
+                  <UserCheck size={18} color="#7c3aed" />
                   <Text style={styles.drawerMenuText}>Managers Roster</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/history')}>
-                  <Clock size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/history')} activeOpacity={0.75}>
+                  <Clock size={18} color="#d97706" />
                   <Text style={styles.drawerMenuText}>Attendance & History</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/reports')}>
-                  <FileText size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.75}>
+                  <FileText size={18} color="#2563eb" />
                   <Text style={styles.drawerMenuText}>Reports & Analytics</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/settings')}>
-                  <Settings size={18} color="#94a3b8" />
+                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.75}>
+                  <Settings size={18} color="#475569" />
                   <Text style={styles.drawerMenuText}>Settings & Subscription</Text>
                 </TouchableOpacity>
               </ScrollView>
 
               {/* Drawer Footer Logout */}
               <View style={styles.drawerFooter}>
-                <TouchableOpacity style={styles.drawerLogoutBtn} onPress={handleLogout}>
-                  <LogOut size={18} color="#f43f5e" />
+                <TouchableOpacity style={styles.drawerLogoutBtn} onPress={handleLogout} activeOpacity={0.85}>
+                  <LogOut size={18} color="#dc2626" />
                   <Text style={styles.drawerLogoutText}>Logout Session</Text>
                 </TouchableOpacity>
               </View>
@@ -1029,17 +1000,108 @@ export default function OrgAdminDashboardScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* ── CLIENT VISIT DETAIL INSPECTION MODAL ──────────────────────── */}
+      <Modal
+        visible={visitModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVisitModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setVisitModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.visitModalSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Briefcase size={20} color="#0284c7" />
+                <Text style={styles.modalTitleText}>Visit Record Details</Text>
+              </View>
+              <TouchableOpacity onPress={() => setVisitModalVisible(false)}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedVisit && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.7 }}>
+                <View style={styles.visitModalBadgeRow}>
+                  <View style={styles.modalEmpBadge}>
+                    <Text style={styles.modalEmpText}>
+                      Agent: {formatFullName(selectedVisit.employee?.name || selectedVisit.employeeName || 'Field Executive')}
+                    </Text>
+                  </View>
+                  <View style={[styles.visitStatusPill, { backgroundColor: '#f0fdf4' }]}>
+                    <Text style={[styles.visitStatusText, { color: '#16a34a' }]}>
+                      {(selectedVisit.status || 'COMPLETED').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <Surface style={styles.modalInfoCard} elevation={0}>
+                  <Text style={styles.modalClientName}>{selectedVisit.clientName}</Text>
+                  {selectedVisit.companyName ? (
+                    <Text style={styles.modalCompanyName}>{selectedVisit.companyName}</Text>
+                  ) : null}
+
+                  {selectedVisit.mobileNumber ? (
+                    <TouchableOpacity
+                      style={styles.modalPhoneRow}
+                      onPress={() => Linking.openURL(`tel:${selectedVisit.mobileNumber}`)}
+                    >
+                      <Phone size={14} color="#0284c7" />
+                      <Text style={styles.modalPhoneText}>{selectedVisit.mobileNumber}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {selectedVisit.meetingAddress ? (
+                    <View style={styles.modalAddrRow}>
+                      <MapPin size={14} color="#64748b" />
+                      <Text style={styles.modalAddrText}>{selectedVisit.meetingAddress}</Text>
+                    </View>
+                  ) : null}
+                </Surface>
+
+                {selectedVisit.meetingNotes ? (
+                  <View style={styles.modalNotesBlock}>
+                    <Text style={styles.modalNotesTitle}>Visit Notes / Remarks:</Text>
+                    <Text style={styles.modalNotesBody}>{selectedVisit.meetingNotes}</Text>
+                  </View>
+                ) : null}
+
+                {Number(selectedVisit.dealAmount) > 0 ? (
+                  <View style={styles.modalDealCard}>
+                    <DollarSign size={18} color="#16a34a" />
+                    <View>
+                      <Text style={styles.modalDealTitle}>Closed Deal Value</Text>
+                      <Text style={styles.modalDealAmount}>₹{Number(selectedVisit.dealAmount).toLocaleString('en-IN')}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                <View style={styles.modalMetaRow}>
+                  <Clock size={14} color="#64748b" />
+                  <Text style={styles.modalMetaText}>
+                    Logged on {selectedVisit.date || selectedVisit.createdAt ? new Date(selectedVisit.date || selectedVisit.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Today'}
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 13, color: '#475569', fontWeight: '600' },
-  headerGradient: { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 20 : 0, paddingBottom: 20 },
-  topNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  navCircleBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'start' },
+  headerGradient: { paddingTop: Platform.OS === 'web' ? 14 : 0, paddingBottom: 10 },
+  topNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 4 : 8, paddingBottom: 6 },
+  navCircleBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
   brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 2 },
   navbarAppIcon: { width: '100%', height: '100%', borderRadius: 8 },
@@ -1052,14 +1114,18 @@ const styles = StyleSheet.create({
   profileAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#34d399' },
   profileAvatarImg: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: '#34d399' },
   profileAvatarText: { color: '#34d399', fontSize: 13, fontWeight: '800' },
-  companyCardPill: { marginHorizontal: 16, marginTop: 10, backgroundColor: '#ffffff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' },
-  companyLogoBox: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#f0fdf4', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  orgLogoImg: { width: 32, height: 32 },
+  companyCardPill: { marginHorizontal: 14, marginTop: 2, backgroundColor: '#ffffff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' },
+  companyLogoBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#f0fdf4', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  orgLogoImg: { width: 28, height: 28 },
   companyNameText: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   chevronPill: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
-  companySubText: { fontSize: 11, color: '#64748b', fontWeight: '500', marginTop: 2 },
+  companySubText: { fontSize: 10.5, color: '#64748b', fontWeight: '500', marginTop: 1 },
   bodyScroll: { flex: 1, backgroundColor: BG_COLOR },
-  scrollContent: { padding: 16 },
+  scrollContent: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 16 },
+  empMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  distPill: { backgroundColor: '#ecfdf5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: '#a7f3d0' },
+  distPillText: { fontSize: 10, fontWeight: '800', color: '#059669' },
+  rosterRightClick: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f9ff', justifyContent: 'center', alignItems: 'center' },
   sectionCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 16, marginBottom: 16 },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   cardSectionTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
@@ -1154,31 +1220,33 @@ const styles = StyleSheet.create({
   tabBarLabelActive: { color: '#059669', fontWeight: '800' },
   activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#059669', marginTop: 2 },
 
-  /* SIDE DRAWER MODAL STYLES */
-  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', flexDirection: 'row' },
+  /* SIDE DRAWER MODAL STYLES (UI/UX PRO MAX PREMIUM LIGHT THEME) */
+  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', flexDirection: 'row' },
   drawerDismissArea: { flex: 1 },
-  drawerContainer: { width: width * 0.82, backgroundColor: '#0f172a', height: '100%', borderTopRightRadius: 28, borderBottomRightRadius: 28 },
-  drawerHeader: { padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
+  drawerContainer: { width: width * 0.82, backgroundColor: '#ffffff', height: '100%', borderTopRightRadius: 28, borderBottomRightRadius: 28 },
+  drawerHeader: { overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  drawerHeaderGradient: { padding: 20, paddingTop: Platform.OS === 'ios' ? 12 : 20 },
   drawerBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  drawerLogoImg: { width: 38, height: 38, borderRadius: 10 },
+  drawerLogoImg: { width: 40, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' },
   drawerBrandTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
-  drawerBrandSub: { color: '#34d399', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1e293b', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
+  drawerSubBadge: { backgroundColor: '#d1fae5', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 2 },
+  drawerBrandSub: { color: '#065f46', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ffffff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', elevation: 2 },
   drawerUserAvatar: { width: 44, height: 44, borderRadius: 22 },
-  drawerUserAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
-  drawerUserAvatarText: { color: '#34d399', fontSize: 15, fontWeight: '800' },
-  drawerUserName: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-  drawerUserEmail: { color: '#94a3b8', fontSize: 11, marginTop: 1 },
+  drawerUserAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#ecfdf5', justifyContent: 'center', alignItems: 'center' },
+  drawerUserAvatarText: { color: '#059669', fontSize: 15, fontWeight: '800' },
+  drawerUserName: { color: '#0f172a', fontSize: 14, fontWeight: '800' },
+  drawerUserEmail: { color: '#64748b', fontSize: 11, marginTop: 1 },
   drawerBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  drawerOrgText: { color: '#34d399', fontSize: 10, fontWeight: '700' },
-  drawerMenuSectionHeader: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 12 },
-  drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
-  drawerMenuItemActive: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderLeftWidth: 3, borderLeftColor: '#10b981' },
-  drawerMenuText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
-  drawerMenuTextActive: { color: '#34d399', fontWeight: '800' },
-  drawerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
-  drawerLogoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(244, 63, 94, 0.15)', paddingVertical: 12, borderRadius: 12 },
-  drawerLogoutText: { color: '#f43f5e', fontSize: 13, fontWeight: '800' },
+  drawerOrgText: { color: '#059669', fontSize: 10, fontWeight: '700' },
+  drawerMenuSectionHeader: { color: '#64748b', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 12 },
+  drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 14, marginBottom: 6, backgroundColor: '#ffffff' },
+  drawerMenuItemActive: { backgroundColor: '#ecfdf5', borderLeftWidth: 4, borderLeftColor: '#059669' },
+  drawerMenuText: { color: '#1e293b', fontSize: 13, fontWeight: '700' },
+  drawerMenuTextActive: { color: '#059669', fontWeight: '800' },
+  drawerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9', backgroundColor: '#ffffff' },
+  drawerLogoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', paddingVertical: 13, borderRadius: 14 },
+  drawerLogoutText: { color: '#dc2626', fontSize: 13, fontWeight: '800' },
 
   /* PROFILE SHEET & FORM MODAL STYLES */
   profileModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
@@ -1221,4 +1289,47 @@ const styles = StyleSheet.create({
   formInputText: { backgroundColor: '#f8fafc', borderRadius: 14, paddingHorizontal: 14, height: 48, color: '#0f172a', fontSize: 14, borderWidth: 1, borderColor: '#cbd5e1' },
   submitFormBtn: { backgroundColor: '#074e26', borderRadius: 14, height: 50, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
   submitFormBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+
+  /* CLIENT VISIT RECORDS STYLES */
+  visitKpiRow: { flexDirection: 'row', gap: 8, marginVertical: 12 },
+  visitKpiCard: { flex: 1, borderRadius: 14, padding: 10, borderWidth: 1, alignItems: 'center' },
+  visitKpiNum: { fontSize: 16, fontWeight: '900' },
+  visitKpiLabel: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  visitCardItem: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  visitMainCol: { gap: 6 },
+  visitTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  visitUserPill: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  miniAvatarFallback: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#0284c7', justifyContent: 'center', alignItems: 'center' },
+  miniAvatarText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
+  visitEmpName: { fontSize: 12, fontWeight: '800', color: '#0f172a' },
+  visitStatusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  visitStatusText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  clientNameText: { fontSize: 14, fontWeight: '800', color: '#0f172a', marginTop: 2 },
+  visitLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  visitLocText: { fontSize: 11, color: '#64748b', flex: 1 },
+  visitFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  visitTimePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  visitTimeText: { fontSize: 10, color: '#475569', fontWeight: '700' },
+  dealPill: { backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' },
+  dealPillText: { fontSize: 10, fontWeight: '800', color: '#16a34a' },
+  visitModalSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, shadowColor: '#0f172a', shadowOpacity: 0.15, shadowRadius: 20, elevation: 20 },
+  modalTitleText: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
+  visitModalBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalEmpBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  modalEmpText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  modalInfoCard: { backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#e2e8f0' },
+  modalClientName: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
+  modalCompanyName: { fontSize: 13, color: '#64748b', fontWeight: '600', marginTop: 2 },
+  modalPhoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  modalPhoneText: { fontSize: 13, fontWeight: '700', color: '#0284c7' },
+  modalAddrRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  modalAddrText: { fontSize: 12, color: '#475569', flex: 1 },
+  modalNotesBlock: { backgroundColor: '#fffbebf', borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#fde68a' },
+  modalNotesTitle: { fontSize: 11, fontWeight: '800', color: '#b45309', marginBottom: 4 },
+  modalNotesBody: { fontSize: 12, color: '#78350f', lineHeight: 18 },
+  modalDealCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0fdf4', borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#bbf7d0' },
+  modalDealTitle: { fontSize: 10, fontWeight: '700', color: '#15803d' },
+  modalDealAmount: { fontSize: 16, fontWeight: '900', color: '#16a34a' },
+  modalMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  modalMetaText: { fontSize: 11, color: '#94a3b8' },
 });

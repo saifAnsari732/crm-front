@@ -9,12 +9,15 @@
         "buildType": "apk"
       }
     },
+    "production-apk": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
-      "distribution": "store",
       "android": {
         "buildType": "app-bundle"
-      },
-      "credentialsSource": "local"
+      }
     }
   }
 }

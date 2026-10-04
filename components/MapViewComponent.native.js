@@ -24,25 +24,40 @@ const MapViewComponent = forwardRef(({
         const lat = parseFloat(emp.lat);
         const lng = parseFloat(emp.lng);
         if (isNaN(lat) || isNaN(lng)) return null;
-        const statusColor = emp.statusColor || (emp.isTracking ? '#16a34a' : '#94a3b8');
+        const isLive = emp.isTracking || emp.status === 'ON_FIELD';
+        const statusColor = emp.statusColor || (isLive ? '#10b981' : '#64748b');
+        const kmVal = parseFloat(emp.totalDistance || 0).toFixed(1);
+        const firstName = (emp.name || 'Agent').trim().split(' ')[0];
 
         return (
           <Marker
             key={emp._id || idx}
             coordinate={{ latitude: lat, longitude: lng }}
             title={emp.name}
-            description={`${(emp.totalDistance || 0).toFixed(2)} km - ${emp.address}`}
+            description={`${kmVal} km • ${emp.address}`}
             onPress={() => onSelectEmployee && onSelectEmployee(emp)}
           >
-            <View style={styles.markerContainer}>
-              {getAvatarUrl(emp.avatar) ? (
-                <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={[styles.markerAvatar, { borderColor: statusColor }]} />
-              ) : (
-                <View style={[styles.markerAvatarPlaceholder, { borderColor: statusColor }]}>
-                  <Text style={styles.markerText}>{(emp.name || 'E').charAt(0)}</Text>
-                </View>
-              )}
-              <View style={[styles.markerStatusDot, { backgroundColor: statusColor }]} />
+            <View style={styles.markerCard}>
+              {/* Top Name & KM Badge Pill */}
+              <View style={[styles.namePill, { backgroundColor: isLive ? '#074e26' : '#1e293b' }]}>
+                <View style={[styles.livePulseDot, { backgroundColor: statusColor }]} />
+                <Text style={styles.namePillText} numberOfLines={1}>{firstName}</Text>
+                <Text style={styles.kmBadgeText}>{kmVal}km</Text>
+              </View>
+
+              {/* Circular Avatar Pin */}
+              <View style={[styles.avatarCircleWrap, { borderColor: statusColor }]}>
+                {getAvatarUrl(emp.avatar) ? (
+                  <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={styles.markerAvatar} />
+                ) : (
+                  <View style={[styles.avatarPlaceholder, { backgroundColor: isLive ? '#059669' : '#475569' }]}>
+                    <Text style={styles.avatarText}>{(emp.name || 'E').charAt(0).toUpperCase()}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Pin Pointer Arrow */}
+              <View style={[styles.pinArrow, { borderTopColor: statusColor }]} />
             </View>
           </Marker>
         );
@@ -50,8 +65,8 @@ const MapViewComponent = forwardRef(({
 
       {routeCoords && routeCoords.length > 1 && (
         <>
-          <Polyline coordinates={routeCoords} strokeColor="#ffffff" strokeOpacity={0.8} strokeWidth={6} lineCap="round" lineJoin="round" geodesic />
-          <Polyline coordinates={routeCoords} strokeColor="#2563eb" strokeOpacity={1} strokeWidth={3} lineCap="round" lineJoin="round" geodesic />
+          <Polyline coordinates={routeCoords} strokeColor="#ffffff" strokeOpacity={0.9} strokeWidth={6} lineCap="round" lineJoin="round" geodesic />
+          <Polyline coordinates={routeCoords} strokeColor="#059669" strokeOpacity={1} strokeWidth={3.5} lineCap="round" lineJoin="round" geodesic />
         </>
       )}
     </MapView>
@@ -59,11 +74,53 @@ const MapViewComponent = forwardRef(({
 });
 
 const styles = StyleSheet.create({
-  markerContainer: { alignItems: 'center', justifyContent: 'center' },
-  markerAvatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#16a34a' },
-  markerAvatarPlaceholder: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#0a3d3c', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  markerText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  markerStatusDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', bottom: -2, right: -2, borderWidth: 1, borderColor: '#fff' },
+  markerCard: { alignItems: 'center', justifyContent: 'center' },
+  namePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginBottom: 2,
+    elevation: 5,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  livePulseDot: { width: 6, height: 6, borderRadius: 3 },
+  namePillText: { color: '#ffffff', fontSize: 10, fontWeight: '800', maxWidth: 80 },
+  kmBadgeText: { color: '#a7f3d0', fontSize: 9, fontWeight: '800' },
+  avatarCircleWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2.5,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  markerAvatar: { width: 33, height: 33, borderRadius: 16.5 },
+  avatarPlaceholder: { width: 33, height: 33, borderRadius: 16.5, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#ffffff', fontWeight: '800', fontSize: 13 },
+  pinArrow: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    marginTop: -1,
+  },
 });
 
 export default MapViewComponent;

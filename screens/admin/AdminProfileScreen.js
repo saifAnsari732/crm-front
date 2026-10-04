@@ -77,7 +77,11 @@ export default function AdminProfileScreen() {
           const imageUrl = uploadRes.data.url;
           
           // 2. Update user profile
-          const updateRes = await authAPI.updateProfile({ avatar: imageUrl });
+          const isManagerUser = (user?.role || '').toUpperCase() === 'MANAGER';
+          const updateRes = await authAPI.updateProfile({ 
+            ...(isManagerUser ? { managerPro_pic: imageUrl } : { emp_profile_pic: imageUrl }),
+            avatar: imageUrl 
+          });
           if (updateRes.data && updateRes.data.success) {
             await updateUser(updateRes.data.user);
             Alert.alert('Success', 'Profile picture updated successfully!');
