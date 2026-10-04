@@ -256,8 +256,9 @@ const processLocation = async (location) => {
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
     updateMotionState(Number.isFinite(speed) ? speed : 0);
     
-    const lastLocationStr = await storage.getItem('last_recorded_location');
+    let lastLocation = null;
     let calculatedDistKm = 0;
+    const lastLocationStr = await storage.getItem('last_recorded_location');
     if (lastLocationStr) {
       try {
         lastLocation = JSON.parse(lastLocationStr);
@@ -314,15 +315,26 @@ const processLocation = async (location) => {
       `Acc:${(accuracy || 0).toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
 
-    // Function to atomically update local distance & location checkpoint ONLY after persistence
+    // Atomic Local Checkpoint Transaction — written ONLY AFTER server ACK or queue write
     const commitLocalCheckpoint = async (distToAdd) => {
       try {
         const prevDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        const nextDist = prevDist + distToAdd;
-        await storage.setItem('tracking_accumulated_distance', nextDist.toFixed(4));
-        await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+        const nextDist = (prevDist + distToAdd).toFixed(4);
+        const checkpointData = {
+          sessionId,
+          accumulatedDistance: nextDist,
+          lastRecordedLocation: newCoord,
+          updatedAt: new Date().toISOString()
+        };
+        await Promise.all([
+          storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
+          storage.setItem('tracking_accumulated_distance', nextDist),
+          storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }))
+        ]);
+        return true;
       } catch (chkErr) {
-        console.error('📍 BackgroundTask: Failed to commit local checkpoint:', chkErr);
+        console.error('📍 BackgroundTask: Critical atomic checkpoint write failure:', chkErr);
+        return false;
       }
     };
 
@@ -349,16 +361,26 @@ const processLocation = async (location) => {
         const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
         const authoritativeDist = Number.isFinite(serverToday) ? serverToday : serverDist;
-        if (Number.isFinite(authoritativeDist)) {
-          const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-          await storage.setItem(
-            'tracking_accumulated_distance',
-            Math.max(localDist, authoritativeDist).toFixed(4)
-          );
-        }
-        await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+        const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+        const finalDist = Number.isFinite(authoritativeDist)
+          ? Math.max(localDist, authoritativeDist).toFixed(4)
+          : localDist.toFixed(4);
+
+        const checkpointData = {
+          sessionId,
+          accumulatedDistance: finalDist,
+          lastRecordedLocation: newCoord,
+          updatedAt: new Date().toISOString()
+        };
+
+        await Promise.all([
+          storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
+          storage.setItem('tracking_accumulated_distance', finalDist),
+          storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }))
+        ]);
+
         uploadedToServer = true;
-        console.log(`📍 BackgroundTask: Server synced. Day Total: ${(response.data.totalDistanceToday ?? response.data.totalDistance)?.toFixed(2)} km`);
+        console.log(`📍 BackgroundTask: Server synced. Day Total: ${finalDist} km`);
 
         flushOfflineQueue().catch(() => {});
       }
