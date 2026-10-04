@@ -1,6 +1,7 @@
 import { storage } from '../services/storage';
 import axios from 'axios';
 import { BASE_URL } from '../services/api';
+import { flushOfflineQueue } from '../services/offlineSync';
 
 const QUEUE_KEY = 'offline_request_queue';
 
@@ -28,8 +29,7 @@ class OfflineQueue {
       await storage.setItem(QUEUE_KEY, JSON.stringify(queue));
       console.log(`📦 OfflineQueue: Cached request [${method}] to ${endpoint}. Queue size: ${queue.length}`);
       
-      // Setup network listener if not running
-      this.startHealthCheckLoop();
+      this.flush();
       return true;
     } catch (e) {
       console.error('📦 OfflineQueue: Failed to enqueue:', e);
@@ -61,7 +61,6 @@ class OfflineQueue {
    */
   async isOnline() {
     try {
-      // 5-second timeout to prevent stalling
       const response = await axios.get(`${BASE_URL}/health`, { timeout: 3000 });
       return response.status === 200 && response.data?.status === 'OK';
     } catch {
@@ -70,92 +69,14 @@ class OfflineQueue {
   }
 
   /**
-   * Flush the cached requests to the server in FIFO order
+   * Flush queue using unified offlineSync engine
    */
   async flush() {
-    if (this.isFlushing) return;
-    
-    const queue = await this.getQueue();
-    if (queue.length === 0) {
-      this.stopHealthCheckLoop();
-      return;
-    }
-
-    this.isFlushing = true;
-    console.log(`📦 OfflineQueue: Flushing ${queue.length} cached requests...`);
-
-    const token = await storage.getItem('userToken');
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    const remainingQueue = [...queue];
-
-    for (const req of queue) {
-      try {
-        console.log(`📦 OfflineQueue: Processing [${req.method}] to ${req.endpoint}...`);
-        await axios({
-          url: `${BASE_URL}${req.endpoint}`,
-          method: req.method,
-          data: req.data,
-          headers,
-          timeout: 8000,
-        });
-
-        // Success: remove from local memory queue
-        const index = remainingQueue.findIndex(item => item.id === req.id);
-        if (index > -1) remainingQueue.splice(index, 1);
-        
-        // Save incremental progress in case network drops again
-        await storage.setItem(QUEUE_KEY, JSON.stringify(remainingQueue));
-        console.log(`📦 OfflineQueue: Synchronized request ${req.id} successfully!`);
-      } catch (err) {
-        console.error(`📦 OfflineQueue: Synchronization failed for request ${req.id}:`, err.message);
-        
-        // If it's a server error (e.g. 400 Bad Request, invalid payload), drop it to avoid blocking queue
-        if (err.response && err.response.status >= 400 && err.response.status < 500) {
-          console.log(`📦 OfflineQueue: Drop invalid request due to client error (${err.response.status})`);
-          const index = remainingQueue.findIndex(item => item.id === req.id);
-          if (index > -1) remainingQueue.splice(index, 1);
-          await storage.setItem(QUEUE_KEY, JSON.stringify(remainingQueue));
-        } else {
-          // It's a connection drop. Break and retry later
-          break;
-        }
-      }
-    }
-
-    this.isFlushing = false;
-    
-    if (remainingQueue.length === 0) {
-      console.log('📦 OfflineQueue: All queued requests successfully synchronized!');
-      this.stopHealthCheckLoop();
-    } else {
-      console.log(`📦 OfflineQueue: Sync incomplete. ${remainingQueue.length} requests left in cache.`);
-    }
+    return flushOfflineQueue();
   }
 
-  /**
-   * Start a health checker loop to ping the server when offline items exist
-   */
-  startHealthCheckLoop() {
-    if (this.healthInterval) return;
-
-    console.log('📦 OfflineQueue: Starting connection watchdog loop...');
-    this.healthInterval = setInterval(async () => {
-      const online = await this.isOnline();
-      if (online) {
-        console.log('📦 OfflineQueue: Watchdog detected restored connection. Triggering sync.');
-        this.flush();
-      }
-    }, 15000); // Check every 15 seconds
-  }
-
-  stopHealthCheckLoop() {
-    if (this.healthInterval) {
-      console.log('📦 OfflineQueue: watch dog stopped.');
-      clearInterval(this.healthInterval);
-      this.healthInterval = null;
-    }
-  }
+  startHealthCheckLoop() {}
+  stopHealthCheckLoop() {}
 }
 
 export const offlineQueue = new OfflineQueue();

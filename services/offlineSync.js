@@ -46,28 +46,28 @@ export function haversineKm(lat1, lon1, lat2, lon2) {
 
 // ─── Add coordinate to offline queue ────────────────────────────────────────
 export async function enqueueCoordinate(sessionId, coord, prevCoord) {
-  return withQueueLock(async () => { try {
-    // 1. Add to upload queue
-    const queueStr = await storage.getItem(QUEUE_KEY);
-    const queue = queueStr ? JSON.parse(queueStr) : [];
+  return withQueueLock(async () => { 
+    try {
+      // 1. Add to upload queue
+      const queueStr = await storage.getItem(QUEUE_KEY);
+      const queue = queueStr ? JSON.parse(queueStr) : [];
 
-    queue.push({
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-      endpoint: '/tracking/update',
-      method: 'POST',
-      data: { sessionId, coordinates: [coord] },
-      timestamp: new Date().toISOString(),
-    });
+      queue.push({
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+        endpoint: '/tracking/update',
+        method: 'POST',
+        data: { sessionId, coordinates: [coord] },
+        timestamp: new Date().toISOString(),
+      });
 
-    await storage.setItem(QUEUE_KEY, JSON.stringify(queue));
-
-    // Local distance is already checkpointed at the moment the GPS fix is accepted.
-    // We intentionally do not add it here again; otherwise the same movement gets
-    // counted twice when the queued point is retried or flushed later.
-    console.log(`📦 OfflineSync: Queued coordinate. Queue size: ${queue.length}`);
-  } catch (e) {
-    console.error('📦 OfflineSync: Failed to enqueue coordinate:', e);
-  } });
+      await storage.setItem(QUEUE_KEY, JSON.stringify(queue));
+      console.log(`📦 OfflineSync: Queued coordinate. Queue size: ${queue.length}`);
+      return true;
+    } catch (e) {
+      console.error('📦 OfflineSync: Critical failure enqueuing coordinate:', e);
+      return false;
+    } 
+  });
 }
 
 export async function enqueueStop(sessionId, endTime) {

@@ -257,8 +257,7 @@ const processLocation = async (location) => {
     updateMotionState(Number.isFinite(speed) ? speed : 0);
     
     const lastLocationStr = await storage.getItem('last_recorded_location');
-    let lastLocation = null;
-
+    let calculatedDistKm = 0;
     if (lastLocationStr) {
       try {
         lastLocation = JSON.parse(lastLocationStr);
@@ -286,11 +285,7 @@ const processLocation = async (location) => {
           return;
         }
 
-        // Persist the accepted local checkpoint (crash-safe — written BEFORE network)
-        const prevDist   = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        const nextDist   = prevDist + distKm;
-        await storage.setItem('tracking_accumulated_distance', nextDist.toFixed(4));
-
+        calculatedDistKm = distKm;
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
       }
@@ -310,9 +305,6 @@ const processLocation = async (location) => {
       motionState: _currentMotionState,
     };
 
-    // Update last recorded location IMMEDIATELY so next tick has correct reference
-    await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
-
     // Schedule no-movement watchdog notification (throttled to every 5 min)
     await scheduleNoMovementNotification(sessionId);
 
@@ -322,10 +314,23 @@ const processLocation = async (location) => {
       `Acc:${(accuracy || 0).toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
 
+    // Function to atomically update local distance & location checkpoint ONLY after persistence
+    const commitLocalCheckpoint = async (distToAdd) => {
+      try {
+        const prevDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+        const nextDist = prevDist + distToAdd;
+        await storage.setItem('tracking_accumulated_distance', nextDist.toFixed(4));
+        await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+      } catch (chkErr) {
+        console.error('📍 BackgroundTask: Failed to commit local checkpoint:', chkErr);
+      }
+    };
+
     // ── Try uploading to server ───────────────────────────────────────────────
     const token = await storage.getItem('userToken');
     if (!token) {
-      await enqueueCoordinate(sessionId, newCoord, lastLocation);
+      const enqueued = await enqueueCoordinate(sessionId, newCoord, lastLocation);
+      if (enqueued) await commitLocalCheckpoint(calculatedDistKm);
       return;
     }
 
@@ -341,22 +346,20 @@ const processLocation = async (location) => {
       );
 
       if (response.data?.success) {
-        // Server total today is authoritative — sync local cache to cumulative day value
         const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
         const authoritativeDist = Number.isFinite(serverToday) ? serverToday : serverDist;
         if (Number.isFinite(authoritativeDist)) {
           const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-          // Never lower local cache below what server confirmed
           await storage.setItem(
             'tracking_accumulated_distance',
             Math.max(localDist, authoritativeDist).toFixed(4)
           );
         }
+        await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
         uploadedToServer = true;
         console.log(`📍 BackgroundTask: Server synced. Day Total: ${(response.data.totalDistanceToday ?? response.data.totalDistance)?.toFixed(2)} km`);
 
-        // Also flush any queued offline items now that we have connectivity
         flushOfflineQueue().catch(() => {});
       }
     } catch (apiErr) {
@@ -364,7 +367,8 @@ const processLocation = async (location) => {
     }
 
     if (!uploadedToServer) {
-      await enqueueCoordinate(sessionId, newCoord, lastLocation);
+      const enqueued = await enqueueCoordinate(sessionId, newCoord, lastLocation);
+      if (enqueued) await commitLocalCheckpoint(calculatedDistKm);
     }
 
   } catch (e) {
