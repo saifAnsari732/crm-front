@@ -1488,12 +1488,12 @@ const styles = StyleSheet.create({
   actionIconCircle: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   actionPillLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, fontFamily: FONT },
 
-  // 2x2 Metrics Cards
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
-  metricCard: { width: (width - 38) / 2, backgroundColor: COLORS.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: COLORS.border },
+  // 2x2 Metrics Cards (Fluid 2-Column Grid for Mobile & Web)
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginBottom: 14 },
+  metricCard: { width: '48.5%', backgroundColor: COLORS.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: COLORS.border },
   metricCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   metricIconBox: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  metricLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '700', fontFamily: FONT },
+  metricLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '700', fontFamily: FONT },
   metricVal: { fontSize: 20, fontWeight: '800', color: COLORS.text, fontFamily: FONT, marginTop: 4 },
   percentTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   percentText: { fontSize: 10, fontWeight: '800' },

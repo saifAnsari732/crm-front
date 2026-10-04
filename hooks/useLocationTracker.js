@@ -76,73 +76,54 @@ export default function useLocationTracker() {
   const checkActiveSession = async () => {
     try {
       const activeSession = await storage.getItem('currentTrackingSessionId');
+      if (!activeSession) {
+        setIsTracking(false);
+        return;
+      }
+
       if (Platform.OS === 'web') {
-        setIsTracking(!!activeSession);
+        setIsTracking(true);
         return;
       }
       
-      let serverSessionActive = true;
+      // Best-effort server sync & heartbeat ping
       try {
-        if (activeSession) {
-          // Heartbeat first: the server re-opens a same-day shift it auto-closed,
-          // so the employee is not forced to punch in again and no KM is lost.
-          await sendHeartbeatNow(true);
-          startHeartbeat(activeSession);
-        }
-        const response = await trackingApi.getTodaySessions();
-        const serverSession = response.data?.sessions?.find((session) => session.sessionId === activeSession);
-        const queueSize = await getQueueSize();
-        if (serverSession && serverSession.isActive === false && !serverSession.autoClosed) {
-          if (queueSize > 0) {
-            console.log('📦 useLocationTracker: Server session inactive but offline queue has items. Triggering flush.');
-            flushOfflineQueue().catch(() => {});
-          } else {
-            serverSessionActive = false;
-            await storage.removeItem('currentTrackingSessionId');
-            await storage.removeItem('trackingStartTime');
-            await storage.removeItem('tracking_accumulated_distance');
-            await storage.removeItem('last_recorded_location');
-            await cancelNoMovementNotification();
-          }
-        } else if (serverSession && serverSession.isActive) {
-          serverSessionActive = true;
-        }
+        await sendHeartbeatNow(true);
+        startHeartbeat(activeSession);
+        flushOfflineQueue().catch(() => {});
       } catch (serverError) {
-        console.log('📍 useLocationTracker: Server session check deferred:', serverError.message);
+        console.log('📍 useLocationTracker: Server session sync deferred:', serverError.message);
       }
 
       if (isExpoGo) {
-        setIsTracking(!!activeSession && serverSessionActive);
+        setIsTracking(true);
         return;
       }
 
+      // Auto-recover background location task if OS killed it
       const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-      if (activeSession && serverSessionActive) {
-        if (!isTaskRegistered && Platform.OS !== 'web' && !isExpoGo) {
-          try {
-            console.log('📍 useLocationTracker: Active session found but OS task died. Auto-recovering background GPS task...');
-            await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
-              accuracy: Location.Accuracy.High,
-              timeInterval: 10000,
-              distanceInterval: 10,
-              foregroundService: {
-                notificationTitle: '🟢 Shift Active — Tracking ON',
-                notificationBody: 'Tap to open app. Tracking continues in background.',
-                notificationColor: '#0a3d3c',
-                killServiceOnDestroy: false,
-              },
-              showsBackgroundLocationIndicator: true,
-              pausesUpdatesAutomatically: false,
-            });
-            console.log('📍 useLocationTracker: Background GPS task auto-recovered ✅');
-          } catch (recoverErr) {
-            console.log('⚠️ useLocationTracker: Auto-recovery of location task failed:', recoverErr.message);
-          }
+      if (!isTaskRegistered && Platform.OS !== 'web' && !isExpoGo) {
+        try {
+          console.log('📍 useLocationTracker: Active session found in storage but OS task died. Auto-recovering background GPS task...');
+          await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 10000,
+            distanceInterval: 10,
+            foregroundService: {
+              notificationTitle: '🟢 Shift Active — Tracking ON',
+              notificationBody: 'Tap to open app. Tracking continues in background.',
+              notificationColor: '#0a3d3c',
+              killServiceOnDestroy: false,
+            },
+            showsBackgroundLocationIndicator: true,
+            pausesUpdatesAutomatically: false,
+          });
+          console.log('📍 useLocationTracker: Background GPS task auto-recovered ✅');
+        } catch (recoverErr) {
+          console.log('⚠️ useLocationTracker: Auto-recovery of location task failed:', recoverErr.message);
         }
-        setIsTracking(true);
-      } else {
-        setIsTracking(false);
       }
+      setIsTracking(true);
     } catch (e) {
       console.error('📍 useLocationTracker: Session check failed:', e);
     }
