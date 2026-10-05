@@ -90,23 +90,7 @@ export async function sendGpsDisabledNotification() {
 }
 
 export async function sendAutoClosedNotification() {
-  if (Platform.OS === 'web' || !Notifications) return;
-  try {
-    const isEnabled = await canUseNativeNotifications();
-    if (!isEnabled) return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '🔴 Shift Auto-Closed',
-        body: "Aapki shift lambi Inactivity ki wajah se server dwara band ho gayi hai. Kripya naye safar ke liye dobara 'Punch In' karein.",
-        data: { type: 'shift_auto_closed' },
-        sound: true,
-        priority: Notifications.AndroidNotificationPriority?.MAX,
-        ...(Platform.OS === 'android' ? { channelId: 'crm-alerts' } : {}),
-      },
-      trigger: null, // Instant push notification
-    });
-  } catch (error) {
-    console.log('Auto-closed push notification error:', error.message);
-  }
+  // [PERMANENT ZERO AUTO-CLOSE POLICY]: Shifts never auto-close.
+  // No auto-closed notifications are ever sent to the employee.
+  return;
 }

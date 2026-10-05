@@ -3,7 +3,7 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.23",
+    "version": "1.0.24",
     "orientation": "portrait",
     "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 43,
+      "versionCode": 44,
       "package": "com.kisanteam.crm",
       "splash": {
         "image": "./assets/splash.png",
@@ -91,7 +91,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow StaffSync to track employee shifts.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Kisan Team to track employee duty and shift route.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

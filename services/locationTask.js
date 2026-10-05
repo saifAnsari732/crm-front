@@ -189,10 +189,7 @@ export async function sendHeartbeatNow(force = false) {
     if (!force && Date.now() - last < HEARTBEAT_INTERVAL_MS - 15000) return;
     await storage.setItem('last_heartbeat_ts', String(Date.now()));
     const response = await trackingAPI.heartbeat({ sessionId });
-    if (response.data?.sessionClosed) {
-      console.log('💓 Heartbeat: session closed by server. Saving state for recovery.');
-      await storage.setItem('tracking_session_closed_by_server', 'true');
-    } else {
+    if (response.data?.success) {
       console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
     }
   } catch (_) {
@@ -201,11 +198,11 @@ export async function sendHeartbeatNow(force = false) {
 }
 
 function startHeartbeat(sessionId) {
-  stopHeartbeat();
+  if (_heartbeatTimer) return; // Keep existing timer active, don't restart or force-ping repeatedly
   _heartbeatTimer = setInterval(() => {
-    sendHeartbeatNow();
+    sendHeartbeatNow(false);
   }, HEARTBEAT_INTERVAL_MS);
-  sendHeartbeatNow(true);
+  sendHeartbeatNow(false);
 }
 
 function stopHeartbeat() {

@@ -52,7 +52,7 @@ export default function useLocationTracker() {
   const [permissionStatus, setPermissionStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Sync active tracking state from secure storage upon hook initialization
+  // Sync active tracking state and launch Immortal Background Watchdog
   useEffect(() => {
     checkActiveSession();
     
@@ -66,37 +66,50 @@ export default function useLocationTracker() {
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') checkActiveSession();
     });
+
+    // ─── IMMORTAL TRACKING WATCHDOG (Fires every 25s) ──────────────────────
+    // If Android OS or Chinese OEM task-killer terminates the GPS background service,
+    // this watchdog automatically resurrects the task immediately.
+    const watchdogInterval = setInterval(() => {
+      checkActiveSession();
+    }, 25000);
     
     return () => {
       subscription.remove();
       appStateSubscription.remove();
+      clearInterval(watchdogInterval);
     };
   }, []);
 
   const checkActiveSession = async () => {
     try {
-      const wasClosed = await storage.getItem('tracking_session_closed_by_server');
-      if (wasClosed === 'true') {
-        await storage.removeItem('tracking_session_closed_by_server');
-        await storage.removeItem('currentTrackingSessionId');
-        await storage.removeItem('trackingStartTime');
-        await storage.removeItem('tracking_accumulated_distance');
-        await storage.removeItem('tracking_accumulated_session_id');
-        await storage.removeItem('last_recorded_location');
-        if (Platform.OS !== 'web' && !isExpoGo) {
-          try {
-            const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-            if (isTaskRegistered) {
-              await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
+      let activeSession = await storage.getItem('currentTrackingSessionId');
+
+      // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
+      // If local storage was cleared or phone rebooted, verify with server if today's shift is active
+      if (!activeSession && Platform.OS !== 'web') {
+        try {
+          const userToken = await storage.getItem('userToken');
+          if (userToken) {
+            const todayRes = await trackingApi.getTodaySessions();
+            if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
+              const liveTodaySession = todayRes.data.sessions.find((s) => s.isActive === true);
+              if (liveTodaySession && liveTodaySession.sessionId) {
+                console.log('🛡️ [AUTO_HEAL] Active shift found on server. Auto-starting local tracking:', liveTodaySession.sessionId);
+                await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
+                await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
+                await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
+                const serverDist = (Number(liveTodaySession.totalDistance) || 0).toFixed(2);
+                await storage.setItem('tracking_accumulated_distance', serverDist);
+                activeSession = liveTodaySession.sessionId;
+              }
             }
-          } catch {}
+          }
+        } catch (healErr) {
+          // Best-effort auto-heal
         }
-        setIsTracking(false);
-        DeviceEventEmitter.emit('TrackingStateChanged', false);
-        return;
       }
 
-      const activeSession = await storage.getItem('currentTrackingSessionId');
       if (!activeSession) {
         setIsTracking(false);
         return;
@@ -109,7 +122,7 @@ export default function useLocationTracker() {
       
       // Best-effort server sync & heartbeat ping
       try {
-        await sendHeartbeatNow(true);
+        await sendHeartbeatNow(false);
         startHeartbeat(activeSession);
         flushOfflineQueue().catch(() => {});
       } catch (serverError) {
@@ -125,23 +138,23 @@ export default function useLocationTracker() {
       const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
       if (!isTaskRegistered && Platform.OS !== 'web' && !isExpoGo) {
         try {
-          console.log('📍 useLocationTracker: Active session found in storage but OS task died. Auto-recovering background GPS task...');
+          console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
           await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
             accuracy: Location.Accuracy.High,
             timeInterval: 10000,
             distanceInterval: 10,
             foregroundService: {
-              notificationTitle: '🟢 Shift Active — Tracking ON',
-              notificationBody: 'Tap to open app. Tracking continues in background.',
+              notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
+              notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
               notificationColor: '#0a3d3c',
               killServiceOnDestroy: false,
             },
             showsBackgroundLocationIndicator: true,
             pausesUpdatesAutomatically: false,
           });
-          console.log('📍 useLocationTracker: Background GPS task auto-recovered ✅');
+          console.log('🛡️ [IMMORTAL_WATCHDOG] Background GPS task resurrected successfully! ✅');
         } catch (recoverErr) {
-          console.log('⚠️ useLocationTracker: Auto-recovery of location task failed:', recoverErr.message);
+          console.log('⚠️ [IMMORTAL_WATCHDOG] Auto-recovery of location task failed:', recoverErr.message);
         }
       }
       setIsTracking(true);
@@ -450,8 +463,8 @@ export default function useLocationTracker() {
             // This is what allows GPS to continue running after the USER swipes the app away.
             // Android requires a visible persistent notification for this — Uber, Ola, Rapido all do this.
             foregroundService: {
-              notificationTitle: '🟢 Shift Active — Tracking ON',
-              notificationBody: 'Tap to open app. Tracking continues in background.',
+              notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
+              notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
               notificationColor: '#0a3d3c',
               killServiceOnDestroy: false, // ← KEY: keeps the service alive even after app swipe
             },
@@ -470,7 +483,15 @@ export default function useLocationTracker() {
           });
           console.log('📍 useLocationTracker: Background GPS task started ✅ (survives app kill)');
         } catch (taskErr) {
-          console.log('⚠️ useLocationTracker: Background TaskManager registration failed:', taskErr.message);
+          console.error('⚠️ useLocationTracker: Background TaskManager registration failed:', taskErr.message);
+          // Clean up local session storage to avoid broken half-state
+          await storage.removeItem('currentTrackingSessionId');
+          await storage.removeItem('tracking_accumulated_session_id');
+          await storage.removeItem('trackingStartTime');
+          return { 
+            success: false, 
+            error: 'Background GPS service start failed. Please ensure location permission is set to "Allow all the time" in Phone Settings.' 
+          };
         }
       }
 
