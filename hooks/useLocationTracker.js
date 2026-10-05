@@ -75,6 +75,27 @@ export default function useLocationTracker() {
 
   const checkActiveSession = async () => {
     try {
+      const wasClosed = await storage.getItem('tracking_session_closed_by_server');
+      if (wasClosed === 'true') {
+        await storage.removeItem('tracking_session_closed_by_server');
+        await storage.removeItem('currentTrackingSessionId');
+        await storage.removeItem('trackingStartTime');
+        await storage.removeItem('tracking_accumulated_distance');
+        await storage.removeItem('tracking_accumulated_session_id');
+        await storage.removeItem('last_recorded_location');
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          try {
+            const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
+            if (isTaskRegistered) {
+              await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
+            }
+          } catch {}
+        }
+        setIsTracking(false);
+        DeviceEventEmitter.emit('TrackingStateChanged', false);
+        return;
+      }
+
       const activeSession = await storage.getItem('currentTrackingSessionId');
       if (!activeSession) {
         setIsTracking(false);

@@ -141,7 +141,7 @@ export default function AdminTrackingScreen() {
 
   const fetchEmployees = useCallback(async (force = false) => {
     try {
-      const empRes = await cachedFetch('admin_employees', () => adminAPI.getEmployees({ limit: 200, role: 'employee' }), 30, force);
+      const empRes = await cachedFetch('admin_employees', () => adminAPI.getEmployees({ limit: 200, role: 'all' }), 10, force);
       if (empRes.data?.success) setAllEmployeesList(empRes.data.employees || []);
     } catch (e) {
       console.log('Tracking employee fetch error:', e.message);
@@ -274,9 +274,6 @@ export default function AdminTrackingScreen() {
   const filteredDirectory = useMemo(() => {
     const query = search.toLowerCase();
     return directoryStaff.filter((emp) => {
-      // By default list active/tracking staff
-      if (!emp.isTracking && emp.status === 'OFFLINE') return false;
-      
       if (!query) return true;
       return (emp.name || '').toLowerCase().includes(query)
         || (emp.address || '').toLowerCase().includes(query)
@@ -429,15 +426,26 @@ export default function AdminTrackingScreen() {
     if (!employeeId && !sessionId) return;
     const requestKey = `${employeeId || ''}:${sessionId || ''}`;
     if (autoSelectedRef.current === requestKey) return;
+
     const employee = directoryStaff.find((item) =>
       (sessionId && String(item.sessionId) === String(sessionId)) ||
       (employeeId && String(item._id) === String(employeeId))
     );
+
     if (employee) {
       autoSelectedRef.current = requestKey;
       handleSelectEmployee(employee, sessionId);
+    } else if (employeeId && allEmployeesList.length > 0) {
+      const matchInAll = allEmployeesList.find(e => String(e._id) === String(employeeId));
+      if (matchInAll) {
+        autoSelectedRef.current = requestKey;
+        handleSelectEmployee(matchInAll, sessionId);
+      } else {
+        autoSelectedRef.current = requestKey;
+        handleSelectEmployee({ _id: employeeId, name: 'Field Executive' }, sessionId);
+      }
     }
-  }, [directoryStaff, requestedEmployeeId, requestedSessionId, handleSelectEmployee]);
+  }, [directoryStaff, allEmployeesList, requestedEmployeeId, requestedSessionId, handleSelectEmployee]);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 

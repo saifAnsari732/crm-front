@@ -224,16 +224,9 @@ const processLocation = async (location) => {
   const { latitude, longitude, speed, accuracy, heading } = location.coords;
   const timestamp = location.timestamp;
 
-  // ── Sanity check & India Geographic Bounds ───────────────────────────────
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp) ||
-      latitude < 6 || latitude > 38 || longitude < 68 || longitude > 98) {
-    console.log('📍 BackgroundTask: Invalid GPS payload or out-of-bounds coordinate, skipping.');
-    return;
-  }
-
-  // ── Gate 1: GPS accuracy guard ───────────────────────────────────────────
-  if ((accuracy || 9999) > MAX_ACCURACY_METERS) {
-    console.log(`📍 BackgroundTask: Too low GPS accuracy (${(accuracy || 0).toFixed(0)} m), skipping.`);
+  // ── Basic Finite Coordinate Guard ──────────────────────────────────────────
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp)) {
+    console.log('📍 BackgroundTask: Non-numeric GPS payload, skipping.');
     return;
   }
 
