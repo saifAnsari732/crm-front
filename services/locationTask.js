@@ -137,21 +137,18 @@ function validateSegment(prev, curr) {
   const distKm = distM / 1000;
 
   // ── Gate 1: Minimum movement ─────────────────────────────────────────
-  if (distM < MIN_MOVE_METERS) return { valid: false, distKm: 0 };
+  // Accept micro-movements (>= 1 meter) so slow walking/heavy traffic is captured
+  if (distM < 1.0) return { valid: false, distKm: 0 };
 
   const prevTs = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
   const currTs = curr.timestamp ? new Date(curr.timestamp).getTime() : Date.now();
   const rawSecs = Math.max((currTs - prevTs) / 1000, 0.1);
 
   // ── Gate 2: 5-Hour / Long Stationary Transition Guard ────────────────
-  // If the user was stationary for a long time (e.g. at home for 5 hours),
-  // rawSecs is huge (e.g. 18000s). We MUST NOT divide distM by 18000s, because that
-  // produces a false speed of 0.005 m/s and wrongly discards real movement as drift.
-  // If the user moved >= 12m from the stationary anchor or reportedSpeed >= 0.4 m/s:
   const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
   
   if (rawSecs > 60) {
-    if (distM >= 12 || reportedSpeedMps >= 0.4) {
+    if (distM >= 5 || reportedSpeedMps >= 0.3) {
       console.log(`📍 Movement detected after ${(rawSecs / 60).toFixed(1)}min stationary: ${distM.toFixed(0)}m! Accepting transition.`);
       return { valid: true, distKm };
     }
@@ -167,16 +164,13 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 3: Stationary drift filter ──────────────────────────────────
-  const calcSpeedMps     = (distM / secs);
+  const calcSpeedMps = (distM / secs);
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
 
-  // If the phone is clearly stationary AND the jump is within GPS noise range → ignore
-  if (effectiveSpeedMps < MIN_WALKING_SPEED_MPS && distM < STATIONARY_DRIFT_LIMIT) {
-    const trust = accuracyTrustWeight(curr.accuracy || 100);
-    if (trust > 0.3) {
-      console.log(`📍 Stationary drift ignored: ${distM.toFixed(0)}m at ${effectiveSpeedMps.toFixed(2)} m/s`);
-      return { valid: false, distKm: 0 };
-    }
+  // Ignore tiny jitter when phone is stationary (< 0.3 m/s AND < 8m)
+  if (effectiveSpeedMps < 0.3 && distM < 8) {
+    console.log(`📍 Stationary drift ignored: ${distM.toFixed(0)}m at ${effectiveSpeedMps.toFixed(2)} m/s`);
+    return { valid: false, distKm: 0 };
   }
 
   return { valid: true, distKm };
@@ -187,10 +181,6 @@ function validateSegment(prev, curr) {
 // ─────────────────────────────────────────────────────────────────────────────
 let _heartbeatTimer = null;
 
-// Throttled heartbeat that can be called from ANY context (JS timer, background
-// GPS task, app-resume). JS timers are frozen by Android in background/Doze, so the
-// OS-driven GPS task must also ping the server, otherwise a stationary employee
-// (home/office for hours) looks "inactive" and the server closes the shift.
 export async function sendHeartbeatNow(force = false) {
   try {
     const sessionId = await storage.getItem('currentTrackingSessionId');
@@ -215,7 +205,6 @@ function startHeartbeat(sessionId) {
   _heartbeatTimer = setInterval(() => {
     sendHeartbeatNow();
   }, HEARTBEAT_INTERVAL_MS);
-  // Immediate ping so lastActivity is fresh the moment tracking (re)starts
   sendHeartbeatNow(true);
 }
 
@@ -226,7 +215,6 @@ function stopHeartbeat() {
   }
 }
 
-// Export so useLocationTracker can call these on start/stop
 export { startHeartbeat, stopHeartbeat };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,6 +240,9 @@ const processLocation = async (location) => {
   try {
     const sessionId = await storage.getItem('currentTrackingSessionId');
     if (!sessionId) return; // No active session
+
+    // Ensure session tracking ID is synchronized locally
+    await storage.setItem('tracking_accumulated_session_id', sessionId);
 
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
     updateMotionState(Number.isFinite(speed) ? speed : 0);
@@ -281,18 +272,15 @@ const processLocation = async (location) => {
           }
         }
 
-        if (!valid) {
-          // Not a valid movement — heartbeat will keep session alive
-          return;
+        if (valid) {
+          calculatedDistKm = distKm;
         }
-
-        calculatedDistKm = distKm;
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
       }
     }
 
-    // ─── Employee is moving — build coordinate payload ───────────────────────
+    // ─── Build coordinate payload for server processing ───────────────────
     const eventId = `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
     const newCoord = {
       eventId,
@@ -306,47 +294,22 @@ const processLocation = async (location) => {
       motionState: _currentMotionState,
     };
 
-    // Schedule no-movement watchdog notification (throttled to every 5 min)
-    await scheduleNoMovementNotification(sessionId);
-
     console.log(
-      `📍 BackgroundTask: ✅ Movement accepted! ` +
+      `📍 BackgroundTask: Telemetry update ` +
       `[${latitude.toFixed(5)}, ${longitude.toFixed(5)}] ` +
       `Acc:${(accuracy || 0).toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
 
-    // Atomic Local Checkpoint Transaction — written ONLY AFTER server ACK or queue write
-    const commitLocalCheckpoint = async (distToAdd) => {
-      try {
-        const prevDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        const nextDist = (prevDist + distToAdd).toFixed(4);
-        const checkpointData = {
-          sessionId,
-          accumulatedDistance: nextDist,
-          lastRecordedLocation: newCoord,
-          updatedAt: new Date().toISOString()
-        };
-        await Promise.all([
-          storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
-          storage.setItem('tracking_accumulated_distance', nextDist),
-          storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }))
-        ]);
-        return true;
-      } catch (chkErr) {
-        console.error('📍 BackgroundTask: Critical atomic checkpoint write failure:', chkErr);
-        return false;
-      }
-    };
+    // Always update last_recorded_location anchor so location moves forward
+    await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
 
     // ── Try uploading to server ───────────────────────────────────────────────
     const token = await storage.getItem('userToken');
     if (!token) {
       const enqueued = await enqueueCoordinate(sessionId, newCoord, lastLocation);
-      if (enqueued) await commitLocalCheckpoint(calculatedDistKm);
       return;
     }
 
-    let uploadedToServer = false;
     try {
       const response = await axios.post(
         `${BASE_URL}/tracking/update`,
@@ -376,21 +339,15 @@ const processLocation = async (location) => {
         await Promise.all([
           storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
           storage.setItem('tracking_accumulated_distance', finalDist),
-          storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }))
         ]);
 
-        uploadedToServer = true;
         console.log(`📍 BackgroundTask: Server synced. Day Total: ${finalDist} km`);
 
         flushOfflineQueue().catch(() => {});
       }
     } catch (apiErr) {
-      console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Queuing...`);
-    }
-
-    if (!uploadedToServer) {
-      const enqueued = await enqueueCoordinate(sessionId, newCoord, lastLocation);
-      if (enqueued) await commitLocalCheckpoint(calculatedDistKm);
+      console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Enqueuing for offline sync...`);
+      await enqueueCoordinate(sessionId, newCoord, lastLocation);
     }
 
   } catch (e) {

@@ -55,6 +55,7 @@ export default function ProfileScreen() {
 
   // ─── Permission States ────────────────────────────────────────────────────
   const [permissions, setPermissions] = useState({
+    gpsServices: false,
     locationForeground: false,
     locationBackground: false,
     notifications: false,
@@ -64,13 +65,15 @@ export default function ProfileScreen() {
   const checkPermissions = useCallback(async () => {
     if (Platform.OS === 'web') return;
     try {
-      const [fgLoc, bgLoc, notif, cam] = await Promise.all([
+      const [gpsServices, fgLoc, bgLoc, notif, cam] = await Promise.all([
+        Location.hasServicesEnabledAsync().catch(() => false),
         Location.getForegroundPermissionsAsync(),
         Location.getBackgroundPermissionsAsync(),
         Notifications ? Notifications.getPermissionsAsync() : Promise.resolve({ status: 'denied' }),
         ImagePicker.getCameraPermissionsAsync(),
       ]);
       setPermissions({
+        gpsServices: !!gpsServices,
         locationForeground: fgLoc.status === 'granted',
         locationBackground: bgLoc.status === 'granted',
         notifications: notif.status === 'granted',
@@ -432,6 +435,30 @@ export default function ProfileScreen() {
           </Text>
           <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
             
+            {/* Permission: Device GPS Location Services */}
+            <TouchableOpacity 
+              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+              onPress={() => handlePermissionPress('locationForeground')}
+            >
+              <Shield size={20} color={permissions.gpsServices ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+              <View style={styles.settingsTextCol}>
+                <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                  {language === 'en' ? 'Device GPS Hardware' : 'डिवाइस GPS हार्डवेयर'}
+                </Text>
+                <Text style={[styles.settingsSub, { color: permissions.gpsServices ? colors.subText : '#ef4444' }]}>
+                  {permissions.gpsServices
+                    ? (language === 'en' ? 'Phone GPS Services ON' : 'फोन GPS सेवाएं चालू हैं')
+                    : (language === 'en' ? '⚠️ Phone GPS is OFF! Tap to enable' : '⚠️ फोन GPS बंद है! चालू करने के लिए टैप करें')
+                  }
+                </Text>
+              </View>
+              <View style={[styles.permBadge, { backgroundColor: permissions.gpsServices ? '#dcfce7' : '#fee2e2' }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.gpsServices ? '#15803d' : '#dc2626' }}>
+                  {permissions.gpsServices ? 'ACTIVE' : 'OFF'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
             {/* Permission: Location (Foreground) */}
             <TouchableOpacity 
               style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
@@ -440,15 +467,15 @@ export default function ProfileScreen() {
               <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
               <View style={styles.settingsTextCol}>
                 <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Location Access' : 'लोकेशन एक्सेस'}
+                  {language === 'en' ? 'Foreground Location' : 'फोरग्राउंड लोकेशन'}
                 </Text>
                 <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                  {language === 'en' ? 'Required for GPS tracking' : 'GPS ट्रैकिंग के लिए ज़रूरी'}
+                  {language === 'en' ? 'Required for shift check-in & maps' : 'शिफ्ट चेक-इन और मैप के लिए ज़रूरी'}
                 </Text>
               </View>
               <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
-                  {permissions.locationForeground ? 'ON' : 'OFF'}
+                  {permissions.locationForeground ? 'ALLOWED' : 'DENIED'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -465,14 +492,14 @@ export default function ProfileScreen() {
                 </Text>
                 <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
                   {permissions.locationBackground
-                    ? (language === 'en' ? '"Allow all the time" is ON' : '"हमेशा अनुमति दें" चालू है')
-                    : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" करें')
+                    ? (language === 'en' ? '✅ "Allow all the time" is ACTIVE' : '✅ "हमेशा अनुमति दें" चालू है')
+                    : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" सेट करें')
                   }
                 </Text>
               </View>
               <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
-                  {permissions.locationBackground ? 'ON' : 'OFF'}
+                  {permissions.locationBackground ? 'ALLOW ALL' : 'DENIED'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -485,14 +512,14 @@ export default function ProfileScreen() {
               <BatteryCharging size={20} color="#f59e0b" style={{ marginRight: 14 }} />
               <View style={styles.settingsTextCol}>
                 <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Battery Unrestricted' : 'बैटरी अनरिस्ट्रिक्टेड'}
+                  {language === 'en' ? 'Battery Optimization' : 'बैटरी ऑप्टिमाइजेशन'}
                 </Text>
                 <Text style={[styles.settingsSub, { color: '#f59e0b' }]}>
-                  {language === 'en' ? 'Tap to set → prevents GPS kill' : 'टैप करें → GPS बंद होने से बचाएँ'}
+                  {language === 'en' ? 'Set to "Unrestricted" → prevents GPS kill' : ' "अनरिस्ट्रिक्टेड" रखें → GPS बंद होने से बचाएं'}
                 </Text>
               </View>
               <View style={[styles.permBadge, { backgroundColor: '#fef3c7' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>SET</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>CONFIGURE</Text>
               </View>
             </TouchableOpacity>
 
@@ -504,15 +531,15 @@ export default function ProfileScreen() {
               <Bell size={20} color={permissions.notifications ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
               <View style={styles.settingsTextCol}>
                 <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Notifications' : 'नोटिफिकेशन'}
+                  {language === 'en' ? 'System Notifications' : 'सिस्टम नोटिफिकेशन'}
                 </Text>
                 <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                  {language === 'en' ? 'Shift alerts & task updates' : 'शिफ्ट अलर्ट और टास्क अपडेट'}
+                  {language === 'en' ? 'Required for active status bar tracking' : 'सक्रिय स्टेटस बार ट्रैकिंग के लिए जरूरी'}
                 </Text>
               </View>
               <View style={[styles.permBadge, { backgroundColor: permissions.notifications ? '#dcfce7' : '#fee2e2' }]}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.notifications ? '#15803d' : '#dc2626' }}>
-                  {permissions.notifications ? 'ON' : 'OFF'}
+                  {permissions.notifications ? 'ALLOWED' : 'DENIED'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -533,7 +560,7 @@ export default function ProfileScreen() {
               </View>
               <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.camera ? '#15803d' : '#dc2626' }}>
-                  {permissions.camera ? 'ON' : 'OFF'}
+                  {permissions.camera ? 'ALLOWED' : 'DENIED'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -541,7 +568,7 @@ export default function ProfileScreen() {
           </Surface>
 
           {/* Warning banner if critical permissions are OFF */}
-          {(!permissions.locationBackground || !permissions.locationForeground) && (
+          {(!permissions.gpsServices || !permissions.locationBackground || !permissions.locationForeground) && (
             <TouchableOpacity 
               style={styles.warningBanner}
               onPress={() => handlePermissionPress('locationBackground')}
@@ -549,8 +576,8 @@ export default function ProfileScreen() {
               <Shield size={18} color="#fff" style={{ marginRight: 8 }} />
               <Text style={styles.warningText}>
                 {language === 'en' 
-                  ? '⚠️ Location OFF — KM will NOT track! Tap to fix.' 
-                  : '⚠️ लोकेशन बंद है — KM ट्रैक नहीं होगा! ठीक करने के लिए टैप करें'}
+                  ? '⚠️ Critical Permission OFF — KM will NOT track! Tap to fix.' 
+                  : '⚠️ आवश्यक अनुमति बंद है — KM ट्रैक नहीं होगा! ठीक करने के लिए टैप करें'}
               </Text>
             </TouchableOpacity>
           )}

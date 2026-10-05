@@ -141,7 +141,13 @@ export default function useLocationTracker() {
   };
 
   /**
-   * Request precise foreground and background permissions sequentially
+   * Request and strictly verify all precise permissions before starting Punch In:
+   * 1. Device GPS / Location Services (Must be ON)
+   * 2. Post Notification Permission (Android 13+ mandatory for foreground service)
+   * 3. Foreground Location Permission
+   * 4. Background Location Permission ("Allow all the time" mandatory)
+   * 5. Camera Permission (Mandatory for selfie check-in)
+   * 6. Battery Optimization check (Nudge to set "Unrestricted")
    */
   const requestPermissions = async () => {
     try {
@@ -152,7 +158,23 @@ export default function useLocationTracker() {
         return true;
       }
 
-      // 0. Request notification permission on Android 13+ (API 33+) to keep background task active
+      // 0. Check if device Location Services (GPS) are turned ON
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        sendGpsDisabledNotification().catch(() => {});
+        showCustomAlert(
+          'GPS Location Disabled',
+          'Phone ka Location / GPS Services OFF hai. Punch In karne se pehle kripya GPS ON karein.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ],
+          'warning'
+        );
+        return false;
+      }
+
+      // 1. Request notification permission on Android 13+ (API 33+) to keep background task active
       if (Platform.OS === 'android' && Platform.Version >= 33) {
         try {
           const hasNotificationPermission = await PermissionsAndroid.check(
@@ -163,7 +185,7 @@ export default function useLocationTracker() {
               'android.permission.POST_NOTIFICATIONS',
               {
                 title: 'Notification Permission Required',
-                message: 'StaffSync requires notification permission to show active tracking logs in your system header.',
+                message: 'Field App requires notification permission to keep background tracking active in system header.',
                 buttonNeutral: 'Ask Me Later',
                 buttonNegative: 'Cancel',
                 buttonPositive: 'OK',
@@ -177,64 +199,70 @@ export default function useLocationTracker() {
           console.warn('⚠️ useLocationTracker: Failed to request notification permission:', notifErr.message);
         }
       }
-      
-      // 0.5. Check if device Location Services are turned on
-      const servicesEnabled = await Location.hasServicesEnabledAsync();
-      if (!servicesEnabled) {
-        sendGpsDisabledNotification().catch(() => {});
-        alert('Please turn on your device GPS / Location Services before starting the shift.');
-        return false;
-      }
-      
-      // 1. Foreground Location Permission (Requirement #1)
+
+      // 2. Foreground Location Permission
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       if (foregroundStatus !== 'granted') {
         setPermissionStatus('denied');
-        alert('Foreground Location permission is required to log visits.');
+        showCustomAlert(
+          'Location Permission Denied',
+          'Location permission ("Allow") is required to log visits and track shift distance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ],
+          'error'
+        );
         return false;
       }
 
-      // Expo Go cannot provide Android background location. Use foreground-only
-      // tracking there; full background tracking requires a development build.
+      // 3. Background Location Permission ("Allow all the time")
       if (!isExpoGo) {
-        // 2. Background Location Permission (Requirement #2 - triggered after foreground)
         const { status: currentBgStatus } = await Location.getBackgroundPermissionsAsync();
 
         if (currentBgStatus !== 'granted') {
-        // Prominent Disclosure before requesting background location (Google Play Policy Requirement)
-        const userAgreed = await new Promise((resolve) => {
-          showCustomAlert(
-            "Background Location Required",
-            "This app collects location data to enable shift tracking and calculate distance travelled even when the app is closed or not in use.",
-            [
-              { text: "Decline", onPress: () => resolve(false), style: "cancel" },
-              { text: "Agree", onPress: () => resolve(true) }
-            ],
-            'warning'
-          );
-        });
+          // Prominent Disclosure before requesting background location (Google Play Policy Requirement)
+          const userAgreed = await new Promise((resolve) => {
+            showCustomAlert(
+              "Background Location Required",
+              "This app collects background location data to track your shift route and calculate total distance travelled even when the app is closed or not in use.",
+              [
+                { text: "Decline", onPress: () => resolve(false), style: "cancel" },
+                { text: "Agree", onPress: () => resolve(true) }
+              ],
+              'warning'
+            );
+          });
 
-        if (!userAgreed) {
-          setPermissionStatus('foreground_only');
-          showCustomAlert(
-            'Permission Denied', 
-            'Background Location permission is required for active tracking when minimized.',
-            [{ text: 'OK' }],
-            'error'
-          );
-          return false;
-        }
+          if (!userAgreed) {
+            setPermissionStatus('foreground_only');
+            showCustomAlert(
+              'Background Permission Required',
+              'Background Location permission ("Allow all the time") is required for tracking when app is minimized.',
+              [{ text: 'OK' }],
+              'error'
+            );
+            return false;
+          }
 
           const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
           if (backgroundStatus !== 'granted') {
             setPermissionStatus('foreground_only');
-            alert('Background Location permission ("Allow all the time") is required for active tracking when minimized.');
+            showCustomAlert(
+              'Background Location "Allow All The Time" Required',
+              'Punch In start karne ke liye Location permission me "Allow all the time" (Hamesha allow) select karna zaroori hai.\n\nKripya App Settings me jaakar Location ko "Allow all the time" par set karein.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open App Settings', onPress: () => Linking.openSettings() }
+              ],
+              'error'
+            );
             return false;
           }
         }
       }
 
-      // 3. Camera Permission (Mandatory for Selfie Check-in)
+      // 4. Camera Permission (Mandatory for Selfie Check-in)
       const { status: cameraStatus } = await ImagePicker.getCameraPermissionsAsync();
       if (cameraStatus !== 'granted') {
         const { status: reqCamStatus } = await ImagePicker.requestCameraPermissionsAsync();

@@ -125,9 +125,12 @@ class SocketService {
         this.flushMessageQueue(); // Flush queued telemetry on reconnect
         this.startHeartbeat();
         
-        // Re-register all custom listeners
+        // Re-register all custom listeners cleanly without duplicate bindings
         this.listeners.forEach((callbacks, event) => {
-          callbacks.forEach(cb => this.socket.on(event, cb));
+          callbacks.forEach(cb => {
+            this.socket.off(event, cb);
+            this.socket.on(event, cb);
+          });
         });
       });
 
@@ -179,6 +182,7 @@ class SocketService {
     this.listeners.get(event).add(callback);
 
     if (this.socket) {
+      this.socket.off(event, callback);
       this.socket.on(event, callback);
     }
   }

@@ -11,6 +11,7 @@
  */
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
 import axios from 'axios';
 import { BASE_URL } from './api';
 import { storage } from './storage';
@@ -205,6 +206,32 @@ export function flushOfflineQueue() {
 TaskManager.defineTask(OFFLINE_SYNC_TASK, async () => {
   console.log('📦 OfflineSync: Background fetch triggered by OS...');
   try {
+    // 1. Auto-revive background tracking task if active session exists but task died
+    const activeSession = await storage.getItem('currentTrackingSessionId');
+    if (activeSession && Platform.OS !== 'web' && !isExpoGo) {
+      try {
+        const isLocRunning = await Location.hasStartedLocationUpdatesAsync('BACKGROUND_TRACKING');
+        if (!isLocRunning) {
+          console.log('📦 OfflineSync: Reviving dead background GPS task...');
+          await Location.startLocationUpdatesAsync('BACKGROUND_TRACKING', {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 10000,
+            distanceInterval: 10,
+            foregroundService: {
+              notificationTitle: '🟢 Shift Active — Tracking ON',
+              notificationBody: 'Tap to open app. Tracking continues in background.',
+              notificationColor: '#0a3d3c',
+              killServiceOnDestroy: false,
+            },
+            showsBackgroundLocationIndicator: true,
+            pausesUpdatesAutomatically: false,
+          });
+        }
+      } catch (locReviveErr) {
+        console.warn('📦 OfflineSync: Location revive failed:', locReviveErr.message);
+      }
+    }
+
     const success = await flushOfflineQueue();
     return success
       ? BackgroundFetch.BackgroundFetchResult.NewData

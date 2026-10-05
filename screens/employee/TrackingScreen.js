@@ -90,12 +90,12 @@ export default function ActiveShiftMapScreen() {
   // 1.5. Local Cache & AppState Sync for Active Tracking Session Distance
   useEffect(() => {
     let appStateSubscription = null;
+    let syncInterval = null;
 
     const loadLocalCachedDistance = async () => {
       try {
         const sessionId = await storage.getItem('currentTrackingSessionId');
-        const cachedSessionId = await storage.getItem('tracking_accumulated_session_id');
-        if (!sessionId || cachedSessionId !== sessionId) {
+        if (!sessionId) {
           totalDistanceRef.current = 0;
           setDistance('0.00');
           return;
@@ -151,13 +151,16 @@ export default function ActiveShiftMapScreen() {
         syncDistanceWithBackend();
       });
 
-      // Step 3: Register AppState listener to sync distance when returning from background / lock screen
+      // Step 3: Set 10-second polling interval for real-time live distance updates on screen
+      syncInterval = setInterval(() => {
+        syncDistanceWithBackend();
+      }, 10000);
+
+      // Step 4: Register AppState listener to sync distance when returning from background / lock screen
       appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
         if (nextAppState === 'active') {
           console.log('📍 Tracking Screen: App returned to active foreground. Syncing distance telemetry...');
-          // Load local cache first to show immediate updates
           await loadLocalCachedDistance();
-          // Fetch backend distance to ensure consistency with background tracker database writes
           await syncDistanceWithBackend();
         }
       });
@@ -181,6 +184,9 @@ export default function ActiveShiftMapScreen() {
     return () => {
       if (appStateSubscription) {
         appStateSubscription.remove();
+      }
+      if (syncInterval) {
+        clearInterval(syncInterval);
       }
     };
   }, [isTracking]);

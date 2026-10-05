@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { storage } from './storage';
 import { Platform } from 'react-native';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
@@ -15,7 +15,7 @@ export const PROD_URL = 'https://kisanteamapp.online/api';
 export const LOCAL_URL = 'http://192.168.0.107:5000/api';
 
 // Set to false for Production Server
-const USE_LOCAL = false;
+const USE_LOCAL = true;
 
 const getBaseUrl = () => {
   if (USE_LOCAL && __DEV__) {
