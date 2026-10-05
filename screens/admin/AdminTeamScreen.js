@@ -452,7 +452,7 @@ export default function AdminTeamScreen() {
             <View style={[styles.tabBarIconBox, { backgroundColor: C.primaryLight }]}>
               <Users size={20} color={C.primary} />
             </View>
-            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive, { color: C.primary }]}>Workforce</Text>
+            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive, { color: C.primary }]}>My Team</Text>
             <View style={[styles.activeTabDot, { backgroundColor: C.primary }]} />
           </TouchableOpacity>
 

@@ -359,7 +359,7 @@ export default function AdminMonitoringScreen() {
             <View style={styles.headerTitleWrap}>
               <View style={styles.badgeRow}>
                 <Users size={18} color="#10b981" />
-                <Text style={styles.headerMainTitle}>Workforce Directory</Text>
+                <Text style={styles.headerMainTitle}>My Team</Text>
               </View>
               <Text style={styles.headerSubTitle}>Real-Time Field Team & Shift Operations</Text>
             </View>
@@ -618,12 +618,12 @@ export default function AdminMonitoringScreen() {
             <Text style={styles.tabBarLabel}>Live Map</Text>
           </TouchableOpacity>
 
-          {/* Tab 3: Workforce (Active) */}
+          {/* Tab 3: My Team (Active) */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => {}} activeOpacity={0.7}>
             <View style={[styles.tabBarIconBox, styles.tabBarIconBoxActive]}>
               <Users size={20} color="#059669" />
             </View>
-            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>Workforce</Text>
+            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>My Team</Text>
             <View style={styles.activeTabDot} />
           </TouchableOpacity>
 

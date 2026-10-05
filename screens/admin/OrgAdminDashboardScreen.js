@@ -516,7 +516,7 @@ export default function OrgAdminDashboardScreen() {
               <View style={[styles.quickIconBox, { backgroundColor: '#ecfdf5' }]}>
                 <Users size={18} color="#10b981" />
               </View>
-              <Text style={styles.quickBtnTitle}>Workforce List</Text>
+              <Text style={styles.quickBtnTitle}>My Team</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.quickCardBtn} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.8}>
@@ -539,7 +539,7 @@ export default function OrgAdminDashboardScreen() {
         <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
           <View style={styles.cardHeaderRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.cardSectionTitle}>Field Workforce Roster</Text>
+              <Text style={styles.cardSectionTitle}>My Team Roster</Text>
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>{staffOnly.length}</Text>
               </View>
@@ -627,12 +627,12 @@ export default function OrgAdminDashboardScreen() {
             <Text style={styles.tabBarLabel}>Live Map</Text>
           </TouchableOpacity>
 
-          {/* Tab 3: Workforce */}
+          {/* Tab 3: My Team */}
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/monitoring')} activeOpacity={0.7}>
             <View style={styles.tabBarIconBox}>
               <Users size={20} color="#64748b" />
             </View>
-            <Text style={styles.tabBarLabel}>Workforce</Text>
+            <Text style={styles.tabBarLabel}>My Team</Text>
           </TouchableOpacity>
 
           {/* Tab 4: Reports */}

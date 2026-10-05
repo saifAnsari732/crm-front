@@ -881,7 +881,7 @@ export default function ManagerDashboardScreen() {
             <View style={styles.tabBarIconBox}>
               <Users size={20} color={COLORS.textMuted} />
             </View>
-            <Text style={styles.tabBarLabel}>Workforce</Text>
+            <Text style={styles.tabBarLabel}>My Team</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
