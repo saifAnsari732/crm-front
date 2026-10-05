@@ -1,4 +1,4 @@
-name: Build Android Release (AAB & APK)
+name: Build Android AAB
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build AAB and APK
+    name: Build AAB
     runs-on: ubuntu-latest
 
     steps:
@@ -40,10 +40,10 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Android AAB and APK
+      - name: Build Android AAB
         working-directory: android
         run: |
-          ./gradlew bundleRelease assembleRelease \
+          ./gradlew bundleRelease \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
             -Pandroid.injected.signing.store.password=35e46672f6141074bc080e0d79616afd \
             -Pandroid.injected.signing.key.alias=c3e6c980534f93dc06f106f42a7e99db \
@@ -58,9 +58,3 @@ jobs:
         with:
           name: app-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release.apk
-          path: android/app/build/outputs/apk/release/app-release.apk
