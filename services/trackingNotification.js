@@ -33,23 +33,47 @@ export async function scheduleNoMovementNotification(sessionId) {
 }
 
 export async function cancelNoMovementNotification() {
-  if (Platform.OS === 'web' || !Notifications || typeof Notifications.cancelScheduledNotificationAsync !== 'function') return;
+  if (Platform.OS === 'web' || !Notifications) return;
   try {
-    const idsStr = await storage.getItem(WATCHDOG_KEY);
-    if (idsStr) {
-      let ids = [];
-      try {
-        ids = JSON.parse(idsStr);
-      } catch (e) {
-        ids = [idsStr];
+    // 1. Clean both singular & plural legacy keys
+    const legacyKeys = ['tracking_no_movement_notification_ids', 'tracking_no_movement_notification_id', 'tracking_last_schedule_time'];
+    for (const key of legacyKeys) {
+      const stored = await storage.getItem(key);
+      if (stored) {
+        let ids = [];
+        try {
+          ids = JSON.parse(stored);
+        } catch {
+          ids = [stored];
+        }
+        if (!Array.isArray(ids)) ids = [ids];
+        for (const id of ids) {
+          if (id && typeof Notifications.cancelScheduledNotificationAsync === 'function') {
+            await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+          }
+        }
+        await storage.removeItem(key).catch(() => {});
       }
-      
-      for (const id of ids) {
-        if (id) {
-          await Notifications.cancelScheduledNotificationAsync(id);
+    }
+
+    // 2. Scan OS scheduled notification queue for any legacy watchdog timers and cancel them
+    if (typeof Notifications.getAllScheduledNotificationsAsync === 'function' && typeof Notifications.cancelScheduledNotificationAsync === 'function') {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync().catch(() => []);
+      for (const notif of scheduled) {
+        const title = notif.content?.title || '';
+        const body = notif.content?.body || '';
+        const data = notif.content?.data || {};
+        if (
+          title.toLowerCase().includes('tracking') ||
+          title.toLowerCase().includes('stopped') ||
+          title.toLowerCase().includes('paused') ||
+          body.toLowerCase().includes('no movement') ||
+          body.toLowerCase().includes('stopped automatically') ||
+          data.type === 'no_movement_watchdog'
+        ) {
+          await Notifications.cancelScheduledNotificationAsync(notif.identifier).catch(() => {});
         }
       }
-      await storage.removeItem(WATCHDOG_KEY);
     }
   } catch (error) {
     console.log('Tracking notification cancel error:', error.message);

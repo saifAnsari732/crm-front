@@ -34,9 +34,9 @@ const MAX_SPEED_KMH          = 220;   // Teleport guard (airplane / GPS flip)
 const MIN_WALKING_SPEED_MPS  = 0.4;  // ~1.4 km/h — below this treat as stationary
 const STATIONARY_DRIFT_LIMIT = 120;  // If stationary AND jump < 120 m → GPS drift, ignore
 
-// Heartbeat: send a ping every N ms so server's 3-hour inactivity clock resets
-// even if the employee is standing at a location without moving.
-const HEARTBEAT_INTERVAL_MS  = 5 * 60 * 1000; // 5 minutes
+// Heartbeat: send a clean keep-alive ping every 3 minutes so server session
+// stays continuously synchronized even if the employee is stationary.
+const HEARTBEAT_INTERVAL_MS  = 3 * 60 * 1000; // 3 minutes
 
 // Upload retry: re-queue if the network call takes longer than this
 const UPLOAD_TIMEOUT_MS      = 9000;

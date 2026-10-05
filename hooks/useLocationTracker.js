@@ -55,6 +55,7 @@ export default function useLocationTracker() {
   // Sync active tracking state and launch Immortal Background Watchdog
   useEffect(() => {
     checkActiveSession();
+    cancelNoMovementNotification().catch(() => {});
     
     // Show battery optimization dialog once (first-ever app launch)
     showBatteryOptimizationDialog();
