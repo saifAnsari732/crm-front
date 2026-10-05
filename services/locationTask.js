@@ -336,6 +336,26 @@ const processLocation = async (location) => {
         flushOfflineQueue().catch(() => {});
       }
     } catch (apiErr) {
+      if (apiErr.response?.status === 409 || apiErr.response?.data?.sessionClosed === true) {
+        console.log('🛡️ [AUTO_HEAL] Server reported sessionClosed/409. Auto-recovering active shift...');
+        try {
+          const startRes = await trackingAPI.startTracking({ lat: newCoord.lat, lng: newCoord.lng });
+          if (startRes.data?.success && startRes.data?.sessionId) {
+            const newSessionId = startRes.data.sessionId;
+            await storage.setItem('currentTrackingSessionId', newSessionId);
+            await storage.setItem('tracking_accumulated_session_id', newSessionId);
+            console.log('🛡️ [AUTO_HEAL] Seamlessly adopted active session:', newSessionId);
+            await axios.post(
+              `${BASE_URL}/tracking/update`,
+              { sessionId: newSessionId, coordinates: [newCoord] },
+              { headers: { Authorization: `Bearer ${token}` }, timeout: UPLOAD_TIMEOUT_MS }
+            ).catch(() => {});
+            return;
+          }
+        } catch (healErr) {
+          console.log('⚠️ [AUTO_HEAL] Auto-recovery attempt failed:', healErr.message);
+        }
+      }
       console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Enqueuing for offline sync...`);
       await enqueueCoordinate(sessionId, newCoord, lastLocation);
     }

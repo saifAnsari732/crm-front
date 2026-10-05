@@ -174,8 +174,23 @@ export const NotificationProvider = ({ children }) => {
 
       // New notification detected!
       if (latest._id !== lastNotificationIdRef.current && !latest.isRead) {
-        console.log('🔔 Polling: New notification!', latest.title);
         lastNotificationIdRef.current = latest._id;
+        
+        // Suppress legacy auto-stop notifications from stale DB records
+        const titleLower = (latest.title || '').toLowerCase();
+        const msgLower = (latest.message || '').toLowerCase();
+        if (
+          titleLower.includes('tracking stopped automatically') ||
+          titleLower.includes('tracking paused') ||
+          msgLower.includes('without accepted gps movement')
+        ) {
+          console.log('🛡️ [NotificationContext] Suppressed legacy auto-stop notification from DB:', latest.title);
+          // Silently mark as read on backend
+          notificationAPI.markAsRead(latest._id).catch(() => {});
+          return;
+        }
+
+        console.log('🔔 Polling: New notification!', latest.title);
         triggerSystemNotification({
           title: latest.title,
           message: latest.message,
