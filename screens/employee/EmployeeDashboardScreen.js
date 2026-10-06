@@ -759,7 +759,7 @@ export default function EmployeeDashboardScreen() {
             </View>
 
             {/* Live Selfie Image Preview Box */}
-            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 240 : 180 }]}>
+            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 190 : 140 }]}>
               {pendingSelfieUri ? (
                 <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="contain" />
               ) : null}
@@ -1403,7 +1403,7 @@ const styles = StyleSheet.create({
 
   // Selfie Custom Resize Modal Styles
   selfieModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
-  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, paddingBottom: Platform.OS === 'ios' ? 44 : 36 },
   selfieModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   selfieModalTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   selfieModalSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
@@ -1415,9 +1415,9 @@ const styles = StyleSheet.create({
   aspectOptionTextActive: { color: '#ffffff' },
   selfiePreviewFrame: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#cbd5e1', marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
   selfiePreviewImg: { width: '100%', height: '100%', resizeMode: 'contain' },
-  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginBottom: Platform.OS === 'ios' ? 20 : 10 },
-  retakeSelfieBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc', alignItems: 'center' },
+  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: Platform.OS === 'ios' ? 28 : 22 },
+  retakeSelfieBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   retakeSelfieText: { fontSize: 13, fontWeight: '800', color: '#475569' },
-  confirmPunchInBtn: { flex: 1.4, paddingVertical: 13, borderRadius: 14, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center' },
+  confirmPunchInBtn: { flex: 1.4, paddingVertical: 14, borderRadius: 14, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center' },
   confirmPunchInText: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
 });

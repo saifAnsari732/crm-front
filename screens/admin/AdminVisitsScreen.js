@@ -2,16 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Platform, RefreshControl,
   StyleSheet, TextInput, TouchableOpacity, View, Image,
-  Modal, ScrollView, Alert, KeyboardAvoidingView
+  Modal, ScrollView, Alert, KeyboardAvoidingView, StatusBar
 } from 'react-native';
 import {
   BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, MapPin, Search, XCircle,
-  Plus, Camera, X, User, Phone, Briefcase
+  Plus, Camera, X, User, Phone, Briefcase, Users, Filter, RotateCcw, Route
 } from 'lucide-react-native';
 import { Text, Surface } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { meetingAPI, uploadAPI, getAvatarUrl } from '../../services/api';
+import { meetingAPI, uploadAPI, adminAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
@@ -48,7 +48,8 @@ export default function AdminVisitsScreen() {
     border: isDark ? '#334155' : '#e2e8f0',
   };
   const [visits, setVisits] = useState([]);
-  const [search, setSearch] = useState('');
+  const [employeesList, setEmployeesList] = useState([]);
+  const [selectedEmpFilter, setSelectedEmpFilter] = useState('all');
   const [status, setStatus] = useState('all');
   const [date, setDate] = useState('');
   const [loading, setLoading] = useState(true);
@@ -70,9 +71,15 @@ export default function AdminVisitsScreen() {
 
   const fetchVisits = useCallback(async () => {
     try {
-      const response = await meetingAPI.getAll({ limit: 200 });
-      if (response.data?.success) setVisits(response.data.meetings || []);
+      const [resVisits, resEmp] = await Promise.all([
+        meetingAPI.getAll({ limit: 200 }).catch(() => ({ data: { success: false } })),
+        adminAPI.getEmployees({ limit: 200 }).catch(() => ({ data: { success: false } })),
+      ]);
+
+      if (resVisits.data?.success) setVisits(resVisits.data.meetings || []);
       else setVisits([]);
+
+      if (resEmp.data?.success) setEmployeesList(resEmp.data.employees || []);
     } catch (error) {
       console.log('Admin visits fetch error:', error.message);
       setVisits([]);
@@ -211,16 +218,15 @@ export default function AdminVisitsScreen() {
   };
 
   const filteredVisits = useMemo(() => visits.filter((visit) => {
-    const query = search.toLowerCase();
-    const haystack = [
-      visit.clientName, visit.companyName, visit.meetingAddress,
-      visit.employee?.name, visit.employee?.department,
-    ].filter(Boolean).join(' ').toLowerCase();
-    const matchesSearch = !query || haystack.includes(query);
+    const vEmpId = String(visit.employee?._id || visit.employee || visit.employeeId || '');
+    const vEmpName = (visit.employee?.name || visit.employeeName || '').toLowerCase();
+    const matchesEmp = selectedEmpFilter === 'all' || 
+      (vEmpId && vEmpId === String(selectedEmpFilter)) ||
+      (vEmpName && vEmpName.includes(selectedEmpFilter.toLowerCase()));
     const matchesStatus = status === 'all' || visit.status === status;
-    const matchesDate = !date || new Date(visit.date).toISOString().slice(0, 10) === date;
-    return matchesSearch && matchesStatus && matchesDate;
-  }), [date, search, status, visits]);
+    const matchesDate = !date || (visit.date && new Date(visit.date).toISOString().slice(0, 10) === date);
+    return matchesEmp && matchesStatus && matchesDate;
+  }), [date, selectedEmpFilter, status, visits]);
 
   const counts = useMemo(() => ({
     all: visits.length,
@@ -229,10 +235,37 @@ export default function AdminVisitsScreen() {
     followUp: visits.filter((visit) => visit.status === 'follow-up').length,
   }), [visits]);
 
+  const uniqueStaffList = useMemo(() => {
+    const map = new Map();
+    employeesList.forEach((e) => {
+      const id = String(e._id || e.employeeId || '');
+      if (id) map.set(id, e);
+    });
+    visits.forEach((v) => {
+      const id = String(v.employee?._id || v.employee || v.employeeId || '');
+      if (id && !map.has(id)) {
+        map.set(id, { _id: id, name: v.employee?.name || v.employeeName || 'Staff' });
+      }
+    });
+    return Array.from(map.values());
+  }, [employeesList, visits]);
+
   const onRefresh = async () => { setRefreshing(true); await fetchVisits(); };
 
   if (loading) {
-    return <View style={[styles.center, { backgroundColor: C.bg }]}><ActivityIndicator size="large" color="#283b96" /><Text style={[styles.loadingText, { color: C.sub }]}>Loading visits...</Text></View>;
+    return (
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <View style={styles.loadingBrandCard}>
+          <View style={styles.loadingLogoBadge}>
+            <Image source={require('../../assets/splash.png')} style={styles.loadingLogoImg} resizeMode="contain" />
+          </View>
+          <ActivityIndicator size="small" color="#059669" style={{ marginTop: 14 }} />
+          <Text style={[styles.loadingBrandTitle, { color: C.text }]}>KisanConnect</Text>
+          <Text style={[styles.loadingBrandSub, { color: C.sub }]}>Loading Visit Reports & Analytics…</Text>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -240,10 +273,10 @@ export default function AdminVisitsScreen() {
       <FlatList
         data={filteredVisits}
         keyExtractor={(item, index) => String(item._id || index)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#059669']} />}
         contentContainerStyle={styles.content}
         ListHeaderComponent={(
-          <View>
+          <View style={{ marginBottom: 12 }}>
             {/* Screen Header Bar with "+ Log Visit" */}
             <View style={styles.topHeaderBar}>
               <View>
@@ -256,19 +289,157 @@ export default function AdminVisitsScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* 4-COLUMN PREMIUM SUMMARY KPI CARDS */}
             <View style={styles.summaryRow}>
-              <Summary label="ALL" value={counts.all} color="#283b96" />
-              <Summary label="SCHEDULED" value={counts.scheduled} color="#2563eb" />
-              <Summary label="DONE" value={counts.completed} color="#15803d" />
-              <Summary label="FOLLOW-UP" value={counts.followUp} color="#a16207" />
+              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#f0f9ff', borderColor: isDark ? '#334155' : '#bae6fd' }]} elevation={1}>
+                <View style={styles.kpiCardTop}>
+                  <BriefcaseBusiness size={14} color="#0284c7" />
+                  <Text style={[styles.kpiCardNum, { color: '#0284c7' }]}>{counts.all}</Text>
+                </View>
+                <Text style={[styles.kpiCardLabel, { color: C.sub }]}>ALL</Text>
+              </Surface>
+
+              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]} elevation={1}>
+                <View style={styles.kpiCardTop}>
+                  <Clock3 size={14} color="#2563eb" />
+                  <Text style={[styles.kpiCardNum, { color: '#2563eb' }]}>{counts.scheduled}</Text>
+                </View>
+                <Text style={[styles.kpiCardLabel, { color: C.sub }]}>SCHEDULED</Text>
+              </Surface>
+
+              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#f0fdf4', borderColor: isDark ? '#334155' : '#bbf7d0' }]} elevation={1}>
+                <View style={styles.kpiCardTop}>
+                  <CheckCircle2 size={14} color="#16a34a" />
+                  <Text style={[styles.kpiCardNum, { color: '#16a34a' }]}>{counts.completed}</Text>
+                </View>
+                <Text style={[styles.kpiCardLabel, { color: C.sub }]}>DONE</Text>
+              </Surface>
+
+              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#fff7ed', borderColor: isDark ? '#334155' : '#fed7aa' }]} elevation={1}>
+                <View style={styles.kpiCardTop}>
+                  <CalendarDays size={14} color="#d97706" />
+                  <Text style={[styles.kpiCardNum, { color: '#d97706' }]}>{counts.followUp}</Text>
+                </View>
+                <Text style={[styles.kpiCardLabel, { color: C.sub }]}>FOLLOW-UP</Text>
+              </Surface>
             </View>
 
-            <View style={[styles.searchBox, { backgroundColor: C.surface, borderColor: C.border }]}><Search size={15} color={C.sub} /><TextInput style={[styles.searchInput, { color: C.text }]} value={search} onChangeText={setSearch} placeholder="Search employee or client..." placeholderTextColor={C.sub} /></View>
-            <View style={styles.filterRow}>
-              <View style={[styles.dateBox, { backgroundColor: C.surface, borderColor: C.border }]}><CalendarDays size={15} color={C.sub} /><TextInput style={[styles.dateInput, { color: C.text }]} value={date} onChangeText={setDate} placeholder="Choose date" placeholderTextColor={C.sub} {...(Platform.OS === 'web' ? { type: 'date' } : {})} /></View>
-              <View style={styles.statusScroll}>{statusOptions.map((option) => <TouchableOpacity key={option} style={[styles.statusChip, { backgroundColor: status === option ? '#283b96' : C.surface, borderColor: status === option ? '#283b96' : C.border }]} onPress={() => setStatus(option)}><Text style={[styles.statusChipText, { color: status === option ? '#fff' : C.sub }]}>{option.toUpperCase()}</Text></TouchableOpacity>)}</View>
+            {/* EMPLOYEE FILTER PILL SCROLLER */}
+            <View style={styles.empScrollerSection}>
+              <View style={styles.empScrollerHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Users size={14} color="#059669" />
+                  <Text style={[styles.empScrollerTitle, { color: C.text }]}>Filter By Staff Member</Text>
+                </View>
+                {selectedEmpFilter !== 'all' && (
+                  <TouchableOpacity onPress={() => setSelectedEmpFilter('all')} style={styles.resetEmpBtn}>
+                    <RotateCcw size={11} color="#059669" />
+                    <Text style={styles.resetEmpText}>Show All</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.empChipPill,
+                    selectedEmpFilter === 'all' && styles.empChipPillActive,
+                    { borderColor: selectedEmpFilter === 'all' ? '#059669' : C.border, backgroundColor: selectedEmpFilter === 'all' ? '#064e3b' : C.surface }
+                  ]}
+                  onPress={() => setSelectedEmpFilter('all')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.empChipText, { color: selectedEmpFilter === 'all' ? '#a7f3d0' : C.sub }]}>All Staff ({uniqueStaffList.length})</Text>
+                </TouchableOpacity>
+
+                {uniqueStaffList.map((emp) => {
+                  const empId = String(emp._id || emp.employeeId || '');
+                  const empName = formatFullName(emp.name || emp.employeeName);
+                  const isSelected = String(selectedEmpFilter) === empId || selectedEmpFilter === empName;
+
+                  return (
+                    <TouchableOpacity
+                      key={empId}
+                      style={[
+                        styles.empChipPill,
+                        isSelected && styles.empChipPillActive,
+                        { borderColor: isSelected ? '#059669' : C.border, backgroundColor: isSelected ? '#064e3b' : C.surface }
+                      ]}
+                      onPress={() => setSelectedEmpFilter(isSelected ? 'all' : empId)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.empChipText, { color: isSelected ? '#a7f3d0' : C.text }]}>
+                        👤 {empName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
-            <Text style={[styles.resultsLabel, { color: C.sub }]}>{filteredVisits.length} visit{filteredVisits.length === 1 ? '' : 's'} shown</Text>
+
+            {/* DATE FILTER & STATUS TABS ROW */}
+            <View style={styles.filterRowSection}>
+              {/* Date Selector Box */}
+              <View style={[styles.dateBox, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <CalendarDays size={16} color="#059669" />
+                <TextInput
+                  style={[styles.dateInput, { color: C.text }]}
+                  value={date}
+                  onChangeText={setDate}
+                  placeholder="Filter by Date (YYYY-MM-DD)"
+                  placeholderTextColor={C.sub}
+                  {...(Platform.OS === 'web' ? { type: 'date' } : {})}
+                />
+                {date.length > 0 && (
+                  <TouchableOpacity onPress={() => setDate('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={16} color={C.sub} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Status Chips Scroller */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                {statusOptions.map((option) => {
+                  const isSelected = status === option;
+                  let labelText = option.toUpperCase();
+                  if (option === 'all') labelText = 'ALL VISITS';
+
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.statusChipPill,
+                        isSelected && styles.statusChipPillActive,
+                        { backgroundColor: isSelected ? '#064e3b' : C.surface, borderColor: isSelected ? '#064e3b' : C.border }
+                      ]}
+                      onPress={() => setStatus(option)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.statusChipPillText, { color: isSelected ? '#a7f3d0' : C.sub }]}>
+                        {labelText}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.resultBadgeRow}>
+              <Text style={[styles.resultsLabel, { color: C.sub }]}>{filteredVisits.length} visit{filteredVisits.length === 1 ? '' : 's'} shown</Text>
+              {(selectedEmpFilter !== 'all' || status !== 'all' || date) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedEmpFilter('all');
+                    setStatus('all');
+                    setDate('');
+                  }}
+                  style={styles.clearAllFiltersBtn}
+                >
+                  <RotateCcw size={12} color="#dc2626" />
+                  <Text style={styles.clearAllFiltersText}>Reset Filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
         ListEmptyComponent={<View style={styles.empty}><BriefcaseBusiness size={38} color={C.sub} /><Text style={[styles.emptyTitle, { color: C.text }]}>No visits found</Text><Text style={[styles.emptyText, { color: C.sub }]}>Try changing the date, status, or search filter.</Text></View>}
@@ -557,4 +728,38 @@ const styles = StyleSheet.create({
   selfiePickerBox: { borderWidth: 1.5, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 14, height: 120, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', marginTop: 4, marginBottom: 16 },
   saveSubmitBtn: { backgroundColor: '#0a3d3c', paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 24 },
   saveSubmitBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // Branded Loading Card
+  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingLogoBadge: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#022c17', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  loadingLogoImg: { width: 48, height: 48 },
+  loadingBrandTitle: { fontSize: 18, fontWeight: '800', fontFamily: FONT, marginTop: 12 },
+  loadingBrandSub: { fontSize: 12, fontWeight: '500', fontFamily: FONT, marginTop: 4 },
+
+  // KPI Summary Card Items
+  kpiCardItem: { flex: 1, padding: 10, borderRadius: 14, borderWidth: 1 },
+  kpiCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  kpiCardNum: { fontSize: 16, fontWeight: '800', fontFamily: FONT },
+  kpiCardLabel: { fontSize: 8, fontWeight: '800', fontFamily: FONT, marginTop: 4, letterSpacing: 0.5 },
+
+  // Employee Scroller
+  empScrollerSection: { marginTop: 12, marginBottom: 8 },
+  empScrollerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  empScrollerTitle: { fontSize: 12, fontWeight: '800', fontFamily: FONT },
+  resetEmpBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  resetEmpText: { fontSize: 11, fontWeight: '700', color: '#059669' },
+  empChipPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  empChipPillActive: { backgroundColor: '#064e3b' },
+  empChipText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
+
+  // Filter Row Section
+  filterRowSection: { gap: 8, marginBottom: 8 },
+  statusChipPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  statusChipPillActive: { backgroundColor: '#064e3b' },
+  statusChipPillText: { fontSize: 10, fontWeight: '800', fontFamily: FONT },
+
+  // Result Badge Row
+  resultBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },
+  clearAllFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#fef2f2' },
+  clearAllFiltersText: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
 });

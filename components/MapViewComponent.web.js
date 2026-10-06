@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import { StyleSheet, View, Text } from 'react-native';
 import Constants from 'expo-constants';
 import { AlertCircle } from 'lucide-react-native';
+import { getAvatarUrl } from '../services/api';
 
 const GOOGLE_MAPS_KEY = Constants.expoConfig?.extra?.googleMapsApiKey
   || Constants.expoConfig?.android?.config?.googleMaps?.apiKey
@@ -122,32 +123,84 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
     if (!mapRef.current || !window.google?.maps) return;
     const maps = window.google.maps;
     if (markersRef.current) markersRef.current.forEach((marker) => marker.setMap(null));
+
     markersRef.current = directoryStaff.filter((emp) => emp.lat && emp.lng).map((emp) => {
       const lat = Number(emp.lat);
       const lng = Number(emp.lng);
       const isLive = emp.isTracking || emp.status === 'ON_FIELD';
       const pinColor = isLive ? '#10b981' : '#64748b';
       const kmText = `${parseFloat(emp.totalDistance || 0).toFixed(1)} km`;
+      const avatarUrl = getAvatarUrl(emp.avatar);
+      const initial = (emp.name || 'E').charAt(0).toUpperCase();
+      const firstName = (emp.name || 'Agent').trim().split(' ')[0];
 
-      const svgPin = {
-        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
-        fillColor: pinColor,
-        fillOpacity: 1,
-        strokeWeight: 2,
-        strokeColor: '#ffffff',
-        scale: 1.8,
-        anchor: new maps.Point(12, 22),
-      };
+      // Sleek Unified Uber-Style Pill Pin for Google Maps Web
+      const markerContainer = document.createElement('div');
+      markerContainer.style.cursor = 'pointer';
+      markerContainer.style.display = 'flex';
+      markerContainer.style.flexDirection = 'column';
+      markerContainer.style.alignItems = 'center';
+      markerContainer.style.transform = 'translate(-50%, -100%)';
 
-      const marker = new maps.Marker({
-        map: mapRef.current,
-        position: { lat, lng },
-        title: `${emp.name} (${kmText}) - ${emp.address}`,
-        icon: svgPin,
-      });
-      marker.addListener('click', () => onSelectEmployee?.(emp));
-      return marker;
+      const avatarHtml = avatarUrl
+        ? `<img src="${avatarUrl}" style="width:26px;height:26px;border-radius:13px;object-fit:cover;" />`
+        : `<div style="width:26px;height:26px;border-radius:13px;background:${isLive ? '#059669' : '#475569'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:11px;">${initial}</div>`;
+
+      markerContainer.innerHTML = `
+        <div style="background:#ffffff;border:1.5px solid #cbd5e1;padding:3px 6px;border-radius:20px;display:flex;align-items:center;gap:5px;box-shadow:0 4px 12px rgba(15,23,42,0.18);white-space:nowrap;font-family:sans-serif;">
+          ${avatarHtml}
+          <span style="color:#0f172a;font-weight:700;font-size:11px;">${firstName}</span>
+          <span style="background:${isLive ? '#ecfdf5' : '#f1f5f9'};color:${isLive ? '#047857' : '#475569'};padding:2px 6px;border-radius:10px;font-weight:800;font-size:10px;">${kmText}</span>
+        </div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #cbd5e1;margin-top:-1px;"></div>
+      `;
+
+      let marker;
+      if (maps.OverlayView) {
+        class CustomOverlay extends maps.OverlayView {
+          constructor(position, element) {
+            super();
+            this.position = position;
+            this.element = element;
+          }
+          onAdd() {
+            const panes = this.getPanes();
+            panes.overlayMouseTarget.appendChild(this.element);
+            this.element.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onSelectEmployee?.(emp);
+            });
+          }
+          draw() {
+            const overlayProjection = this.getProjection();
+            if (!overlayProjection) return;
+            const point = overlayProjection.fromLatLngToDivPixel(this.position);
+            if (point) {
+              this.element.style.position = 'absolute';
+              this.element.style.left = point.x + 'px';
+              this.element.style.top = point.y + 'px';
+            }
+          }
+          onRemove() {
+            if (this.element.parentNode) {
+              this.element.parentNode.removeChild(this.element);
+            }
+          }
+        }
+        const overlay = new CustomOverlay(new maps.LatLng(lat, lng), markerContainer);
+        overlay.setMap(mapRef.current);
+        return overlay;
+      } else {
+        marker = new maps.Marker({
+          map: mapRef.current,
+          position: { lat, lng },
+          title: `${emp.name} (${kmText})`,
+        });
+        marker.addListener('click', () => onSelectEmployee?.(emp));
+        return marker;
+      }
     });
+
     if (routeOutlineRef.current) routeOutlineRef.current.setMap(null);
     if (routeRef.current) routeRef.current.setMap(null);
     if (startMarkerRef.current) startMarkerRef.current.setMap(null);
@@ -170,23 +223,11 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
       routeRef.current = new maps.Polyline({
         map: mapRef.current,
         path: routePath,
-        strokeColor: '#2563eb',
+        strokeColor: '#059669',
         strokeOpacity: 1,
-        strokeWeight: 3,
+        strokeWeight: 3.5,
         geodesic: true,
         zIndex: 21,
-        icons: [{
-          icon: {
-            path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 2.2,
-            fillColor: '#2563eb',
-            fillOpacity: 1,
-            strokeWeight: 1.5,
-            strokeColor: '#ffffff'
-          },
-          offset: '0%',
-          repeat: '100px'
-        }]
       });
 
       const routeStart = routePath[0];
@@ -240,10 +281,6 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
             <Text style={styles.errorTitle}>Google Maps Billing Required</Text>
           </View>
           <Text style={styles.errorText}>{mapError}</Text>
-          <Text style={styles.errorSub}>
-            Google Cloud JavaScript API requires an active billing account linked to the key project.
-            Please enable billing in Google Cloud Console or build for Android/iOS native view.
-          </Text>
         </View>
       ) : null}
     </View>
@@ -271,7 +308,6 @@ const styles = StyleSheet.create({
   errorHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   errorTitle: { color: '#dc2626', fontWeight: '800', fontSize: 14 },
   errorText: { color: '#475569', fontSize: 12, fontWeight: '600' },
-  errorSub: { color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 15 },
 });
 
 export default MapViewComponent;

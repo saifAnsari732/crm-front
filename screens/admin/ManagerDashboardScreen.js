@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
+import { storage } from '../../services/storage';
 import useLocationTracker from '../../hooks/useLocationTracker';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
@@ -255,15 +256,22 @@ export default function ManagerDashboardScreen() {
   };
 
   const [managerKm, setManagerKm] = useState('0.00');
+  const [localKmState, setLocalKmState] = useState('0.00');
 
   const fetchData = useCallback(async (isInitial = false) => {
     try {
       if (isInitial) setLoading(true);
+
+      try {
+        const storedDist = await storage.getItem('tracking_accumulated_distance');
+        if (storedDist) setLocalKmState(parseFloat(storedDist).toFixed(2));
+      } catch (_) {}
+
       const [empRes, locRes, orgRes, visitRes, attRes, myStatsRes] = await Promise.all([
         adminAPI.getEmployees({ limit: 200 }).catch(() => ({ data: { success: false } })),
         trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
         adminAPI.getOrganization().catch(() => ({ data: { success: false } })),
-        meetingAPI.getAll({ limit: 30 }).catch(() => ({ data: { success: false } })),
+        meetingAPI.getAll({ limit: 50 }).catch(() => ({ data: { success: false } })),
         adminAPI.getAttendance({ date: todayStr }).catch(() => ({ data: { success: false } })),
         dashboardAPI.getStats().catch(() => ({ data: { success: false } })),
       ]);
@@ -337,11 +345,25 @@ export default function ManagerDashboardScreen() {
 
   // Directory Staff Mapping with Live Tracking & Distance Metrics
   const directoryStaff = teamMembers.map((emp) => {
-    const liveLoc = liveLocations.find((l) =>
-      (l.employeeId && String(l.employeeId) === String(emp._id || emp.employeeId)) ||
-      (l.employeeIdCode && emp.employeeId && String(l.employeeIdCode) === String(emp.employeeId)) ||
-      (l.name && emp.name && l.name.toLowerCase() === emp.name.toLowerCase())
-    );
+    const liveLoc = liveLocations.find((l) => {
+      const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
+      const empId = String(emp._id || emp.employeeId || '');
+      const lCode = String(l.employeeIdCode || '');
+      const empCode = String(emp.employeeId || '');
+      const lName = (l.name || l.employeeName || l.employee?.name || '').toLowerCase();
+      const empName = (emp.name || '').toLowerCase();
+      return (
+        (empId && lEmpId === empId) ||
+        (empCode && lCode === empCode) ||
+        (empName && lName && lName === empName)
+      );
+    });
+
+    const empVisits = recentVisits.filter((v) => {
+      const vEmpId = String(v.employee?._id || v.employee || v.employeeId || '');
+      const empId = String(emp._id || emp.employeeId || '');
+      return vEmpId && empId && vEmpId === empId;
+    });
 
     return {
       _id: emp._id || emp.employeeId,
@@ -355,8 +377,8 @@ export default function ManagerDashboardScreen() {
       isOnline: emp.isOnline || !!liveLoc,
       lat: liveLoc?.lat || emp.lat || null,
       lng: liveLoc?.lng || emp.lng || null,
-      totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
-      totalMeetings: emp.totalMeetings || liveLoc?.totalMeetings || 0,
+      totalDistance: liveLoc?.totalDistance || liveLoc?.officialDistance || emp.totalDistance || 0,
+      totalMeetings: empVisits.length || emp.totalMeetings || liveLoc?.totalMeetings || 0,
       address: formatAddress(liveLoc?.address || emp.address, liveLoc ? 'Active On Field' : 'Not Punched In'),
       sessionId: liveLoc?.sessionId || emp.sessionId || null,
       updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
@@ -374,12 +396,32 @@ export default function ManagerDashboardScreen() {
       .map(r => String(r.employee?._id || r.employee || ''))
   );
 
-  const managerLiveLoc = liveLocations.find((l) =>
-    (l.employeeId && String(l.employeeId) === String(user?._id || user?.id)) ||
-    (l.employeeIdCode && user?.employeeId && String(l.employeeIdCode) === String(user?.employeeId)) ||
-    (l.name && user?.name && l.name.toLowerCase() === user?.name.toLowerCase())
-  );
-  const myTodayKm = Math.max(parseFloat(managerKm || 0), parseFloat(managerLiveLoc?.totalDistance || 0)).toFixed(2);
+  const managerIdStr = String(user?._id || user?.id || user?.employeeId || '');
+
+  const managerLiveLoc = liveLocations.find((l) => {
+    const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
+    const lCode = String(l.employeeIdCode || '');
+    const uCode = String(user?.employeeId || '');
+    const lName = (l.name || l.employeeName || l.employee?.name || '').toLowerCase();
+    const uName = (user?.name || '').toLowerCase();
+    return (
+      (managerIdStr && lEmpId === managerIdStr) ||
+      (uCode && lCode === uCode) ||
+      (uName && lName && lName === uName)
+    );
+  });
+
+  const managerAttRec = attendanceRecords.find((r) => {
+    const rEmpId = String(r.employee?._id || r.employee || '');
+    return managerIdStr && rEmpId === managerIdStr;
+  });
+
+  const myTodayKm = Math.max(
+    parseFloat(managerKm || 0),
+    parseFloat(managerLiveLoc?.totalDistance || managerLiveLoc?.officialDistance || 0),
+    parseFloat(managerAttRec?.totalDistanceTraveled || managerAttRec?.totalDistance || 0),
+    parseFloat(localKmState || 0)
+  ).toFixed(2);
 
   const presentCount = todayRecords.length > 0
     ? realPresentEmpIds.size
@@ -389,7 +431,12 @@ export default function ManagerDashboardScreen() {
   const lateCount = todayRecords.filter(r => (r.status || '').toLowerCase() === 'late').length;
 
   const totalKmToday = directoryStaff.reduce((sum, item) => sum + (parseFloat(item.totalDistance) || 0), 0);
-  const totalVisitsToday = directoryStaff.reduce((sum, item) => sum + (parseInt(item.totalMeetings) || 0), 0);
+  const todayVisits = recentVisits.filter((v) => {
+    const vDate = v.date || v.createdAt || v.meetingDate;
+    if (!vDate) return true;
+    return new Date(vDate).toISOString().slice(0, 10) === todayStr;
+  });
+  const totalVisitsToday = recentVisits.length > 0 ? (todayVisits.length || recentVisits.length) : 0;
 
   const presentPercent = totalTeam > 0 ? Math.round((presentCount / totalTeam) * 100) : 0;
   const livePercent = totalTeam > 0 ? Math.round((activeLive / totalTeam) * 100) : 0;
@@ -434,8 +481,19 @@ export default function ManagerDashboardScreen() {
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: COLORS.background }]}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading Organization Dashboard...</Text>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <View style={styles.loadingBrandCard}>
+          <View style={styles.loadingLogoBadge}>
+            <Image
+              source={require('../../assets/splash.png')}
+              style={styles.loadingLogoImg}
+              resizeMode="contain"
+            />
+          </View>
+          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 14 }} />
+          <Text style={styles.loadingBrandTitle}>KisanConnect</Text>
+          <Text style={styles.loadingBrandSub}>Loading Manager Console…</Text>
+        </View>
       </View>
     );
   }
@@ -1274,7 +1332,7 @@ export default function ManagerDashboardScreen() {
             </View>
 
             {/* Live Selfie Image Preview Box */}
-            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 240 : 180 }]}>
+            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 190 : 140 }]}>
               {pendingSelfieUri ? (
                 <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="contain" />
               ) : null}
@@ -1317,7 +1375,11 @@ export default function ManagerDashboardScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontFamily: FONT, fontSize: 13, color: COLORS.primary, marginTop: 10, fontWeight: '700' },
+  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingLogoBadge: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#059669', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 4 },
+  loadingLogoImg: { width: 62, height: 62, borderRadius: 16 },
+  loadingBrandTitle: { fontSize: 19, fontWeight: '800', color: '#0f172a', marginTop: 12, letterSpacing: 0.2 },
+  loadingBrandSub: { fontSize: 11.5, fontWeight: '600', color: '#64748b', marginTop: 2 },
 
   // Header Gradient (Professional Emerald)
   headerGradient: {
@@ -1650,7 +1712,7 @@ const styles = StyleSheet.create({
   dealPillText: { fontSize: 10, fontWeight: '800', color: COLORS.success },
 
   // Selfie Custom Resize Modal Styles
-  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, paddingBottom: Platform.OS === 'ios' ? 44 : 36 },
   selfieModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   selfieModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   selfieModalSub: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
@@ -1661,9 +1723,9 @@ const styles = StyleSheet.create({
   aspectOptionTextActive: { color: '#ffffff' },
   selfiePreviewFrame: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
   selfiePreviewImg: { width: '100%', height: '100%', resizeMode: 'contain' },
-  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginBottom: Platform.OS === 'ios' ? 20 : 10 },
-  retakeSelfieBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center' },
+  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: Platform.OS === 'ios' ? 28 : 22 },
+  retakeSelfieBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   retakeSelfieText: { fontSize: 13, fontWeight: '800', color: COLORS.textSecondary },
-  confirmPunchInBtn: { flex: 1.4, paddingVertical: 13, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  confirmPunchInBtn: { flex: 1.4, paddingVertical: 14, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   confirmPunchInText: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
 });

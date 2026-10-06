@@ -159,8 +159,13 @@ export const trackingAPI = {
   geocode:           (lat, lng)       => API.get(`/tracking/geocode?lat=${lat}&lng=${lng}`),
   getEmployeeReport: (empId, params)  => API.get(`/tracking/report/employee/${empId}`, { params }),
   deleteHistory:     (empId)          => API.delete(`/tracking/history/employee/${empId}`),
-  startTracking:     (_, __, lat, lng, ___, selfieUrl) =>
-                                         API.post('/tracking/start', { lat, lng, selfieUrl }),
+  startTracking:     (...args) => {
+    if (args[0] && typeof args[0] === 'object') {
+      return API.post('/tracking/start', args[0]);
+    }
+    const [_, __, lat, lng, ___, selfieUrl] = args;
+    return API.post('/tracking/start', { lat, lng, selfieUrl });
+  },
 };
 
 // â”€â”€â”€ Meetings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

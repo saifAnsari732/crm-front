@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   StyleSheet, View, TouchableOpacity, ActivityIndicator,
-  Platform, TextInput, FlatList, StatusBar, Modal, ScrollView,
+  Platform, FlatList, StatusBar, Modal, ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ArrowLeft, Bell, ChevronDown, Search, Map as MapIcon, Users,
-  LocateFixed, RefreshCw, Route, MapPin, CalendarDays, ChevronRight,
+  ArrowLeft, Users, LocateFixed, RefreshCw, Route, MapPin, ChevronRight, X, Clock, Activity
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
 import { trackingAPI, adminAPI, getAvatarUrl } from '../../services/api';
@@ -20,26 +19,30 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const GREEN = '#0f766e';
-const GREEN_DARK = '#0a3d3c';
+const GREEN_DARK = '#064e3b';
 
 const cardShadow = Platform.OS === 'web'
-  ? { boxShadow: '0px 4px 14px rgba(15, 23, 42, 0.12)' }
-  : { elevation: 4, shadowColor: '#0f172a', shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } };
+  ? { boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.08)' }
+  : { elevation: 3, shadowColor: '#0f172a', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } };
 
 const STATUS_META = {
-  ON_FIELD: { label: 'On Field', color: '#15803d', bg: '#e7f6ec', pin: '#16a34a' },
-  IN_TRANSIT: { label: 'In Transit', color: '#1d4ed8', bg: '#e8f0fe', pin: '#3b82f6' },
-  AT_LOCATION: { label: 'At Location', color: '#b45309', bg: '#fdf3e3', pin: '#f59e0b' },
-  OFFLINE: { label: 'Offline', color: '#64748b', bg: '#f1f5f9', pin: '#94a3b8' },
+  ON_FIELD: { label: 'On Field', color: '#047857', bg: '#ecfdf5', pin: '#10b981' },
+  IN_TRANSIT: { label: 'In Transit', color: '#1d4ed8', bg: '#eff6ff', pin: '#3b82f6' },
+  AT_LOCATION: { label: 'At Location', color: '#b45309', bg: '#fffbeb', pin: '#f59e0b' },
+  OFFLINE: { label: 'Offline', color: '#64748b', bg: '#f8fafc', pin: '#94a3b8' },
 };
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—');
 const normalizeAddress = (value) => {
-  if (!value) return 'Location unavailable';
-  if (typeof value === 'string') return value.trim() || 'Location unavailable';
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === 'Tracking Active' || trimmed === 'Location unavailable' || trimmed === 'Not Punched In') return '';
+    return trimmed;
+  }
   if (typeof value === 'object') {
     const parts = [value.street, value.city, value.state, value.pincode].filter(Boolean);
-    return parts.length ? parts.join(', ') : 'Location unavailable';
+    return parts.length ? parts.join(', ') : '';
   }
   return String(value);
 };
@@ -60,7 +63,7 @@ const buildPathTimeline = (coordinates = []) => {
     const prev = checkpointRef;
     const latitudeDelta = Number(current.lat) - Number(prev.lat);
     const longitudeDelta = Number(current.lng) - Number(prev.lng);
-    const distanceKm = Math.sqrt((latitudeDelta ** 2) + (longitudeDelta ** 2)) * 111; // rough fallback approximation for route chunking
+    const distanceKm = Math.sqrt((latitudeDelta ** 2) + (longitudeDelta ** 2)) * 111;
     const timeGapMinutes = prev.timestamp && current.timestamp
       ? (new Date(current.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 60000
       : 0;
@@ -116,7 +119,6 @@ export default function AdminTrackingScreen() {
   const autoSelectedRef = useRef('');
   const mapRef = useRef(null);
 
-  const [search, setSearch] = useState('');
   const [liveLocations, setLiveLocations] = useState([]);
   const [allEmployeesList, setAllEmployeesList] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -181,7 +183,7 @@ export default function AdminTrackingScreen() {
       } catch (e) {}
     };
     initSocket();
-    const interval = setInterval(() => fetchLiveLocations(true), 30000); // Light poll GPS only every 30s
+    const interval = setInterval(() => fetchLiveLocations(true), 30000);
     return () => {
       clearInterval(interval);
       if (socket) {
@@ -206,12 +208,11 @@ export default function AdminTrackingScreen() {
     return { byEmployeeId, byEmployeeCode, byName };
   }, [liveLocations]);
 
-  const baseStaffList = allEmployeesList.length > 0 ? allEmployeesList : liveLocations;
   const directoryStaff = useMemo(() => {
     const seen = new Set();
     const result = [];
 
-    // 1. Process all live locations first (active GPS sessions)
+    // 1. Live location sessions first (active GPS sessions)
     for (const loc of liveLocations) {
       const idStr = String(loc.employeeId || loc.employee?._id || loc.employee || loc._id || '');
       if (!idStr || seen.has(idStr)) continue;
@@ -222,7 +223,7 @@ export default function AdminTrackingScreen() {
         _id: idStr,
         name: empMatch?.name || loc.name || loc.employeeName || loc.employee?.name || 'Field Executive',
         avatar: empMatch?.avatar || loc.avatar,
-        department: empMatch?.department || loc.department || 'Field Operations',
+        department: empMatch?.department || loc.department || '',
         phone: empMatch?.phone || loc.phone,
         status: 'ON_FIELD',
         isTracking: true,
@@ -230,13 +231,13 @@ export default function AdminTrackingScreen() {
         lat: loc.lat || loc.latitude,
         lng: loc.lng || loc.longitude,
         totalDistance: loc.totalDistance || 0,
-        address: normalizeAddress(loc.address || 'Tracking Active'),
+        address: normalizeAddress(loc.address),
         sessionId: loc.sessionId || loc._id,
         updatedAt: loc.updatedAt || new Date().toISOString(),
       });
     }
 
-    // 2. Add remaining staff from employees directory
+    // 2. Remaining staff
     for (const emp of allEmployeesList) {
       const idStr = String(emp._id || emp.employeeId || '');
       if (idStr && seen.has(idStr)) continue;
@@ -251,7 +252,7 @@ export default function AdminTrackingScreen() {
         _id: idStr || `emp-${result.length}`,
         name: emp.name || 'Field Agent',
         avatar: emp.avatar || liveLoc?.avatar,
-        department: emp.department || liveLoc?.department || 'Field Services',
+        department: emp.department || liveLoc?.department || '',
         phone: emp.phone,
         status: tracking ? 'ON_FIELD' : (emp.isOnline ? 'AT_LOCATION' : 'OFFLINE'),
         isTracking: tracking,
@@ -259,7 +260,7 @@ export default function AdminTrackingScreen() {
         lat: liveLoc?.lat || emp.lat || null,
         lng: liveLoc?.lng || emp.lng || null,
         totalDistance: liveLoc?.totalDistance || emp.totalDistance || 0,
-        address: normalizeAddress(liveLoc?.address || emp.address || (liveLoc ? 'Tracking Active' : 'Not Punched In')),
+        address: normalizeAddress(liveLoc?.address || emp.address),
         sessionId: liveLoc?.sessionId || emp.sessionId || null,
         updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
       });
@@ -269,24 +270,35 @@ export default function AdminTrackingScreen() {
   }, [allEmployeesList, liveLocations, liveLocationIndex]);
 
   const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD').length;
-  const totalKm = directoryStaff.reduce((sum, s) => sum + (parseFloat(s.totalDistance) || 0), 0);
 
-  const filteredDirectory = useMemo(() => {
-    const query = search.toLowerCase();
-    return directoryStaff.filter((emp) => {
-      if (!query) return true;
-      return (emp.name || '').toLowerCase().includes(query)
-        || (emp.address || '').toLowerCase().includes(query)
-        || (emp.department || '').toLowerCase().includes(query);
-    });
-  }, [directoryStaff, search]);
-
-  const defaultRegion = useMemo(() => ({
-    latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.8620,
-    longitude: liveLocations[0]?.lng ? parseFloat(liveLocations[0].lng) : 80.9340,
-    latitudeDelta: 0.09,
-    longitudeDelta: 0.09,
-  }), [liveLocations]);
+  // Compute map region dynamically to fit ALL active employees on the map automatically
+  const defaultRegion = useMemo(() => {
+    const activeStaffWithCoords = directoryStaff.filter(s => (s.isTracking || s.status === 'ON_FIELD') && s.lat && s.lng);
+    if (activeStaffWithCoords.length > 0) {
+      const lats = activeStaffWithCoords.map(s => parseFloat(s.lat)).filter(n => !isNaN(n));
+      const lngs = activeStaffWithCoords.map(s => parseFloat(s.lng)).filter(n => !isNaN(n));
+      if (lats.length > 0 && lngs.length > 0) {
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+        const latDelta = Math.max((maxLat - minLat) * 1.5, 0.08);
+        const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.08);
+        return {
+          latitude: (minLat + maxLat) / 2,
+          longitude: (minLng + maxLng) / 2,
+          latitudeDelta: latDelta,
+          longitudeDelta: lngDelta,
+        };
+      }
+    }
+    return {
+      latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.8620,
+      longitude: liveLocations[0]?.lng ? parseFloat(liveLocations[0].lng) : 80.9340,
+      latitudeDelta: 0.12,
+      longitudeDelta: 0.12,
+    };
+  }, [directoryStaff, liveLocations]);
 
   const mapStaff = useMemo(() => directoryStaff.map((s) => ({
     ...s,
@@ -328,9 +340,7 @@ export default function AdminTrackingScreen() {
               chosenResponse = res;
               break;
             }
-          } catch (e) {
-            // continue to next candidate if this route id is not valid
-          }
+          } catch (e) {}
         }
 
         if (chosenResponse?.data?.success) {
@@ -379,7 +389,6 @@ export default function AdminTrackingScreen() {
           totalDistance: Number(baseEmployee.totalDistance || 0),
           routeSummary: getRouteSummary([]),
         }));
-        console.log('Employee route unavailable:', e.response?.data?.message || e.message);
       } finally {
         setLoadingRoute(false);
       }
@@ -396,14 +405,22 @@ export default function AdminTrackingScreen() {
   }, []);
 
   const recenterMap = () => {
-    const target = directoryStaff.find((s) => s.lat && s.lng);
-    if (target && mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
-      mapRef.current.animateToRegion({
-        latitude: parseFloat(target.lat),
-        longitude: parseFloat(target.lng),
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }, 600);
+    const activeCoords = directoryStaff.filter((s) => s.lat && s.lng && (s.isTracking || s.status === 'ON_FIELD'));
+    if (activeCoords.length > 0 && mapRef.current?.fitToCoordinates) {
+      mapRef.current.fitToCoordinates(
+        activeCoords.map(s => ({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lng) })),
+        { edgePadding: { top: 80, right: 50, bottom: 250, left: 50 }, animated: true }
+      );
+    } else {
+      const target = directoryStaff.find((s) => s.lat && s.lng);
+      if (target && mapRef.current?.animateToRegion) {
+        mapRef.current.animateToRegion({
+          latitude: parseFloat(target.lat),
+          longitude: parseFloat(target.lng),
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }, 600);
+      }
     }
   };
 
@@ -447,24 +464,24 @@ export default function AdminTrackingScreen() {
     }
   }, [directoryStaff, allEmployeesList, requestedEmployeeId, requestedSessionId, handleSelectEmployee]);
 
-  const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
-
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={GREEN} />
-        <Text style={styles.loadingText}>Loading live tracking…</Text>
+        <Text style={styles.loadingText}>Connecting live telematics…</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+      <StatusBar barStyle="light-content" backgroundColor="#022c17" />
 
-      {/* ── FULL-WIDTH EXECUTIVE HEADER ──────────────────────────── */}
+      {/* ── PROFESSIONAL EXECUTIVE HEADER ───────────────────────── */}
       <LinearGradient
-        colors={['#074e26', '#065a29']}
+        colors={['#022c17', '#064e3b', '#0d9488']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.fullWidthHeader}
       >
         <SafeAreaView edges={['top']}>
@@ -474,7 +491,7 @@ export default function AdminTrackingScreen() {
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
               activeOpacity={0.8}
             >
-              <ArrowLeft size={20} color="#ffffff" />
+              <ArrowLeft size={18} color="#ffffff" />
             </TouchableOpacity>
 
             <View style={styles.headerTitleWrap}>
@@ -485,7 +502,7 @@ export default function AdminTrackingScreen() {
                   <Text style={styles.activePillText}>{activeCount} Active</Text>
                 </View>
               </View>
-              <Text style={styles.headerSubText}>Real-Time Field Operations & Trajectory</Text>
+              <Text style={styles.headerSubText}>Real-Time Field Telemetry & Trajectory</Text>
             </View>
 
             <TouchableOpacity
@@ -494,13 +511,13 @@ export default function AdminTrackingScreen() {
               disabled={refreshing}
               activeOpacity={0.8}
             >
-              {refreshing ? <ActivityIndicator size="small" color="#ffffff" /> : <RefreshCw size={17} color="#ffffff" />}
+              {refreshing ? <ActivityIndicator size="small" color="#ffffff" /> : <RefreshCw size={16} color="#ffffff" />}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* ── FULL SCREEN MAP ────────────────────────────────────── */}
+      {/* ── MAP CONTAINER ───────────────────────────────────────── */}
       <View style={styles.mapWrap}>
         <MapViewComponent
           ref={mapRef}
@@ -513,10 +530,10 @@ export default function AdminTrackingScreen() {
 
         {/* Floating controls */}
         <View style={styles.mapControls}>
-          <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={recenterMap} accessibilityLabel="My location">
+          <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={recenterMap} activeOpacity={0.85}>
             <LocateFixed size={18} color={GREEN} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={fitRoute} accessibilityLabel="Fit route">
+          <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={fitRoute} activeOpacity={0.85}>
             <Route size={18} color={GREEN} />
           </TouchableOpacity>
         </View>
@@ -524,19 +541,20 @@ export default function AdminTrackingScreen() {
         {loadingRoute && (
           <View style={styles.routeLoader}>
             <ActivityIndicator color={GREEN} size="small" />
-            <Text style={styles.routeLoaderText}>Drawing GPS route…</Text>
+            <Text style={styles.routeLoaderText}>Tracing GPS trajectory…</Text>
           </View>
         )}
       </View>
 
-      {/* ── BOTTOM TEAM SHEET ──────────────────────────────────── */}
+      {/* ── CLEAN BOTTOM TEAM SHEET (NO SEARCH / NO TABS) ────────── */}
       <View style={[styles.sheet, cardShadow, !panelOpen && styles.sheetCollapsed]}>
         <TouchableOpacity style={styles.sheetHandleWrap} onPress={() => setPanelOpen((v) => !v)} activeOpacity={0.9}>
           <View style={styles.sheetHandle} />
         </TouchableOpacity>
 
+        {/* Sheet Header */}
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Active Team ({filteredDirectory.length})</Text>
+          <Text style={styles.sheetTitle}>Active Team ({directoryStaff.length})</Text>
           <TouchableOpacity style={styles.viewAll} onPress={() => router.push('/(admin)/team')}>
             <Text style={styles.viewAllText}>All Employees</Text>
             <ChevronRight size={13} color={GREEN} />
@@ -544,313 +562,351 @@ export default function AdminTrackingScreen() {
         </View>
 
         {panelOpen && (
-          <>
-            
-            <FlatList
-              data={filteredDirectory}
-              keyExtractor={(item, idx) => (item && item._id) ? `${String(item._id)}-${idx}` : `staff-${idx}`}
-              style={styles.sheetList}
-              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={
-                <View style={styles.emptyWrap}>
-                  <Users size={30} color="#fafbfd" />
-                  <Text style={styles.emptyText}>{directoryStaff.length === 0 ? 'No employees found.' : 'No team members match your search.'}</Text>
-                </View>
-              }
-              renderItem={({ item }) => {
-                const meta = STATUS_META[item.status] || STATUS_META.OFFLINE;
-                const selected = selectedEmployee?._id === item._id;
-                const displayAddress = normalizeAddress(item.address);
-                return (
-                  <TouchableOpacity
-                    style={[styles.memberRow, selected && styles.memberRowSelected]}
-                    onPress={() => handleSelectEmployee(item)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={{ position: 'relative' }}>
-                      {getAvatarUrl(item.avatar) ? (
-                        <Avatar.Image size={38} source={{ uri: getAvatarUrl(item.avatar) }} />
-                      ) : (
-                        <Avatar.Text
-                          size={38}
-                          label={(item.name || 'E').slice(0, 2).toUpperCase()}
-                          style={{ backgroundColor: meta.pin }}
-                          labelStyle={{ color: '#fff', fontSize: 13 }}
-                        />
-                      )}
-                      <View style={[styles.memberDot, { backgroundColor: meta.pin }]} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={styles.memberName}>{item.name}</Text>
-                      <Text style={styles.memberRole}>{item.department}</Text>
+          <FlatList
+            data={directoryStaff}
+            keyExtractor={(item, idx) => (item && item._id) ? `${String(item._id)}-${idx}` : `staff-${idx}`}
+            style={styles.sheetList}
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16), paddingTop: 4 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Users size={24} color="#94a3b8" />
+                <Text style={styles.emptyText}>No active employees currently on map.</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const meta = STATUS_META[item.status] || STATUS_META.OFFLINE;
+              const selected = selectedEmployee?._id === item._id;
+              const displayAddress = normalizeAddress(item.address);
+              const hasAddress = Boolean(displayAddress);
+
+              return (
+                <TouchableOpacity
+                  style={[styles.memberCard, selected && styles.memberCardSelected]}
+                  onPress={() => handleSelectEmployee(item)}
+                  activeOpacity={0.85}
+                >
+                  {/* Avatar with Status Ring */}
+                  <View style={{ position: 'relative' }}>
+                    {getAvatarUrl(item.avatar) ? (
+                      <Avatar.Image size={40} source={{ uri: getAvatarUrl(item.avatar) }} />
+                    ) : (
+                      <Avatar.Text
+                        size={40}
+                        label={(item.name || 'E').slice(0, 2).toUpperCase()}
+                        style={{ backgroundColor: meta.pin }}
+                        labelStyle={{ color: '#fff', fontSize: 14, fontWeight: '700' }}
+                      />
+                    )}
+                    <View style={[styles.memberDot, { backgroundColor: meta.pin }]} />
+                  </View>
+
+                  {/* Content Section: Name & Real Address only (Clean design) */}
+                  <View style={styles.memberMainContent}>
+                    <Text style={styles.memberName} numberOfLines={1}>{item.name}</Text>
+                    {hasAddress ? (
                       <View style={styles.memberLocRow}>
-                        <MapPin size={9} color="#94a3b8" />
+                        <MapPin size={10} color="#64748b" />
                         <Text style={styles.memberLoc} numberOfLines={1}>{displayAddress}</Text>
                       </View>
+                    ) : null}
+                  </View>
+
+                  {/* Right Telemetry Badge */}
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+                      <View style={[styles.statusPillDot, { backgroundColor: meta.pin }]} />
+                      <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
-                        <View style={[styles.statusPillDot, { backgroundColor: meta.pin }]} />
-                        <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
+                    {item.isTracking && (
+                      <View style={styles.distBadge}>
+                        <Text style={styles.distBadgeText}>{(parseFloat(item.totalDistance) || 0).toFixed(1)} km</Text>
                       </View>
-                      <Text style={styles.memberTime}>
-                        {item.isTracking ? `${(parseFloat(item.totalDistance) || 0).toFixed(1)} km` : fmtTime(item.updatedAt)}
-                      </Text>
-                    </View>
-                    <ChevronRight size={15} color="#cbd5e1" style={{ marginLeft: 6 }} />
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </>
+                    )}
+                  </View>
+                  <ChevronRight size={14} color="#cbd5e1" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              );
+            }}
+          />
         )}
       </View>
-      {/* ── EMPLOYEE DETAIL MODAL ──────────────────────────────── */}
+
+      {/* ── EMPLOYEE DETAIL MODAL (UI/UX PRO MAX) ──────────────────────────────── */}
       <Modal visible={showEmployeeModal} transparent animationType="slide" onRequestClose={() => setShowEmployeeModal(false)}>
         <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowEmployeeModal(false)} activeOpacity={1} />
           <View style={styles.modalContent}>
+            <View style={styles.sheetHandleWrap}>
+              <View style={styles.sheetHandle} />
+            </View>
+
             <View style={styles.modalHeader}>
               {selectedEmployee && (
-                <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    {getAvatarUrl(selectedEmployee.avatar) ? (
-                      <Avatar.Image size={40} source={{ uri: getAvatarUrl(selectedEmployee.avatar) }} />
-                    ) : (
-                      <Avatar.Text size={40} label={(selectedEmployee.name || 'E').slice(0, 2).toUpperCase()} />
-                    )}
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={{ fontFamily: FONT, fontSize: 16, fontWeight: 'bold', color: '#1e293b' }}>{selectedEmployee.name}</Text>
-                      <Text style={{ fontFamily: FONT, fontSize: 12, color: '#64748b' }}>{selectedEmployee.department || 'Employee'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+                  {getAvatarUrl(selectedEmployee.avatar) ? (
+                    <Avatar.Image size={44} source={{ uri: getAvatarUrl(selectedEmployee.avatar) }} style={{ borderWidth: 2, borderColor: '#10b981' }} />
+                  ) : (
+                    <Avatar.Text
+                      size={44}
+                      label={(selectedEmployee.name || 'E').slice(0, 2).toUpperCase()}
+                      style={{ backgroundColor: '#064e3b' }}
+                      labelStyle={{ color: '#fff', fontSize: 15, fontWeight: '800' }}
+                    />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontFamily: FONT, fontSize: 16, fontWeight: '800', color: '#0f172a' }}>{selectedEmployee.name}</Text>
+                      {selectedEmployee.isTracking && (
+                        <View style={styles.modalLiveBadge}>
+                          <View style={styles.modalLiveDot} />
+                          <Text style={styles.modalLiveText}>LIVE</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowEmployeeModal(false)} style={styles.closeBtn}>
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Close</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            <View style={styles.modalStatsRow}>
-              <View style={styles.modalStatBoxPrimary}>
-                <Text style={styles.modalStatLabel}>Shift Distance</Text>
-                <Text style={styles.modalStatValue}>{selectedEmployee?.totalDistance ? parseFloat(selectedEmployee.totalDistance).toFixed(2) : '0.00'} km</Text>
-                <Text style={styles.modalStatSubLabel}>{selectedEmployee?.routeSummary?.durationLabel || 'Live route'}</Text>
-              </View>
-              <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatLabel}>Current Status</Text>
-                <Text style={[styles.modalStatValue, { color: STATUS_META[selectedEmployee?.status]?.color || '#64748b' }]}>
-                  {STATUS_META[selectedEmployee?.status]?.label || 'Offline'}
-                </Text>
-                <Text style={styles.modalStatSubLabel}>
-                  {selectedEmployee?.routeSummary?.points ? `${selectedEmployee.routeSummary.points} tracked points` : 'No route yet'}
-                </Text>
-              </View>
-            </View>
-
-            {(selectedEmployee?.routeSummary?.start || selectedEmployee?.routeSummary?.end) && (
-              <View style={styles.routeSummaryCard}>
-                <Text style={styles.routeSummaryTitle}>Path summary</Text>
-                <View style={styles.routeSummaryGrid}>
-                  <View style={styles.routeSummaryCell}>
-                    <Text style={styles.routeSummaryLabel}>Start</Text>
-                    <Text style={styles.routeSummaryValue}>{selectedEmployee?.routeSummary?.start?.timestamp ? fmtTime(selectedEmployee.routeSummary.start.timestamp) : '–'}</Text>
-                  </View>
-                  <View style={styles.routeSummaryCell}>
-                    <Text style={styles.routeSummaryLabel}>End</Text>
-                    <Text style={styles.routeSummaryValue}>{selectedEmployee?.routeSummary?.end?.timestamp ? fmtTime(selectedEmployee.routeSummary.end.timestamp) : '–'}</Text>
+                    {normalizeAddress(selectedEmployee.address) ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <MapPin size={11} color="#64748b" />
+                        <Text style={{ fontFamily: FONT, fontSize: 11, color: '#64748b', fontWeight: '500' }} numberOfLines={1}>
+                          {normalizeAddress(selectedEmployee.address)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
-              </View>
-            )}
+              )}
+              <TouchableOpacity style={styles.closeBtnPill} onPress={() => setShowEmployeeModal(false)}>
+                <X size={16} color="#475569" />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={{ fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#334155', marginHorizontal: 16, marginTop: 10, marginBottom: 5 }}>
-              Activity & Path Timeline
-            </Text>
-
-            {loadingRoute ? (
-              <View style={{ padding: 30, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={GREEN} />
-                <Text style={{ marginTop: 10, color: '#64748b' }}>Loading path data...</Text>
-              </View>
-            ) : fullSessionData.length === 0 ? (
-              <View style={{ padding: 30, alignItems: 'center' }}>
-                <Text style={{ color: '#94a3b8' }}>No location data available for today.</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={fullSessionData}
-                keyExtractor={(item, index) => (item && (item._id || item.eventId)) ? String(item._id || item.eventId) : `coord-${index}`}
-                contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-                renderItem={({ item, index }) => (
-                  <View style={styles.timelineRow}>
-                    <View style={styles.timelineDotWrap}>
-                      <View style={styles.timelineDot} />
-                      {index !== fullSessionData.length - 1 && <View style={styles.timelineLine} />}
+            {selectedEmployee && (
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+                {/* Metrics Cards Row */}
+                <View style={styles.modalStatsRow}>
+                  <View style={styles.modalStatBoxPrimary}>
+                    <View style={styles.statBoxHeader}>
+                      <Route size={14} color="#047857" />
+                      <Text style={styles.modalStatLabelPrimary}>Total Distance</Text>
                     </View>
-                    <View style={styles.timelineContent}>
-                      <Text style={styles.timelineTime}>{fmtTime(item.timestamp)}</Text>
-                      <Text style={styles.timelineAddress}>{item.address || `${parseFloat(item.lat).toFixed(5)}, ${parseFloat(item.lng).toFixed(5)}`}</Text>
-                      {item.speed > 0 && <Text style={styles.timelineSpeed}>Speed: {parseFloat(item.speed).toFixed(1)} km/h</Text>}
+                    <Text style={styles.modalStatValuePrimary}>
+                      {(parseFloat(selectedEmployee.totalDistance) || 0).toFixed(2)} <Text style={{ fontSize: 12, fontWeight: '800', color: '#059669' }}>KM</Text>
+                    </Text>
+                  </View>
+
+                  <View style={styles.modalStatBoxSecondary}>
+                    <View style={styles.statBoxHeader}>
+                      <MapPin size={14} color="#0284c7" />
+                      <Text style={styles.modalStatLabelSecondary}>Route Points</Text>
+                    </View>
+                    <Text style={styles.modalStatValueSecondary}>
+                      {fullSessionData.length} <Text style={{ fontSize: 12, fontWeight: '800', color: '#0284c7' }}>Points</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                {/* GPS Trajectory Timeline Card */}
+                {fullSessionData.length > 0 && (
+                  <View style={styles.routeSummaryCard}>
+                    <View style={styles.timelineHeaderRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Activity size={16} color="#059669" />
+                        <Text style={styles.routeSummaryTitle}>GPS Trajectory Timeline</Text>
+                      </View>
+                      <View style={styles.timelineCountBadge}>
+                        <Text style={styles.timelineCountText}>{fullSessionData.length} checkpoints</Text>
+                      </View>
+                    </View>
+
+                    <View style={{ marginTop: 14 }}>
+                      {fullSessionData.map((pt, idx) => {
+                        const isLatest = idx === fullSessionData.length - 1;
+                        const isFirst = idx === 0;
+                        const isCoordOnly = !pt.address || pt.address.includes(',');
+
+                        return (
+                          <View key={pt._id || idx} style={styles.timelineRow}>
+                            <View style={styles.timelineDotWrap}>
+                              {isLatest ? (
+                                <View style={styles.timelineLatestOuterDot}>
+                                  <View style={styles.timelineLatestInnerDot} />
+                                </View>
+                              ) : isFirst ? (
+                                <View style={styles.timelineStartDot} />
+                              ) : (
+                                <View style={styles.timelineDot} />
+                              )}
+                              {idx < fullSessionData.length - 1 && <View style={styles.timelineLine} />}
+                            </View>
+                            <View style={styles.timelineContent}>
+                              <View style={styles.timelineTimeRow}>
+                                <Clock size={11} color="#64748b" />
+                                <Text style={styles.timelineTime}>{fmtTime(pt.timestamp)}</Text>
+                                {isLatest && (
+                                  <View style={styles.latestTag}>
+                                    <Text style={styles.latestTagText}>Latest Ping</Text>
+                                  </View>
+                                )}
+                                {isFirst && (
+                                  <View style={styles.startTag}>
+                                    <Text style={styles.startTagText}>Start</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text style={[styles.timelineAddress, isCoordOnly && styles.timelineCoordText]}>
+                                {pt.address}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
                     </View>
                   </View>
                 )}
-              />
+              </ScrollView>
             )}
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f6f4' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f6f4' },
-  loadingText: { fontFamily: FONT, fontSize: 12, color: '#64748b', marginTop: 8 },
+  root: { flex: 1, backgroundColor: '#0f172a' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  loadingText: { fontFamily: FONT, fontSize: 13, color: '#64748b', marginTop: 10 },
 
   fullWidthHeader: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0,
-    paddingBottom: 10,
     paddingHorizontal: 16,
-    zIndex: 100,
+    paddingBottom: 14,
+    paddingTop: 4,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 4,
+    gap: 12,
   },
   headerBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitleWrap: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  headerTitleText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  headerSubText: {
-    color: '#a7f3d0',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 1,
-  },
+  headerTitleWrap: { flex: 1 },
+  headerTitleText: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
+  headerSubText: { fontFamily: FONT, fontSize: 10.5, color: 'rgba(255, 255, 255, 0.8)', marginTop: 2 },
+
   activePillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(16, 185, 129, 0.25)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(52, 211, 153, 0.4)',
   },
   activePillText: {
     color: '#34d399',
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800',
   },
+  liveGreenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10b981',
+  },
   headerRefreshBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  liveGreenDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10b981',
-  },
 
   mapWrap: { flex: 1, position: 'relative' },
-
-  livePillCard: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 13, paddingHorizontal: 11, paddingVertical: 8 },
-  livePillDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#16a34a' },
-  livePillTitle: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: '#0f172a' },
-  livePillSub: { fontFamily: FONT, fontSize: 8, color: '#64748b', marginTop: 1 },
-
-  legendCard: { position: 'absolute', top: 12, right: 12, backgroundColor: '#fff', borderRadius: 13, padding: 9, gap: 6 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendText: { fontFamily: FONT, fontSize: 9, fontWeight: '700', color: '#334155' },
-
-  distanceCard: { position: 'absolute', left: 12, bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9, minWidth: 150 },
-  distanceIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: '#e7f6ec', alignItems: 'center', justifyContent: 'center' },
-  distanceLabel: { fontFamily: FONT, fontSize: 8, color: '#64748b', fontWeight: '700' },
-  distanceValue: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 1 },
-
   mapControls: { position: 'absolute', right: 12, bottom: 14, gap: 8 },
   mapCtrlBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-
-  routeLoader: { position: 'absolute', top: 58, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  routeLoader: { position: 'absolute', top: 16, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   routeLoaderText: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: GREEN },
 
-  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 10, maxHeight: '82%', flexShrink: 0 },
-  sheetCollapsed: { maxHeight: 68 },
-  sheetHandleWrap: { alignItems: 'center', paddingVertical: 8 },
-  sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0' },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
+  // Bottom Sheet - Compact Height (42% max screen height)
+  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, maxHeight: '42%', flexShrink: 0 },
+  sheetCollapsed: { maxHeight: 56 },
+  sheetHandleWrap: { alignItems: 'center', paddingVertical: 6 },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#cbd5e1' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   sheetTitle: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#0f172a' },
   viewAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  viewAllText: { fontFamily: FONT, fontSize: 10, fontWeight: '700', color: GREEN },
+  viewAllText: { fontFamily: FONT, fontSize: 11, fontWeight: '700', color: GREEN },
 
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 11, paddingHorizontal: 10, height: 36, gap: 7, marginBottom: 8 },
-  searchInput: { flex: 1, fontFamily: FONT, fontSize: 11, color: '#0f172a', paddingVertical: 0 },
   sheetList: { flexGrow: 1 },
 
-  memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderRadius: 12 },
-  memberRowSelected: { backgroundColor: '#e7f6ec' },
-  memberDot: { width: 9, height: 9, borderRadius: 5, position: 'absolute', bottom: 0, right: 0, borderWidth: 1.5, borderColor: '#fff' },
-  memberName: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', color: '#0f172a' },
-  memberRole: { fontFamily: FONT, fontSize: 8.5, color: '#64748b', marginTop: 1 },
+  // Member Card Item Design
+  memberCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 6 },
+  memberCardSelected: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  memberDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', bottom: -1, right: -1, borderWidth: 2, borderColor: '#fff' },
+  memberMainContent: { flex: 1, marginLeft: 10, justifyContent: 'center' },
+  memberName: { fontFamily: FONT, fontSize: 13, fontWeight: '700', color: '#0f172a' },
   memberLocRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  memberLoc: { fontFamily: FONT, fontSize: 8.5, color: '#94a3b8', flex: 1 },
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
-  statusPillDot: { width: 5, height: 5, borderRadius: 3 },
-  statusPillText: { fontFamily: FONT, fontSize: 7.5, fontWeight: 'bold' },
-  memberTime: { fontFamily: FONT, fontSize: 9, fontWeight: '700', color: '#94a3b8', marginTop: 4 },
+  memberLoc: { fontFamily: FONT, fontSize: 9.5, color: '#64748b', flex: 1 },
+  
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2.5 },
+  statusPillDot: { width: 5, height: 5, borderRadius: 2.5 },
+  statusPillText: { fontFamily: FONT, fontSize: 8, fontWeight: 'bold' },
+  distBadge: { backgroundColor: '#ccfbf1', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
+  distBadgeText: { fontFamily: FONT, fontSize: 9.5, fontWeight: 'bold', color: GREEN_DARK },
 
-  emptyWrap: { alignItems: 'center', paddingVertical: 22 },
-  emptyText: { fontFamily: FONT, fontSize: 10, color: '#94a3b8', marginTop: 6 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 20 },
+  emptyText: { fontFamily: FONT, fontSize: 11, color: '#94a3b8', marginTop: 6 },
 
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%', minHeight: '50%', paddingBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 20 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  closeBtn: { backgroundColor: '#ef4444', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  modalStatsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 12 },
-  modalStatBox: { flex: 1, backgroundColor: '#f8fafc', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  modalStatBoxPrimary: { flex: 1, backgroundColor: '#e7f6ec', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#bbf7d0' },
-  modalStatLabel: { fontFamily: FONT, color: '#64748b', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
-  modalStatValue: { fontFamily: FONT, color: '#0f172a', fontSize: 18, fontWeight: 'bold', marginTop: 4 },
-  modalStatSubLabel: { fontFamily: FONT, color: '#64748b', fontSize: 10, marginTop: 6 },
-  routeSummaryCard: { marginHorizontal: 16, marginTop: 4, borderRadius: 16, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', padding: 12 },
-  routeSummaryTitle: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 },
-  routeSummaryGrid: { flexDirection: 'row', marginTop: 10, gap: 10 },
-  routeSummaryCell: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  routeSummaryLabel: { fontFamily: FONT, fontSize: 9, color: '#64748b', textTransform: 'uppercase', fontWeight: '700' },
-  routeSummaryValue: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 },
+  // Modal Styles - UI/UX Pro Max Redesign
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '84%', minHeight: '50%', paddingBottom: 10 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  closeBtnPill: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+
+  modalLiveBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ecfdf5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  modalLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
+  modalLiveText: { fontFamily: FONT, fontSize: 8.5, fontWeight: '800', color: '#047857' },
+
+  modalStatsRow: { flexDirection: 'row', paddingTop: 14, gap: 12 },
+  modalStatBoxPrimary: { flex: 1, backgroundColor: '#ecfdf5', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#a7f3d0' },
+  modalStatBoxSecondary: { flex: 1, backgroundColor: '#f0f9ff', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#bae6fd' },
+  statBoxHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  modalStatLabelPrimary: { fontFamily: FONT, color: '#047857', fontSize: 10.5, fontWeight: '800' },
+  modalStatLabelSecondary: { fontFamily: FONT, color: '#0369a1', fontSize: 10.5, fontWeight: '800' },
+  modalStatValuePrimary: { fontFamily: FONT, color: '#064e3b', fontSize: 18, fontWeight: '900', marginTop: 4 },
+  modalStatValueSecondary: { fontFamily: FONT, color: '#0c4a6e', fontSize: 18, fontWeight: '900', marginTop: 4 },
+
+  routeSummaryCard: { marginTop: 14, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
+  timelineHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  routeSummaryTitle: { fontFamily: FONT, fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  timelineCountBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  timelineCountText: { fontFamily: FONT, fontSize: 10, fontWeight: '700', color: '#475569' },
+
   timelineRow: { flexDirection: 'row' },
-  timelineDotWrap: { width: 30, alignItems: 'center' },
-  timelineDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: GREEN, marginTop: 4, borderWidth: 2, borderColor: '#e7f6ec' },
-  timelineLine: { width: 2, flex: 1, backgroundColor: '#e2e8f0', marginVertical: 4 },
-  timelineContent: { flex: 1, paddingBottom: 24, paddingLeft: 10 },
-  timelineTime: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', color: '#64748b' },
-  timelineAddress: { fontFamily: FONT, fontSize: 13, color: '#334155', marginTop: 4, lineHeight: 18 },
-  timelineSpeed: { fontFamily: FONT, fontSize: 11, color: '#0ea5e9', fontWeight: 'bold', marginTop: 6 },
+  timelineDotWrap: { width: 26, alignItems: 'center' },
+  timelineLatestOuterDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#d1fae5', justifyContent: 'center', alignItems: 'center', marginTop: 2 },
+  timelineLatestInnerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' },
+  timelineStartDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#0284c7', marginTop: 4 },
+  timelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#64748b', marginTop: 4 },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#e2e8f0', marginVertical: 3 },
+
+  timelineContent: { flex: 1, paddingBottom: 16, paddingLeft: 10 },
+  timelineTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  timelineTime: { fontFamily: FONT, fontSize: 11, fontWeight: '800', color: '#0f172a' },
+  latestTag: { backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, marginLeft: 4 },
+  latestTagText: { fontSize: 8.5, fontWeight: '800', color: '#15803d' },
+  startTag: { backgroundColor: '#e0f2fe', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, marginLeft: 4 },
+  startTagText: { fontSize: 8.5, fontWeight: '800', color: '#0369a1' },
+  timelineAddress: { fontFamily: FONT, fontSize: 12, color: '#334155', fontWeight: '500', marginTop: 3, lineHeight: 17 },
+  timelineCoordText: { color: '#64748b', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'sans-serif', fontSize: 11 },
 });

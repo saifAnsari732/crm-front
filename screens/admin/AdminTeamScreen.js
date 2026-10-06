@@ -10,7 +10,7 @@ import {
   Users, Search, UserCheck, Ban, Pencil, X, Check, ShieldCheck,
   ArrowLeft, Filter, Phone, Mail, CheckCircle2, ChevronRight,
   LayoutDashboard, MapPin, FileText, Settings, UserPlus, UserX, Building2,
-  Briefcase, Sparkles
+  Briefcase, Sparkles, Route
 } from 'lucide-react-native';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 import { useRouter } from 'expo-router';
@@ -161,8 +161,19 @@ export default function AdminTeamScreen() {
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: C.bg }]}>
-        <ActivityIndicator size="large" color={C.primary} />
-        <Text style={[styles.loadingText, { color: C.textSub }]}>Loading Workforce Directory…</Text>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <View style={styles.loadingBrandCard}>
+          <View style={styles.loadingLogoBadge}>
+            <Image
+              source={require('../../assets/splash.png')}
+              style={styles.loadingLogoImg}
+              resizeMode="contain"
+            />
+          </View>
+          <ActivityIndicator size="small" color="#059669" style={{ marginTop: 14 }} />
+          <Text style={[styles.loadingBrandTitle, { color: C.text }]}>KisanConnect</Text>
+          <Text style={[styles.loadingBrandSub, { color: C.textSub }]}>Loading Workforce Directory…</Text>
+        </View>
       </View>
     );
   }
@@ -395,6 +406,15 @@ export default function AdminTeamScreen() {
                 )}
 
                 <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0' }]}
+                  onPress={() => router.push(`/(admin)/tracking?employeeId=${empId}`)}
+                  activeOpacity={0.75}
+                >
+                  <Route size={13} color={isDark ? '#34d399' : '#047857'} />
+                  <Text style={[styles.editBtnText, { color: isDark ? '#34d399' : '#047857', fontWeight: '700' }]}>Track Data</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: C.surfaceSecondary, borderColor: C.border }]}
                   onPress={() => openEdit(emp)}
                   activeOpacity={0.75}
@@ -565,7 +585,11 @@ export default function AdminTeamScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 13, marginTop: 10, fontFamily: FONT },
+  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingLogoBadge: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#059669', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 4 },
+  loadingLogoImg: { width: 62, height: 62, borderRadius: 16 },
+  loadingBrandTitle: { fontSize: 19, fontWeight: '800', marginTop: 12, letterSpacing: 0.2 },
+  loadingBrandSub: { fontSize: 11.5, fontWeight: '600', marginTop: 2 },
 
   // Header
   headerGradient: { paddingBottom: 16 },

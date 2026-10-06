@@ -260,8 +260,19 @@ export default function OrgAdminDashboardScreen() {
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: BG_COLOR }]}>
-        <ActivityIndicator size="large" color="#0284c7" />
-        <Text style={styles.loadingText}>Loading KisanConnect Operations…</Text>
+        <StatusBar barStyle="dark-content" backgroundColor={BG_COLOR} />
+        <View style={styles.loadingBrandCard}>
+          <View style={styles.loadingLogoBadge}>
+            <Image
+              source={require('../../assets/splash.png')}
+              style={styles.loadingLogoImg}
+              resizeMode="contain"
+            />
+          </View>
+          <ActivityIndicator size="small" color="#059669" style={{ marginTop: 14 }} />
+          <Text style={styles.loadingBrandTitle}>KisanConnect</Text>
+          <Text style={styles.loadingBrandSub}>Loading Organization Console…</Text>
+        </View>
       </View>
     );
   }
@@ -309,11 +320,11 @@ export default function OrgAdminDashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+      <StatusBar barStyle="light-content" backgroundColor="#022c17" />
 
       {/* EXECUTIVE ULTRA-PROFESSIONAL HEADER */}
       <LinearGradient
-        colors={['#074e26', '#065a29']}
+        colors={['#022c17', '#064e3b', '#0d9488']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
@@ -575,7 +586,6 @@ export default function OrgAdminDashboardScreen() {
                           <Text style={styles.avatarFallbackText}>{getUserInitials(emp.name)}</Text>
                         </View>
                       )}
-                      <View style={[styles.statusDot, { backgroundColor: isLive ? '#10b981' : '#94a3b8' }]} />
                     </View>
 
                     <View style={styles.empInfoCol}>
@@ -598,7 +608,7 @@ export default function OrgAdminDashboardScreen() {
                   </View>
 
                   <View style={styles.rosterRightClick}>
-                    <ChevronRight size={18} color="#0284c7" />
+                    <ChevronRight size={16} color="#94a3b8" />
                   </View>
                 </TouchableOpacity>
               );
@@ -1108,7 +1118,12 @@ export default function OrgAdminDashboardScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'start' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingLogoBadge: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#059669', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 4 },
+  loadingLogoImg: { width: 62, height: 62, borderRadius: 16 },
+  loadingBrandTitle: { fontSize: 19, fontWeight: '800', color: '#0f172a', marginTop: 12, letterSpacing: 0.2 },
+  loadingBrandSub: { fontSize: 11.5, fontWeight: '600', color: '#64748b', marginTop: 2 },
   headerGradient: { paddingTop: Platform.OS === 'web' ? 14 : 0, paddingBottom: 10 },
   topNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 4 : 8, paddingBottom: 6 },
   navCircleBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
@@ -1185,19 +1200,22 @@ const styles = StyleSheet.create({
   filterPillTextActive: { color: '#ffffff' },
   filterPillTextLiveActive: { color: '#a7f3d0' },
   livePulseDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
-  rosterCardItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f1f5f9' },
+  rosterCardItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f1f5f9' },
   rosterLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   avatarWrap: { position: 'relative' },
   empAvatarImg: { width: 40, height: 40, borderRadius: 20 },
-  avatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center' },
-  avatarFallbackText: { color: '#34d399', fontSize: 13, fontWeight: '800' },
-  statusDot: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#ffffff' },
+  avatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ccfbf1', justifyContent: 'center', alignItems: 'center' },
+  avatarFallbackText: { color: '#0f766e', fontSize: 14, fontWeight: '800' },
+  statusDot: { position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: '#ffffff' },
   empInfoCol: { flex: 1 },
-  empNameText: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
-  livePulsePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8 },
-  livePulseText: { fontSize: 8, fontWeight: '800', color: '#16a34a' },
+  empNameText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  livePulsePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ecfdf5', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
+  livePulseText: { fontSize: 8.5, fontWeight: '800', color: '#047857' },
   empSubText: { fontSize: 10, color: '#64748b', marginTop: 1 },
-  empTimeText: { fontSize: 9, color: '#94a3b8', marginTop: 2 },
+  empMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  empTimeText: { fontSize: 10, color: '#64748b' },
+  distPill: { backgroundColor: '#f0fdf4', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
+  distPillText: { fontSize: 10, fontWeight: '800', color: '#047857' },
   rosterActions: { flexDirection: 'row', gap: 6 },
   actionIconBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   emptyWrap: { padding: 20, alignItems: 'center' },
