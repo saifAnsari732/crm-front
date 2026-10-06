@@ -191,7 +191,7 @@ export default function AdminTeamScreen() {
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNav}>
-            <TouchableOpacity style={styles.navCircleBtn} onPress={() => router.back()} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.navCircleBtn} onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))} activeOpacity={0.75}>
               <ArrowLeft size={20} color="#ffffff" />
             </TouchableOpacity>
 

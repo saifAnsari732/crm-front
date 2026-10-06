@@ -300,7 +300,13 @@ export default function OrgAdminDashboardScreen() {
     const isLive = e.isTracking || e.isOnline || (liveLoc && liveLoc.isActive !== false) || liveLocations.some(l => String(l.employeeId || l.employee || l.employee?._id || l._id) === String(e._id));
     const attRec = attendanceRecords.find(a => String(a.employee?._id || a.employee) === String(e._id));
 
-    const totalKm = parseFloat(e.totalDistance || e.totalDistanceToday || attRec?.totalDistanceTraveled || liveLoc?.totalDistance || liveLoc?.officialDistance || 0).toFixed(2);
+    // Daily KM Today calculation: prioritize today's attendance record, live tracking session, or today distance
+    const attKm = parseFloat(attRec?.totalDistanceTraveled || attRec?.totalDistance || attRec?.kmTraveled || 0);
+    const liveKm = parseFloat(liveLoc?.totalDistance || liveLoc?.officialDistance || 0);
+    const userTodayKm = parseFloat(e.todayKm || e.totalDistanceToday || e.todayDistance || 0);
+
+    const todayKmNum = Math.max(attKm, liveKm, userTodayKm);
+    const totalKm = todayKmNum.toFixed(2);
 
     const pingTime = liveLoc?.lastActivity || liveLoc?.updatedAt || e.lastPing || attRec?.checkIn || e.lastCheckIn || e.lastSeen;
     const formattedTime = pingTime ? new Date(pingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isLive ? 'Active' : 'Offline');
@@ -311,7 +317,7 @@ export default function OrgAdminDashboardScreen() {
       status: isLive ? 'Tracking Active' : 'Offline',
       sub: e.department ? `${e.department} • Field Executive` : 'Field Executive',
       time: formattedTime,
-      totalDistance: totalKm
+      todayKm: totalKm,
     };
   });
 
@@ -568,8 +574,7 @@ export default function OrgAdminDashboardScreen() {
           ) : (
             realActivities.map((emp) => {
               const isLive = emp.status === 'Tracking Active' || emp.isTracking || emp.isOnline;
-              const liveLoc = liveLocations.find(l => String(l.employeeId || l.employee || l._id) === String(emp._id));
-              const kmVal = parseFloat(emp.totalDistance || liveLoc?.totalDistance || 0).toFixed(2);
+              const kmVal = parseFloat(emp.todayKm || 0).toFixed(2);
               return (
                 <TouchableOpacity
                   key={emp._id}

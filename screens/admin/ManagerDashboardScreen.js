@@ -365,6 +365,12 @@ export default function ManagerDashboardScreen() {
       return vEmpId && empId && vEmpId === empId;
     });
 
+    const attRec = attendanceRecords.find(a => String(a.employee?._id || a.employee) === String(emp._id));
+    const attKm = parseFloat(attRec?.totalDistanceTraveled || attRec?.totalDistance || attRec?.kmTraveled || 0);
+    const liveKm = parseFloat(liveLoc?.totalDistance || liveLoc?.officialDistance || 0);
+    const userTodayKm = parseFloat(emp.todayKm || emp.totalDistanceToday || emp.todayDistance || 0);
+    const todayKmNum = Math.max(attKm, liveKm, userTodayKm);
+
     return {
       _id: emp._id || emp.employeeId,
       name: emp.name || 'Field Agent',
@@ -377,7 +383,8 @@ export default function ManagerDashboardScreen() {
       isOnline: emp.isOnline || !!liveLoc,
       lat: liveLoc?.lat || emp.lat || null,
       lng: liveLoc?.lng || emp.lng || null,
-      totalDistance: liveLoc?.totalDistance || liveLoc?.officialDistance || emp.totalDistance || 0,
+      totalDistance: todayKmNum,
+      todayKm: todayKmNum.toFixed(2),
       totalMeetings: empVisits.length || emp.totalMeetings || liveLoc?.totalMeetings || 0,
       address: formatAddress(liveLoc?.address || emp.address, liveLoc ? 'Active On Field' : 'Not Punched In'),
       sessionId: liveLoc?.sessionId || emp.sessionId || null,
@@ -450,6 +457,39 @@ export default function ManagerDashboardScreen() {
     { day: 'Sat', val: 65 },
     { day: 'Sun', val: 88 },
   ];
+
+  const recenterMap = useCallback(() => {
+    const activeCoords = directoryStaff.filter((s) => s.lat && s.lng && (s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT' || s.status === 'AT_LOCATION'));
+    const targetCoords = activeCoords.length > 0 ? activeCoords : directoryStaff.filter((s) => s.lat && s.lng);
+
+    if (targetCoords.length > 0 && mapRef.current?.fitToCoordinates) {
+      mapRef.current.fitToCoordinates(
+        targetCoords.map(s => ({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lng) })),
+        { edgePadding: { top: 70, right: 40, bottom: 180, left: 40 }, animated: true }
+      );
+    } else {
+      const target = directoryStaff.find((s) => s.lat && s.lng);
+      if (target && mapRef.current?.animateToRegion) {
+        mapRef.current.animateToRegion({
+          latitude: parseFloat(target.lat),
+          longitude: parseFloat(target.lng),
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }, 600);
+      }
+    }
+  }, [directoryStaff]);
+
+  const hasAutoCenteredRef = useRef(false);
+  useEffect(() => {
+    if (directoryStaff.length > 0 && !hasAutoCenteredRef.current) {
+      hasAutoCenteredRef.current = true;
+      const timer = setTimeout(() => {
+        recenterMap();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [directoryStaff, recenterMap]);
 
   const defaultRegion = {
     latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.4499,

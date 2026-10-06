@@ -404,11 +404,13 @@ export default function AdminTrackingScreen() {
     }
   }, []);
 
-  const recenterMap = () => {
-    const activeCoords = directoryStaff.filter((s) => s.lat && s.lng && (s.isTracking || s.status === 'ON_FIELD'));
-    if (activeCoords.length > 0 && mapRef.current?.fitToCoordinates) {
+  const recenterMap = useCallback(() => {
+    const activeCoords = directoryStaff.filter((s) => s.lat && s.lng && (s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT' || s.status === 'AT_LOCATION'));
+    const targetCoords = activeCoords.length > 0 ? activeCoords : directoryStaff.filter((s) => s.lat && s.lng);
+
+    if (targetCoords.length > 0 && mapRef.current?.fitToCoordinates) {
       mapRef.current.fitToCoordinates(
-        activeCoords.map(s => ({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lng) })),
+        targetCoords.map(s => ({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lng) })),
         { edgePadding: { top: 80, right: 50, bottom: 250, left: 50 }, animated: true }
       );
     } else {
@@ -422,7 +424,7 @@ export default function AdminTrackingScreen() {
         }, 600);
       }
     }
-  };
+  }, [directoryStaff]);
 
   const fitRoute = () => {
     if (routeCoords.length > 1 && mapRef.current?.fitToCoordinates) {
@@ -436,6 +438,19 @@ export default function AdminTrackingScreen() {
   };
 
   const onRefresh = async () => { setRefreshing(true); clearCachePrefix('admin_'); await fetchAllData(true); };
+
+  // Auto-center map to show ALL employees on initial page load
+  const hasAutoCenteredRef = useRef(false);
+  useEffect(() => {
+    const hasRequestedEmp = requestedEmployeeId || requestedSessionId;
+    if (directoryStaff.length > 0 && !hasRequestedEmp && !hasAutoCenteredRef.current) {
+      hasAutoCenteredRef.current = true;
+      const timer = setTimeout(() => {
+        recenterMap();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [directoryStaff, requestedEmployeeId, requestedSessionId, recenterMap]);
 
   useEffect(() => {
     const employeeId = Array.isArray(requestedEmployeeId) ? requestedEmployeeId[0] : requestedEmployeeId;

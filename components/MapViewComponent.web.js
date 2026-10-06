@@ -67,6 +67,8 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
   const routeRef = useRef(null);
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
+  const hasAutoFittedRef = useRef(false);
+
   const [mapError, setMapError] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
@@ -120,11 +122,13 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
   }, [initialRegion]);
 
   useEffect(() => {
-    if (!mapRef.current || !window.google?.maps) return;
+    if (!mapRef.current || !window.google?.maps || !mapReady) return;
     const maps = window.google.maps;
     if (markersRef.current) markersRef.current.forEach((marker) => marker.setMap(null));
 
-    markersRef.current = directoryStaff.filter((emp) => emp.lat && emp.lng).map((emp) => {
+    const validStaff = directoryStaff.filter((emp) => emp.lat && emp.lng && Number.isFinite(Number(emp.lat)) && Number.isFinite(Number(emp.lng)));
+
+    markersRef.current = validStaff.map((emp) => {
       const lat = Number(emp.lat);
       const lng = Number(emp.lng);
       const isLive = emp.isTracking || emp.status === 'ON_FIELD';
@@ -200,6 +204,18 @@ const MapViewComponent = forwardRef(({ initialRegion, directoryStaff = [], route
         return marker;
       }
     });
+
+    // Auto-fit camera bounds to show ALL employees automatically on initial load
+    if (!hasAutoFittedRef.current && validStaff.length > 0) {
+      hasAutoFittedRef.current = true;
+      const bounds = new maps.LatLngBounds();
+      validStaff.forEach((emp) => bounds.extend({ lat: Number(emp.lat), lng: Number(emp.lng) }));
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.fitBounds(bounds, { top: 80, right: 50, bottom: 220, left: 50 });
+        }
+      }, 350);
+    }
 
     if (routeOutlineRef.current) routeOutlineRef.current.setMap(null);
     if (routeRef.current) routeRef.current.setMap(null);

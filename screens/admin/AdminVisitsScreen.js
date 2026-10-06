@@ -6,7 +6,8 @@ import {
 } from 'react-native';
 import {
   BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, MapPin, Search, XCircle,
-  Plus, Camera, X, User, Phone, Briefcase, Users, Filter, RotateCcw, Route
+  Plus, Camera, X, User, Phone, Briefcase, Users, Filter, RotateCcw, Route,
+  ChevronLeft, ChevronRight
 } from 'lucide-react-native';
 import { Text, Surface } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +17,21 @@ import { useSettings } from '../../context/SettingsContext';
 
 const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const statusOptions = ['all', 'scheduled', 'completed', 'follow-up', 'cancelled'];
+
+const getTodayStr = () => {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+};
+
+const getYesterdayStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+};
 
 const formatFullName = (str) => {
   if (!str) return 'Field Executive';
@@ -52,6 +68,7 @@ export default function AdminVisitsScreen() {
   const [selectedEmpFilter, setSelectedEmpFilter] = useState('all');
   const [status, setStatus] = useState('all');
   const [date, setDate] = useState('');
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -368,65 +385,65 @@ export default function AdminVisitsScreen() {
                       onPress={() => setSelectedEmpFilter(isSelected ? 'all' : empId)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.empChipText, { color: isSelected ? '#a7f3d0' : C.text }]}>
-                        👤 {empName}
-                      </Text>
+                      <Text style={[styles.empChipText, { color: isSelected ? '#a7f3d0' : C.text }]}>{empName}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             </View>
 
-            {/* DATE FILTER & STATUS TABS ROW */}
+            {/* DATE FILTER & QUICK PRESET CHIPS ROW */}
             <View style={styles.filterRowSection}>
-              {/* Date Selector Box */}
-              <View style={[styles.dateBox, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <CalendarDays size={16} color="#059669" />
-                <TextInput
-                  style={[styles.dateInput, { color: C.text }]}
-                  value={date}
-                  onChangeText={setDate}
-                  placeholder="Filter by Date (YYYY-MM-DD)"
-                  placeholderTextColor={C.sub}
-                  {...(Platform.OS === 'web' ? { type: 'date' } : {})}
-                />
-                {date.length > 0 && (
-                  <TouchableOpacity onPress={() => setDate('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <X size={16} color={C.sub} />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Status Chips Scroller */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                {statusOptions.map((option) => {
-                  const isSelected = status === option;
-                  let labelText = option.toUpperCase();
-                  if (option === 'all') labelText = 'ALL VISITS';
-
-                  return (
+              <View style={styles.datePickerTriggerRow}>
+                <TouchableOpacity
+                  style={[styles.dateBoxBtn, { backgroundColor: C.surface, borderColor: date ? '#059669' : C.border }]}
+                  onPress={() => setDatePickerVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <CalendarDays size={16} color="#059669" />
+                  <Text style={[styles.dateBoxBtnText, { color: date ? C.text : C.sub }]}>
+                    {date ? formatDate(date) : 'Choose Date (Calendar)'}
+                  </Text>
+                  {date.length > 0 ? (
                     <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.statusChipPill,
-                        isSelected && styles.statusChipPillActive,
-                        { backgroundColor: isSelected ? '#064e3b' : C.surface, borderColor: isSelected ? '#064e3b' : C.border }
-                      ]}
-                      onPress={() => setStatus(option)}
-                      activeOpacity={0.8}
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        setDate('');
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={[styles.statusChipPillText, { color: isSelected ? '#a7f3d0' : C.sub }]}>
-                        {labelText}
-                      </Text>
+                      <X size={15} color={C.sub} />
                     </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                  ) : null}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.quickDateChip,
+                    { backgroundColor: date === getTodayStr() ? '#064e3b' : C.surface, borderColor: date === getTodayStr() ? '#059669' : C.border }
+                  ]}
+                  onPress={() => setDate(date === getTodayStr() ? '' : getTodayStr())}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.quickDateText, { color: date === getTodayStr() ? '#a7f3d0' : C.sub }]}>Today</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.quickDateChip,
+                    { backgroundColor: date === getYesterdayStr() ? '#064e3b' : C.surface, borderColor: date === getYesterdayStr() ? '#059669' : C.border }
+                  ]}
+                  onPress={() => setDate(date === getYesterdayStr() ? '' : getYesterdayStr())}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.quickDateText, { color: date === getYesterdayStr() ? '#a7f3d0' : C.sub }]}>Yesterday</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.resultBadgeRow}>
               <Text style={[styles.resultsLabel, { color: C.sub }]}>{filteredVisits.length} visit{filteredVisits.length === 1 ? '' : 's'} shown</Text>
-              {(selectedEmpFilter !== 'all' || status !== 'all' || date) && (
+              {(selectedEmpFilter !== 'all' || status !== 'all' || date.length > 0) ? (
                 <TouchableOpacity
                   onPress={() => {
                     setSelectedEmpFilter('all');
@@ -438,7 +455,7 @@ export default function AdminVisitsScreen() {
                   <RotateCcw size={12} color="#dc2626" />
                   <Text style={styles.clearAllFiltersText}>Reset Filters</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
             </View>
           </View>
         )}
@@ -562,7 +579,154 @@ export default function AdminVisitsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Interactive Calendar Date Picker Modal */}
+      <DatePickerModal
+        visible={datePickerVisible}
+        onClose={() => setDatePickerVisible(false)}
+        selectedDate={date}
+        onSelectDate={setDate}
+        colors={C}
+      />
     </View>
+  );
+}
+
+function DatePickerModal({ visible, onClose, selectedDate, onSelectDate, colors }) {
+  const [currentYear, setCurrentYear] = useState(() => {
+    return selectedDate ? new Date(selectedDate).getFullYear() : new Date().getFullYear();
+  });
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    return selectedDate ? new Date(selectedDate).getMonth() : new Date().getMonth();
+  });
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const daysOfWeek = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(y => y - 1);
+    } else {
+      setCurrentMonth(m => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(y => y + 1);
+    } else {
+      setCurrentMonth(m => m + 1);
+    }
+  };
+
+  const handleSelectDay = (day) => {
+    const mm = String(currentMonth + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    const dateStr = `${currentYear}-${mm}-${dd}`;
+    onSelectDate(dateStr);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.dpOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[styles.dpContainer, { backgroundColor: colors.surface }]}>
+          <View style={styles.dpHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <CalendarDays size={18} color="#059669" />
+              <Text style={[styles.dpTitle, { color: colors.text }]}>Select Visit Date</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+              <X size={20} color={colors.sub} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.dpPresetsRow}>
+            <TouchableOpacity
+              style={[styles.dpPresetChip, !selectedDate ? styles.dpPresetChipActive : null]}
+              onPress={() => { onSelectDate(''); onClose(); }}
+            >
+              <Text style={[styles.dpPresetText, !selectedDate ? { color: '#fff' } : null]}>All Dates</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.dpPresetChip, selectedDate === getTodayStr() ? styles.dpPresetChipActive : null]}
+              onPress={() => { onSelectDate(getTodayStr()); onClose(); }}
+            >
+              <Text style={[styles.dpPresetText, selectedDate === getTodayStr() ? { color: '#fff' } : null]}>Today</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.dpPresetChip, selectedDate === getYesterdayStr() ? styles.dpPresetChipActive : null]}
+              onPress={() => { onSelectDate(getYesterdayStr()); onClose(); }}
+            >
+              <Text style={[styles.dpPresetText, selectedDate === getYesterdayStr() ? { color: '#fff' } : null]}>Yesterday</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.dpMonthNav}>
+            <TouchableOpacity onPress={handlePrevMonth} style={styles.dpNavBtn}>
+              <ChevronLeft size={18} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.dpMonthTitle, { color: colors.text }]}>
+              {monthNames[currentMonth]} {currentYear}
+            </Text>
+            <TouchableOpacity onPress={handleNextMonth} style={styles.dpNavBtn}>
+              <ChevronRight size={18} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.dpWeekRow}>
+            {daysOfWeek.map(d => (
+              <Text key={d} style={styles.dpWeekDay}>{d}</Text>
+            ))}
+          </View>
+
+          <View style={styles.dpGrid}>
+            {Array.from({ length: firstDayIndex }).map((_, i) => (
+              <View key={`blank-${i}`} style={styles.dpCell} />
+            ))}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const mm = String(currentMonth + 1).padStart(2, '0');
+              const dd = String(day).padStart(2, '0');
+              const dateStr = `${currentYear}-${mm}-${dd}`;
+              const isSelected = selectedDate === dateStr;
+              const isToday = getTodayStr() === dateStr;
+
+              return (
+                <TouchableOpacity
+                  key={dateStr}
+                  style={[
+                    styles.dpCell,
+                    isToday ? styles.dpCellToday : null,
+                    isSelected ? styles.dpCellSelected : null,
+                  ]}
+                  onPress={() => handleSelectDay(day)}
+                >
+                  <Text style={[
+                    styles.dpCellText,
+                    { color: colors.text },
+                    isToday ? { color: '#059669', fontWeight: '800' } : null,
+                    isSelected ? { color: '#fff', fontWeight: '800' } : null,
+                  ]}>
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -618,44 +782,44 @@ function VisitCard({ visit, colors, onPreviewPhoto }) {
           </View>
         ) : null}
 
-        {expanded && (
+        {expanded ? (
           <View style={styles.expandedContent}>
-            {visit.mobileNumber && (
+            {visit.mobileNumber ? (
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.sub }]}>Phone</Text>
                 <Text style={[styles.detailValue, { color: colors.text }]}>{visit.mobileNumber}</Text>
               </View>
-            )}
-            {visit.dealAmount > 0 && (
+            ) : null}
+            {Number(visit.dealAmount) > 0 ? (
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.sub }]}>Deal Amount</Text>
                 <Text style={[styles.detailValue, { color: '#008080' }]}>₹{Number(visit.dealAmount).toLocaleString('en-IN')}</Text>
               </View>
-            )}
-            {visit.followUpDate && (
+            ) : null}
+            {visit.followUpDate ? (
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.sub }]}>Follow-up</Text>
                 <Text style={[styles.detailValue, { color: '#a16207' }]}>{formatDate(visit.followUpDate)}</Text>
               </View>
-            )}
-            {visit.meetingNotes && (
+            ) : null}
+            {visit.meetingNotes ? (
               <View style={styles.notesBox}>
                 <Text style={[styles.notesLabel, { color: colors.sub }]}>Notes / Feedback</Text>
                 <Text style={[styles.notesText, { color: colors.text }]}>{visit.meetingNotes}</Text>
               </View>
-            )}
-            {selfieUri && (
+            ) : null}
+            {selfieUri ? (
               <TouchableOpacity style={styles.selfieBox} onPress={() => onPreviewPhoto && onPreviewPhoto(selfieUri)} activeOpacity={0.85}>
                 <Text style={[styles.notesLabel, { color: colors.sub, marginBottom: 6 }]}>Visit Selfie (Tap to Preview)</Text>
                 <Image source={{ uri: selfieUri }} style={styles.visitSelfie} />
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
-        )}
+        ) : null}
 
-        {!expanded && visit.dealAmount > 0 && (
+        {!expanded && Number(visit.dealAmount) > 0 ? (
           <Text style={styles.amount}>Deal: ₹{Number(visit.dealAmount).toLocaleString('en-IN')}</Text>
-        )}
+        ) : null}
       </TouchableOpacity>
     </Surface>
   );
@@ -762,4 +926,31 @@ const styles = StyleSheet.create({
   resultBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },
   clearAllFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#fef2f2' },
   clearAllFiltersText: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
+
+  // Date Picker Modal Styles
+  dpOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  dpContainer: { width: '100%', maxWidth: 350, borderRadius: 24, padding: 20, elevation: 8 },
+  dpHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  dpTitle: { fontSize: 15, fontWeight: '800', fontFamily: FONT },
+  dpPresetsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  dpPresetChip: { flex: 1, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', backgroundColor: '#f8fafc' },
+  dpPresetChipActive: { backgroundColor: '#064e3b', borderColor: '#059669' },
+  dpPresetText: { fontSize: 11, fontWeight: '700', fontFamily: FONT, color: '#475569' },
+  dpMonthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  dpNavBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  dpMonthTitle: { fontSize: 14, fontWeight: '800', fontFamily: FONT },
+  dpWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  dpWeekDay: { width: '14%', textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#94a3b8', fontFamily: FONT },
+  dpGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dpCell: { width: '14%', height: 38, justifyContent: 'center', alignItems: 'center', borderRadius: 19, marginVertical: 2 },
+  dpCellToday: { borderWidth: 1, borderColor: '#059669', backgroundColor: '#ecfdf5' },
+  dpCellSelected: { backgroundColor: '#059669' },
+  dpCellText: { fontSize: 12, fontWeight: '600', fontFamily: FONT },
+
+  // Date Box Trigger & Quick Chips
+  datePickerTriggerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateBoxBtn: { flex: 1, height: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  dateBoxBtnText: { flex: 1, fontFamily: FONT, fontSize: 12, fontWeight: '600' },
+  quickDateChip: { paddingHorizontal: 12, height: 42, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  quickDateText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
 });
