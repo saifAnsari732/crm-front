@@ -166,10 +166,11 @@ function validateSegment(prev, curr) {
   // ── Gate 3: Stationary drift filter ──────────────────────────────────
   const calcSpeedMps = (distM / secs);
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
+  const reportedAccuracy = Number(curr.accuracy) || 20;
 
-  // Ignore tiny jitter when phone is stationary (< 0.3 m/s AND < 8m)
-  if (effectiveSpeedMps < 0.3 && distM < 8) {
-    console.log(`📍 Stationary drift ignored: ${distM.toFixed(0)}m at ${effectiveSpeedMps.toFixed(2)} m/s`);
+  // Ignore noise jitter when phone is stationary (< 0.55 m/s or < 2 km/h AND (< 15m OR < 75% accuracy radius))
+  if (effectiveSpeedMps < 0.55 && (distM < 15.0 || distM < Math.max(12.0, reportedAccuracy * 0.75))) {
+    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${(effectiveSpeedMps * 3.6).toFixed(1)} km/h (acc: ${reportedAccuracy}m)`);
     return { valid: false, distKm: 0 };
   }
 
