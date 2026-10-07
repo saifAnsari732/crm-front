@@ -185,6 +185,31 @@ export const expenseAPI = {
   approve: (id, data) => API.put(`/expenses/${id}/approve`, data),
 };
 
+// ─── Leaves ───────────────────────────────────────────────────────────────────
+export const leaveAPI = {
+  apply: (data) => API.post('/leaves/apply', data),
+  getMy: (params) => API.get('/leaves/my', { params }),
+  getAll: (params) => API.get('/leaves/all', { params }),
+  updateStatus: (id, data) => API.patch(`/leaves/${id}/status`, data),
+};
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+export const taskAPI = {
+  create: (data) => API.post('/tasks', data),
+  getMy: (params) => API.get('/tasks/my', { params }),
+  getAll: (params) => API.get('/tasks/all', { params }),
+  updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
+};
+
+// ─── Leads ────────────────────────────────────────────────────────────────────
+export const leadAPI = {
+  create: (data) => API.post('/leads', data),
+  getAll: (params) => API.get('/leads', { params }),
+  getById: (id) => API.get(`/leads/${id}`),
+  update: (id, data) => API.put(`/leads/${id}`, data),
+  delete: (id) => API.delete(`/leads/${id}`),
+};
+
 // â”€â”€â”€ Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
@@ -200,6 +225,13 @@ export const adminAPI = {
   getConsolidatedReport: (params) => API.get('/admin/reports/consolidated', { params }),
   getOrganization: () => API.get('/admin/organization'),
   updateOrganization: (data) => API.put('/admin/organization', data),
+  getLeaves: (params) => API.get('/leaves/all', { params }),
+  updateLeaveStatus: (id, data) => API.patch(`/leaves/${id}/status`, data),
+  getExpenses: (params) => API.get('/expenses/all', { params }),
+  updateExpenseStatus: (id, data) => API.put(`/expenses/${id}/approve`, data),
+  getTasks: (params) => API.get('/tasks/all', { params }),
+  getLeads: () => API.get('/leads'),
+  getMeetings: (params) => API.get('/meetings/all', { params }),
 };
 
 // â”€â”€â”€ Employees â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

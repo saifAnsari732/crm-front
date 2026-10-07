@@ -7,15 +7,18 @@ import {
 import {
   BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, MapPin, Search, XCircle,
   Plus, Camera, X, User, Phone, Briefcase, Users, Filter, RotateCcw, Route,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, ArrowLeft
 } from 'lucide-react-native';
 import { Text, Surface } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { meetingAPI, uploadAPI, adminAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const statusOptions = ['all', 'scheduled', 'completed', 'follow-up', 'cancelled'];
 
 const getTodayStr = () => {
@@ -54,6 +57,7 @@ const statusConfig = {
 };
 
 export default function AdminVisitsScreen() {
+  const router = useRouter();
   const { theme } = useSettings();
   const isDark = theme === 'dark';
   const C = {
@@ -287,6 +291,41 @@ export default function AdminVisitsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+
+      {/* ── TOP HEADER ── */}
+      <LinearGradient
+        colors={['#047857', '#0d9488', '#0f766e']}
+        style={styles.headerContainer}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.topHeaderBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TouchableOpacity
+                style={styles.backBtn}
+                onPress={() => {
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(admin)/dashboard');
+                }}
+                activeOpacity={0.7}
+              >
+                <ArrowLeft size={20} color="#fff" />
+              </TouchableOpacity>
+              <View style={{ marginLeft: 10, flex: 1 }}>
+                <Text style={styles.screenHeaderTitle}>Client Visits & Meetings</Text>
+                <Text style={styles.screenHeaderSub}>Organization Visit Reports & Log</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.addVisitBtnHeader} onPress={handleOpenAddModal} activeOpacity={0.85}>
+              <Plus size={16} color="#047857" />
+              <Text style={styles.addVisitBtnText}>Log Visit</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
       <FlatList
         data={filteredVisits}
         keyExtractor={(item, index) => String(item._id || index)}
@@ -294,17 +333,6 @@ export default function AdminVisitsScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={(
           <View style={{ marginBottom: 12 }}>
-            {/* Screen Header Bar with "+ Log Visit" */}
-            <View style={styles.topHeaderBar}>
-              <View>
-                <Text style={[styles.screenHeaderTitle, { color: C.text }]}>Client Visits & Meetings</Text>
-                <Text style={[styles.screenHeaderSub, { color: C.sub }]}>Organization Visit Reports & Log</Text>
-              </View>
-              <TouchableOpacity style={styles.addVisitBtnHeader} onPress={handleOpenAddModal} activeOpacity={0.85}>
-                <Plus size={16} color="#fff" />
-                <Text style={styles.addVisitBtnText}>Log Visit</Text>
-              </TouchableOpacity>
-            </View>
 
             {/* 4-COLUMN PREMIUM SUMMARY KPI CARDS */}
             <View style={styles.summaryRow}>
@@ -826,13 +854,30 @@ function VisitCard({ visit, colors, onPreviewPhoto }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, marginTop: 30 },
-  topHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  screenHeaderTitle: { fontSize: 18, fontWeight: '800', fontFamily: FONT },
-  screenHeaderSub: { fontSize: 11, fontWeight: '600', marginTop: 1 },
-  addVisitBtnHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0a3d3c', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  addVisitBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  content: { padding: 16, paddingBottom: 32 },
+  root: { flex: 1 },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
+  topHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 4 },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screenHeaderTitle: { fontSize: 16, fontWeight: '800', fontFamily: FONT, color: '#ffffff' },
+  screenHeaderSub: { fontSize: 10, fontWeight: '600', marginTop: 1, color: '#a7f3d0' },
+  addVisitBtnHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
+  addVisitBtnText: { color: '#047857', fontSize: 11, fontWeight: '800' },
+  content: { padding: 14, paddingBottom: 32 },
   summaryRow: { flexDirection: 'row', gap: 7, marginBottom: 12 },
   summaryCard: { flex: 1, minHeight: 62, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 1 },
   summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold' },

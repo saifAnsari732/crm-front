@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { cleanTrackingRoute } from '../../utils/trackingRoute';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const GREEN = '#0f766e';
 const GREEN_DARK = '#064e3b';
 
@@ -28,7 +28,9 @@ const cardShadow = Platform.OS === 'web'
 const STATUS_META = {
   ON_FIELD: { label: 'On Field', color: '#047857', bg: '#ecfdf5', pin: '#10b981' },
   IN_TRANSIT: { label: 'In Transit', color: '#1d4ed8', bg: '#eff6ff', pin: '#3b82f6' },
-  AT_LOCATION: { label: 'At Location', color: '#b45309', bg: '#fffbeb', pin: '#f59e0b' },
+  GPS_STALE: { label: 'GPS Weak / Waiting', color: '#ca8a04', bg: '#fefce8', pin: '#eab308' },
+  IDLE_ONLINE: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
+  AT_LOCATION: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
   OFFLINE: { label: 'Offline', color: '#64748b', bg: '#f8fafc', pin: '#94a3b8' },
 };
 
@@ -247,6 +249,14 @@ export default function AdminTrackingScreen() {
         || liveLocationIndex.byEmployeeCode.get(String(emp.employeeId || ''))
         || liveLocationIndex.byName.get((emp.name || '').toLowerCase());
       const tracking = !!liveLoc || emp.isTracking;
+      let memberStatus = 'OFFLINE';
+      if (tracking) {
+        memberStatus = 'ON_FIELD';
+      } else if (emp.isOnline) {
+        memberStatus = 'IDLE_ONLINE';
+      } else {
+        memberStatus = 'OFFLINE';
+      }
 
       result.push({
         _id: idStr || `emp-${result.length}`,
@@ -254,7 +264,7 @@ export default function AdminTrackingScreen() {
         avatar: emp.avatar || liveLoc?.avatar,
         department: emp.department || liveLoc?.department || '',
         phone: emp.phone,
-        status: tracking ? 'ON_FIELD' : (emp.isOnline ? 'AT_LOCATION' : 'OFFLINE'),
+        status: memberStatus,
         isTracking: tracking,
         isOnline: emp.isOnline,
         lat: liveLoc?.lat || emp.lat || null,
@@ -490,11 +500,11 @@ export default function AdminTrackingScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#022c17" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* ── PROFESSIONAL EXECUTIVE HEADER ───────────────────────── */}
       <LinearGradient
-        colors={['#022c17', '#064e3b', '#0d9488']}
+        colors={['#047857', '#0d9488', '#0f766e']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.fullWidthHeader}
@@ -634,7 +644,7 @@ export default function AdminTrackingScreen() {
                       <View style={[styles.statusPillDot, { backgroundColor: meta.pin }]} />
                       <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
                     </View>
-                    {item.isTracking && (
+                    {(parseFloat(item.totalDistance) || 0) > 0 && (
                       <View style={styles.distBadge}>
                         <Text style={styles.distBadgeText}>{(parseFloat(item.totalDistance) || 0).toFixed(1)} km</Text>
                       </View>
@@ -797,6 +807,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 14,
     paddingTop: 4,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',

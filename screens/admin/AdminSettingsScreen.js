@@ -53,11 +53,11 @@ const COLORS = {
   amber: '#D97706',
   amberLight: '#FFFBEB',
   white: '#FFFFFF',
-  headerGradientStart: '#2563EB',
-  headerGradientEnd: '#4F46E5',
+  headerGradientStart: '#047857',
+  headerGradientEnd: '#0d9488',
 };
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const cardShadow = Platform.OS === 'web'
@@ -296,11 +296,11 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
       
-      {/* Blue/Indigo Gradient Top Bar */}
+      {/* Vibrant Emerald Gradient Top Bar */}
       <LinearGradient
-        colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+        colors={['#047857', '#0d9488', '#0f766e']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -776,11 +776,11 @@ export default function AdminSettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
       
-      {/* Blue/Indigo Gradient Top Bar */}
+      {/* Vibrant Emerald Gradient Top Bar */}
       <LinearGradient
-        colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+        colors={['#047857', '#0d9488', '#0f766e']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -937,13 +937,13 @@ export default function AdminSettingsScreen() {
 
             {/* SAVE BUTTON */}
             <TouchableOpacity
-              style={styles.saveBtn}
+              style={styles.saveOrgBtn}
               onPress={handleSaveSettings}
               disabled={saving}
               activeOpacity={0.85}
             >
               <LinearGradient
-                colors={[COLORS.headerGradientStart, COLORS.headerGradientEnd]}
+                colors={['#047857', '#0d9488']}
                 style={styles.saveBtnGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -981,8 +981,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   headerGradient: {
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
     paddingHorizontal: 16,
     paddingBottom: 20,
     paddingTop: Platform.OS === 'android' ? 14 : 10,
@@ -1493,11 +1495,16 @@ const styles = StyleSheet.create({
   },
 
   // Buttons
+  saveOrgBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 14,
+  },
   saveBtnGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     gap: 8,
     borderRadius: 16,
   },

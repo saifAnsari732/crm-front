@@ -15,9 +15,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
-const PINK_HEADER_GRADIENT = ['#e11d48', '#f43f5e', '#fb7185'];
+const PINK_HEADER_GRADIENT = ['#047857', '#0d9488', '#0f766e'];
 const BG_COLOR = '#f1f5f9';
 
 const cardShadow = Platform.OS === 'web'
@@ -77,7 +77,7 @@ export default function SuperAdminDashboardScreen() {
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: BG_COLOR }]}>
-        <ActivityIndicator size="large" color="#e11d48" />
+        <ActivityIndicator size="large" color="#047857" />
         <Text style={styles.loadingText}>Loading SaaS Platform Console…</Text>
       </View>
     );
@@ -85,7 +85,7 @@ export default function SuperAdminDashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#e11d48" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* HEADER WITH RED/ROSE GRADIENT */}
       <LinearGradient colors={PINK_HEADER_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
@@ -276,22 +276,30 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontFamily: FONT, fontSize: 13, color: '#e11d48', marginTop: 10, fontWeight: '600' },
 
-  headerGradient: { borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingHorizontal: 16, paddingBottom: 24, paddingTop: Platform.OS === 'android' ? 10 : 0 },
+  headerGradient: {
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+  },
   topNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   iconBtn: { padding: 4, position: 'relative' },
   brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   logoBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   appName: { color: '#fff', fontSize: 16, fontWeight: 'bold', fontFamily: FONT },
-  appTag: { color: '#ffe4e6', fontSize: 9, fontWeight: '600' },
+  appTag: { color: '#a7f3d0', fontSize: 9, fontWeight: '600' },
 
   topRightActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   userAvatarHeader: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
   userAvatarHeaderText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
 
   greetingBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  greetingLabel: { color: '#ffe4e6', fontSize: 12, fontWeight: '500' },
+  greetingLabel: { color: '#a7f3d0', fontSize: 12, fontWeight: '500' },
   userName: { color: '#fff', fontSize: 20, fontWeight: '900', fontFamily: FONT, marginTop: 2 },
-  userRoleText: { color: '#fecdd3', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  userRoleText: { color: '#d1fae5', fontSize: 11, fontWeight: '600', marginTop: 2 },
 
   pillOwner: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 4 },
   pillOwnerText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },

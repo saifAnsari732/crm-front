@@ -11,9 +11,8 @@ import {
   FileText, Download, ShieldCheck
 } from 'lucide-react-native';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
-const NAVY_DARK = '#0f172a';
-const NAVY_MID = '#1e293b';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const HEADER_GRADIENT = ['#047857', '#0d9488', '#0f766e'];
 const BG_COLOR = '#f8fafc';
 
 const cardShadow = Platform.OS === 'web'
@@ -37,10 +36,10 @@ export default function AdminPaymentsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY_DARK} />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* HEADER */}
-      <LinearGradient colors={[NAVY_DARK, NAVY_MID]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
+      <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
         <SafeAreaView edges={['top']}>
           <View style={styles.headerTitleRow}>
             <View style={styles.headerIconBox}>
@@ -110,11 +109,19 @@ export default function AdminPaymentsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
-  header: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: Platform.OS === 'android' ? 10 : 0 },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   headerIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', fontFamily: FONT },
-  headerSub: { color: '#94a3b8', fontSize: 10, marginTop: 1 },
+  headerSub: { color: '#a7f3d0', fontSize: 10, marginTop: 1 },
 
   totalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   totalCardInner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

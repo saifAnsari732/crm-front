@@ -1,2 +1,2 @@
-import ExpensesScreen from '../../screens/employee/ExpensesScreen';
-export default ExpensesScreen;
+import AdminExpensesScreen from '../../screens/admin/AdminExpensesScreen';
+export default AdminExpensesScreen;

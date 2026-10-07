@@ -13,8 +13,8 @@ import {
 import { adminAPI } from '../../services/api';
 import { useRouter } from 'expo-router';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
-const HEADER_GRADIENT = ['#e11d48', '#be123c', '#9f1239'];
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const HEADER_GRADIENT = ['#047857', '#0d9488', '#0f766e'];
 const BG_COLOR = '#f8fafc';
 
 const cardShadow = Platform.OS === 'web'
@@ -73,7 +73,7 @@ export default function AdminOrganizationsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#e11d48" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* HEADER */}
       <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
@@ -230,16 +230,24 @@ export default function AdminOrganizationsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
-  header: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: Platform.OS === 'android' ? 10 : 0 },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   headerIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', fontFamily: FONT },
-  headerSub: { color: '#ffe4e6', fontSize: 10, marginTop: 1 },
+  headerSub: { color: '#a7f3d0', fontSize: 10, marginTop: 1 },
 
   statsRow: { flexDirection: 'row', gap: 10 },
   statPill: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 8, alignItems: 'center' },
   statVal: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  statLabel: { color: '#ffe4e6', fontSize: 9, marginTop: 1 },
+  statLabel: { color: '#a7f3d0', fontSize: 9, marginTop: 1 },
 
   body: { flex: 1, padding: 14, maxWidth: 720, width: '100%', alignSelf: 'center' },
   filterBar: { flexDirection: 'row', gap: 10, marginBottom: 10 },

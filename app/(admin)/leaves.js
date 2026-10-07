@@ -1,2 +1,2 @@
-import LeaveScreen from '../../screens/employee/LeaveScreen';
-export default LeaveScreen;
+import AdminLeavesScreen from '../../screens/admin/AdminLeavesScreen';
+export default AdminLeavesScreen;

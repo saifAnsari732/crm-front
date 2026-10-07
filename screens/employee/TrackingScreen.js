@@ -126,12 +126,9 @@ export default function ActiveShiftMapScreen() {
             : null;
 
           const backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
-          const cachedDistance = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0.0;
-
-          // Prioritize cumulative today distance so session restarts do not reset KM
-          const synchronizedDistance = totalToday !== null
-            ? Math.max(totalToday, backendDistance, cachedDistance)
-            : Math.max(backendDistance, cachedDistance);
+          const synchronizedDistance = (typeof totalToday === 'number' && totalToday > 0)
+            ? totalToday
+            : backendDistance;
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
@@ -265,7 +262,7 @@ export default function ActiveShiftMapScreen() {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       setLatitude('26.797531');
       setLongitude('88.901868');
-      setAddress('No Addresss Allow. Press START to begin shift.');
+      setAddress('Tracking inactive. Press START to begin shift.');
       totalDistanceRef.current = 0.0;
       lastCoordRef.current = null;
       setRouteCoords([]);

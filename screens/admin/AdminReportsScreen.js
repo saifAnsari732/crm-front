@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const { width, height } = Dimensions.get('window');
 const getEmpId = (e) => e?._id || e?.employeeId || e?.id || '';
 
@@ -236,11 +236,11 @@ export default function AdminReportsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* ── EXECUTIVE TOP HEADER ── */}
       <LinearGradient
-        colors={['#074e26', '#065a29']}
+        colors={['#047857', '#0d9488', '#0f766e']}
         style={styles.header}
       >
         <SafeAreaView edges={['top']}>
@@ -517,6 +517,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 14,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
   },
   headerTitleRow: {
     flexDirection: 'row',

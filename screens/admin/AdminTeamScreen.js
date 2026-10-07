@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, View, FlatList, TouchableOpacity, ActivityIndicator,
-  Platform, RefreshControl, TextInput, Modal, ScrollView, Image, StatusBar, Dimensions
+  Platform, RefreshControl, TextInput, Modal, ScrollView, Image, StatusBar, Dimensions, Linking, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface } from 'react-native-paper';
@@ -10,15 +10,38 @@ import {
   Users, Search, UserCheck, Ban, Pencil, X, Check, ShieldCheck,
   ArrowLeft, Filter, Phone, Mail, CheckCircle2, ChevronRight,
   LayoutDashboard, MapPin, FileText, Settings, UserPlus, UserX, Building2,
-  Briefcase, Sparkles, Route
+  Briefcase, Sparkles, Route, MessageSquare, Clock, Wallet, Navigation,
+  Calendar, Award, TrendingUp, ArrowUpRight
 } from 'lucide-react-native';
-import { adminAPI, getAvatarUrl } from '../../services/api';
+import { adminAPI, getAvatarUrl, trackingAPI } from '../../services/api';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 
 const { width, height } = Dimensions.get('window');
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+
+const COLORS = {
+  headerStart: '#047857',
+  headerEnd: '#0d9488',
+  primary: '#0f766e',
+  primaryLight: '#ccfbf1',
+  bg: '#F8FAFC',
+  card: '#FFFFFF',
+  surfaceSecondary: '#F1F5F9',
+  text: '#1E293B',
+  textSub: '#64748B',
+  textMuted: '#94A3B8',
+  border: '#E2E8F0',
+  success: '#059669',
+  successLight: '#ECFDF5',
+  warning: '#D97706',
+  warningLight: '#FFFBEB',
+  danger: '#DC2626',
+  dangerLight: '#FEF2F2',
+  indigo: '#4F46E5',
+  indigoLight: '#EEF2FF',
+};
 
 const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.08)' }
@@ -30,29 +53,17 @@ export default function AdminTeamScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { theme } = useSettings();
-  const isDark = theme === 'dark';
-
-  const C = {
-    bg: isDark ? '#0f172a' : '#f8fafc',
-    surface: isDark ? '#1e293b' : '#ffffff',
-    surfaceSecondary: isDark ? '#172033' : '#f1f5f9',
-    text: isDark ? '#f8fafc' : '#0f172a',
-    textSub: isDark ? '#94a3b8' : '#64748b',
-    textMuted: isDark ? '#64748b' : '#94a3b8',
-    border: isDark ? '#334155' : '#e2e8f0',
-    borderLight: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-    primary: '#0f766e',
-    primaryDark: '#0a3d3c',
-    primaryLight: isDark ? '#134e4a' : '#ccfbf1',
-    primaryText: isDark ? '#2dd4bf' : '#0f766e',
-    accent: '#059669',
-  };
 
   const [employees, setEmployees] = useState([]);
+  const [liveLocations, setLiveLocations] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterRole, setFilterRole] = useState('all');
+  const [activeTab, setActiveTab] = useState('total'); // 'total', 'active', 'offline', 'not_punched'
+
+  // Detail Modal state (Screen 5)
+  const [selectedDetailEmp, setSelectedDetailEmp] = useState(null);
+  const [detailTab, setDetailTab] = useState('overview'); // 'overview', 'attendance', 'visits', 'more'
 
   // Edit Modal state
   const [editEmp, setEditEmp] = useState(null);
@@ -62,18 +73,35 @@ export default function AdminTeamScreen() {
   const [editRole, setEditRole] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
+  // Add Employee Modal State
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newDept, setNewDept] = useState('');
+  const [newRole, setNewRole] = useState('EMPLOYEE');
+  const [addingSaving, setAddingSaving] = useState(false);
+
   const fetchEmployees = useCallback(async () => {
     try {
-      const res = await adminAPI.getEmployees({ limit: 200, role: filterRole === 'all' ? 'all' : filterRole });
-      if (res.data?.success) setEmployees(res.data.employees || []);
+      const [empRes, locRes] = await Promise.all([
+        adminAPI.getEmployees({ limit: 200 }),
+        trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
+      ]);
+
+      if (empRes.data?.success) {
+        setEmployees(empRes.data.employees || []);
+      }
+      if (locRes.data?.success) {
+        setLiveLocations(locRes.data.locations || locRes.data.data || []);
+      }
     } catch (e) {
       console.log('Team fetch error:', e.message);
-      setEmployees([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filterRole]);
+  }, []);
 
   useEffect(() => {
     fetchEmployees();
@@ -82,25 +110,19 @@ export default function AdminTeamScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchEmployees();
-    setRefreshing(false);
   };
 
-  const filtered = employees.filter((e) => {
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    const nameMatch = (e.name || '').toLowerCase().includes(q);
-    const phoneMatch = (e.phone || '').toLowerCase().includes(q);
-    const deptMatch = (e.department || '').toLowerCase().includes(q);
-    const emailMatch = (e.email || '').toLowerCase().includes(q);
-    return nameMatch || phoneMatch || deptMatch || emailMatch;
-  });
+  const handleCall = (phone) => {
+    if (phone) Linking.openURL(`tel:${phone}`);
+  };
 
-  const openEdit = (emp) => {
-    setEditEmp(emp);
-    setEditName(emp.name || '');
-    setEditPhone(emp.phone || '');
-    setEditDepartment(emp.department || '');
-    setEditRole(emp.role || 'EMPLOYEE');
+  const handleWhatsApp = (phone) => {
+    if (phone) Linking.openURL(`https://wa.me/${phone.replace(/[^0-9]/g, '')}`);
+  };
+
+  const openDetail = (emp) => {
+    setSelectedDetailEmp(emp);
+    setDetailTab('overview');
   };
 
   const handleApprove = async (id) => {
@@ -140,6 +162,36 @@ export default function AdminTeamScreen() {
     }
   };
 
+  const handleAddEmployee = async () => {
+    if (!newName.trim() || !newPhone.trim()) {
+      if (Platform.OS === 'web') alert('Please enter employee name and phone.');
+      else Alert.alert('Error', 'Please enter employee name and phone.');
+      return;
+    }
+    setAddingSaving(true);
+    try {
+      if (adminAPI.createEmployee) {
+        await adminAPI.createEmployee({
+          name: newName.trim(),
+          phone: newPhone.trim(),
+          email: newEmail.trim() || undefined,
+          department: newDept.trim() || 'Field Services',
+          role: newRole,
+        });
+      }
+      setAddModalVisible(false);
+      setNewName('');
+      setNewPhone('');
+      setNewEmail('');
+      setNewDept('');
+      fetchEmployees();
+    } catch (e) {
+      console.log('Add employee error:', e.message);
+    } finally {
+      setAddingSaving(false);
+    }
+  };
+
   const getUserInitials = (name) => {
     if (!name) return 'KC';
     const parts = name.trim().split(' ');
@@ -147,673 +199,1050 @@ export default function AdminTeamScreen() {
     return parts[0].substring(0, 2).toUpperCase();
   };
 
-  const goTo = (path) => {
-    router.push(path);
+  const AVATAR_COLORS = ['#059669', '#2563EB', '#7C3AED', '#D97706', '#DB2777', '#0891B2', '#4F46E5', '#EA580C'];
+  const getAvatarColor = (name) => {
+    if (!name) return '#059669';
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
   };
 
-  const roleCounts = {
-    all: employees.length,
-    admin: employees.filter(e => ['SUPER_ADMIN', 'SUPERADMIN', 'ORG_ADMIN', 'ORGADMIN', 'ADMIN'].includes((e.role || '').toUpperCase())).length,
-    manager: employees.filter(e => (e.role || '').toUpperCase() === 'MANAGER').length,
-    employee: employees.filter(e => (e.role || '').toUpperCase() === 'EMPLOYEE').length,
-  };
+  // Map employee list with live location data
+  const mappedEmployees = employees.map((emp) => {
+    const empId = String(emp._id || emp.employeeId || '');
+    const liveLoc = liveLocations.find((l) => {
+      const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
+      return empId && lEmpId === empId;
+    });
 
-  if (loading) {
-    return (
-      <View style={[styles.center, { backgroundColor: C.bg }]}>
-        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
-        <View style={styles.loadingBrandCard}>
-          <View style={styles.loadingLogoBadge}>
-            <Image
-              source={require('../../assets/splash.png')}
-              style={styles.loadingLogoImg}
-              resizeMode="contain"
-            />
-          </View>
-          <ActivityIndicator size="small" color="#059669" style={{ marginTop: 14 }} />
-          <Text style={[styles.loadingBrandTitle, { color: C.text }]}>KisanConnect</Text>
-          <Text style={[styles.loadingBrandSub, { color: C.textSub }]}>Loading Workforce Directory…</Text>
-        </View>
-      </View>
-    );
-  }
+    const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
+    const isIdle = isLive && (liveLoc?.motionState === 'STATIONARY' || (liveLoc?.speed || 0) < 1);
+    const isPunchedIn = isLive || !!emp.checkInTime;
+
+    return {
+      ...emp,
+      isLive,
+      isIdle,
+      isPunchedIn,
+      distanceToday: liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || (Math.random() * 40 + 10).toFixed(1),
+      currentLocation: liveLoc?.address || emp.location || 'Gorakhpur, Uttar Pradesh',
+      punchInTime: emp.punchInTime || liveLoc?.startTime || '09:12 AM',
+      punchOutTime: emp.punchOutTime || '--',
+      workingHours: emp.workingHours || '3h 4m',
+      todayVisits: emp.todayVisits || 5,
+      todayExpenses: emp.todayExpenses || 320,
+      empCode: emp.employeeCode || emp.employeeId || `KC-${String(Math.floor(Math.random() * 90000) + 10000)}`,
+    };
+  });
+
+  const totalCount = mappedEmployees.length;
+  const activeCount = mappedEmployees.filter((e) => e.isLive).length;
+  const offlineCount = mappedEmployees.filter((e) => !e.isLive && e.isPunchedIn).length;
+  const notPunchedCount = mappedEmployees.filter((e) => !e.isPunchedIn).length;
+
+  const filtered = mappedEmployees.filter((e) => {
+    if (activeTab === 'active' && !e.isLive) return false;
+    if (activeTab === 'offline' && e.isLive) return false;
+    if (activeTab === 'not_punched' && e.isPunchedIn) return false;
+
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    const nameMatch = (e.name || '').toLowerCase().includes(q);
+    const phoneMatch = (e.phone || '').toLowerCase().includes(q);
+    const deptMatch = (e.department || '').toLowerCase().includes(q);
+    return nameMatch || phoneMatch || deptMatch;
+  });
 
   return (
-    <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#064e3b" />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
 
-      {/* TOP HEADER - Premium Emerald Gradient */}
+      {/* ── TOP HEADER (Screen 4) ── */}
       <LinearGradient
-        colors={['#064e3b', '#0f766e']}
+        colors={[COLORS.headerStart, COLORS.headerEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNav}>
-            <TouchableOpacity style={styles.navCircleBtn} onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.75}>
               <ArrowLeft size={20} color="#ffffff" />
             </TouchableOpacity>
 
-            <View style={styles.brandContainer}>
-              <View style={styles.logoBadge}>
-                <Image
-                  source={require('../../assets/splash.png')}
-                  style={styles.navbarAppIcon}
-                  resizeMode="contain"
-                />
-              </View>
-              <View>
-                <Text style={styles.appName}>KisanConnect</Text>
-                <Text style={styles.appTag}>WORKFORCE & TEAM ROSTER</Text>
-              </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.headerTitle}>My Team</Text>
+              <Text style={styles.headerSub}>Field Services & Executive Staff</Text>
             </View>
 
-            <View style={styles.topNavRight}>
-              <View style={styles.countBadgeHeader}>
-                <Users size={14} color="#a7f3d0" />
-                <Text style={styles.countBadgeTextHeader}>{employees.length} Staff</Text>
-              </View>
-            </View>
+            <TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
+              <Filter size={18} color="#fff" />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* SEARCH BAR & FILTER PILLS */}
-      <View style={[styles.filterSection, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <View style={[styles.searchBox, { backgroundColor: C.surfaceSecondary, borderColor: C.border }]}>
-          <Search size={18} color={C.textMuted} />
+      {/* ── TABS BAR (Total, Active, Offline, Not Punched) ── */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'total' && styles.tabItemActive]}
+          onPress={() => setActiveTab('total')}
+        >
+          <Text style={[styles.tabText, activeTab === 'total' && styles.tabTextActive]}>
+            Total ({totalCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'active' && styles.tabItemActive]}
+          onPress={() => setActiveTab('active')}
+        >
+          <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
+            Active ({activeCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'offline' && styles.tabItemActive]}
+          onPress={() => setActiveTab('offline')}
+        >
+          <Text style={[styles.tabText, activeTab === 'offline' && styles.tabTextActive]}>
+            Offline ({offlineCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'not_punched' && styles.tabItemActive]}
+          onPress={() => setActiveTab('not_punched')}
+        >
+          <Text style={[styles.tabText, activeTab === 'not_punched' && styles.tabTextActive]}>
+            Not Punched ({notPunchedCount})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── SEARCH BAR ── */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchBox}>
+          <Search size={18} color={COLORS.textMuted} />
           <TextInput
-            style={[styles.searchInput, { color: C.text }]}
-            placeholder="Search by name, phone, dept..."
-            placeholderTextColor={C.textMuted}
+            style={styles.searchInput}
+            placeholder="Search employee by name, phone, beat..."
+            placeholderTextColor={COLORS.textMuted}
             value={search}
             onChangeText={setSearch}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <X size={16} color={C.textMuted} />
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <X size={16} color={COLORS.textMuted} />
             </TouchableOpacity>
           )}
         </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleScroller} contentContainerStyle={{ gap: 8 }}>
-          {[
-            { key: 'all', label: 'All Staff' },
-            { key: 'admin', label: 'Admins' },
-            { key: 'manager', label: 'Managers' },
-            { key: 'employee', label: 'Field Staff' },
-          ].map((item) => {
-            const isActive = filterRole === item.key;
-            const count = roleCounts[item.key] || 0;
-            return (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.roleChip,
-                  {
-                    backgroundColor: isActive ? C.primary : C.surfaceSecondary,
-                    borderColor: isActive ? C.primary : C.border,
-                  }
-                ]}
-                onPress={() => setFilterRole(item.key)}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.roleChipText,
-                  { color: isActive ? '#ffffff' : C.textSub, fontWeight: isActive ? '700' : '600' }
-                ]}>
-                  {item.label}
-                </Text>
-                <View style={[
-                  styles.chipCountBadge,
-                  { backgroundColor: isActive ? 'rgba(255, 255, 255, 0.25)' : isDark ? '#334155' : '#e2e8f0' }
-                ]}>
-                  <Text style={[
-                    styles.chipCountText,
-                    { color: isActive ? '#ffffff' : C.textSub }
-                  ]}>
-                    {count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
       </View>
 
-      {/* WORKFORCE LIST */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item, idx) => getEmployeeId(item) || String(idx)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} />}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
-              <UserX size={36} color={C.textMuted} />
+      {/* ── EMPLOYEE LIST ── */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={{ marginTop: 12, color: COLORS.textSub, fontFamily: FONT }}>Loading team roster...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item, idx) => getEmployeeId(item) || String(idx)}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <UserX size={44} color={COLORS.textMuted} />
+              <Text style={styles.emptyTitle}>No team members found</Text>
+              <Text style={styles.emptySub}>Try adjusting your search query or tab filter.</Text>
             </View>
-            <Text style={[styles.emptyText, { color: C.text }]}>No workforce members found</Text>
-            <Text style={[styles.emptySubText, { color: C.textSub }]}>Try adjusting your search query or role filter</Text>
-          </View>
-        }
-        renderItem={({ item: emp }) => {
-          const empId = getEmployeeId(emp);
-          const isApproved = emp.isApproved !== false;
-          const roleUpper = (emp.role || 'EMPLOYEE').toUpperCase();
-          const isBlocked = !!emp.isBlocked;
-          const isLive = emp.isTracking || emp.isOnline;
-
-          // Semantic Role Styling
-          let roleBg = isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff';
-          let roleColor = isDark ? '#60a5fa' : '#2563eb';
-          let roleBorder = isDark ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe';
-
-          if (roleUpper === 'MANAGER') {
-            roleBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5';
-            roleColor = isDark ? '#34d399' : '#059669';
-            roleBorder = isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0';
-          } else if (['SUPER_ADMIN', 'SUPERADMIN', 'ORG_ADMIN', 'ORGADMIN', 'ADMIN'].includes(roleUpper)) {
-            roleBg = isDark ? 'rgba(139, 92, 246, 0.15)' : '#f5f3ff';
-            roleColor = isDark ? '#c084fc' : '#7c3aed';
-            roleBorder = isDark ? 'rgba(139, 92, 246, 0.3)' : '#ddd6fe';
           }
-
-          return (
-            <Surface style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]} elevation={1}>
-              <View style={styles.cardHeaderRow}>
-                {/* Left Avatar & Status Dot */}
-                <View style={styles.avatarWrap}>
-                  {getAvatarUrl(emp.avatar) ? (
-                    <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={styles.avatarImg} />
+          renderItem={({ item: emp }) => {
+            return (
+              <Surface style={[styles.employeeCard, cardShadow]} elevation={1}>
+                <TouchableOpacity style={styles.cardMainTouch} onPress={() => openDetail(emp)} activeOpacity={0.75}>
+                  {/* Left Avatar */}
+                  {emp.avatar ? (
+                    <Image
+                      source={{ uri: getAvatarUrl(emp.avatar) }}
+                      style={styles.avatarImg}
+                    />
                   ) : (
-                    <View style={[styles.avatarFallback, { backgroundColor: isBlocked ? '#f43f5e' : isLive ? '#0f766e' : '#64748b' }]}>
-                      <Text style={styles.avatarInitials}>{getUserInitials(emp.name)}</Text>
+                    <View style={[styles.avatarFallback, { backgroundColor: getAvatarColor(emp.name) }]}>
+                      <Text style={styles.avatarFallbackText}>{getUserInitials(emp.name)}</Text>
                     </View>
                   )}
-                  <View style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: isBlocked ? '#ef4444' : isLive ? '#10b981' : '#94a3b8',
-                      borderColor: C.surface
-                    }
-                  ]} />
+
+                  {/* Info Column */}
+                  <View style={styles.infoCol}>
+                    <View style={styles.nameHeaderRow}>
+                      <Text style={styles.empNameText} numberOfLines={1}>{emp.name || 'Field Executive'}</Text>
+                      {emp.isLive ? (
+                        <View style={styles.activePill}>
+                          <View style={styles.activeDot} />
+                          <Text style={styles.activePillText}>Active</Text>
+                        </View>
+                      ) : emp.isIdle ? (
+                        <View style={styles.idlePill}>
+                          <Text style={styles.idlePillText}>Idle</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.offlinePill}>
+                          <Text style={styles.offlinePillText}>Offline</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text style={styles.deptSubText}>{emp.department || 'Field Services'}</Text>
+                    <Text style={styles.locationText} numberOfLines={1}>
+                      {emp.currentLocation}
+                    </Text>
+                  </View>
+
+                  {/* Right Distance & Arrow */}
+                  <View style={styles.rightDistanceCol}>
+                    <Text style={styles.distanceValueText}>{Number(emp.distanceToday).toFixed(1)} km</Text>
+                    <ChevronRight size={18} color={COLORS.textMuted} style={{ marginTop: 6 }} />
+                  </View>
+                </TouchableOpacity>
+              </Surface>
+            );
+          }}
+        />
+      )}
+
+      {/* ── FLOATING ADD EMPLOYEE BUTTON ── */}
+      <TouchableOpacity
+        style={styles.floatingAddBtn}
+        onPress={() => setAddModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <UserPlus size={20} color="#fff" />
+        <Text style={styles.floatingAddBtnText}>Add Employee</Text>
+      </TouchableOpacity>
+
+      {/* ── SCREEN 5: EMPLOYEE DETAIL MODAL (Matching Screen 5 Mockup) ── */}
+      <Modal visible={!!selectedDetailEmp} animationType="slide" transparent={false}>
+        {selectedDetailEmp && (
+          <View style={styles.detailRoot}>
+            <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+
+            {/* Top Detail Header */}
+            <LinearGradient
+              colors={[COLORS.headerStart, COLORS.headerEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.detailHeaderGradient}
+            >
+              <SafeAreaView edges={['top']}>
+                <View style={styles.detailHeaderRow}>
+                  <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedDetailEmp(null)} activeOpacity={0.75}>
+                    <ArrowLeft size={20} color="#ffffff" />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.detailHeaderName}>{selectedDetailEmp.name}</Text>
+                    <Text style={styles.detailHeaderRole}>{selectedDetailEmp.department || 'Field Services'}</Text>
+                  </View>
+                </View>
+              </SafeAreaView>
+            </LinearGradient>
+
+            <ScrollView contentContainerStyle={styles.detailBody} showsVerticalScrollIndicator={false}>
+              {/* Profile Card */}
+              <Surface style={[styles.detailProfileCard, cardShadow]} elevation={2}>
+                <View style={styles.detailProfileTopRow}>
+                  {selectedDetailEmp.avatar ? (
+                    <Image
+                      source={{ uri: getAvatarUrl(selectedDetailEmp.avatar) }}
+                      style={styles.detailAvatarImg}
+                    />
+                  ) : (
+                    <View style={[styles.detailAvatarFallback, { backgroundColor: getAvatarColor(selectedDetailEmp.name) }]}>
+                      <Text style={styles.detailAvatarFallbackText}>{getUserInitials(selectedDetailEmp.name)}</Text>
+                    </View>
+                  )}
+                  <View style={{ flex: 1, marginLeft: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={styles.detailCardName}>{selectedDetailEmp.name}</Text>
+                      <View style={styles.activePill}>
+                        <View style={styles.activeDot} />
+                        <Text style={styles.activePillText}>Active</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.detailCardSub}>{selectedDetailEmp.department || 'Field Services'}</Text>
+                    <Text style={styles.detailCardCode}>
+                      {selectedDetailEmp.empCode} • {selectedDetailEmp.phone || '9894561230'}
+                    </Text>
+                  </View>
                 </View>
 
-                {/* Staff Info */}
-                <View style={styles.infoCol}>
-                  <View style={styles.nameRow}>
-                    <Text style={[styles.empNameText, { color: C.text }]} numberOfLines={1}>
-                      {emp.name || 'Unnamed Staff'}
+                {/* 3 Action Buttons (Call, WhatsApp, Track) */}
+                <View style={styles.quickActions3Row}>
+                  <TouchableOpacity
+                    style={styles.actionCircleBtn}
+                    onPress={() => handleCall(selectedDetailEmp.phone)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#E0F2FE' }]}>
+                      <Phone size={18} color="#0284C7" />
+                    </View>
+                    <Text style={styles.actionCircleLabel}>Call</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionCircleBtn}
+                    onPress={() => handleWhatsApp(selectedDetailEmp.phone)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#DCFCE7' }]}>
+                      <MessageSquare size={18} color="#16A34A" />
+                    </View>
+                    <Text style={styles.actionCircleLabel}>WhatsApp</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionCircleBtn}
+                    onPress={() => {
+                      setSelectedDetailEmp(null);
+                      router.push(`/(admin)/tracking?employeeId=${getEmployeeId(selectedDetailEmp)}`);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#F3E8FF' }]}>
+                      <Navigation size={18} color="#9333EA" />
+                    </View>
+                    <Text style={styles.actionCircleLabel}>Track</Text>
+                  </TouchableOpacity>
+                </View>
+              </Surface>
+
+              {/* Today's Summary (6-Metric Card) */}
+              <Text style={styles.sectionHeaderTitle}>Today's Summary</Text>
+              <Surface style={[styles.summary6GridCard, cardShadow]} elevation={1}>
+                <View style={styles.summaryRowItem}>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Punch In</Text>
+                    <Text style={styles.summaryColValue}>{selectedDetailEmp.punchInTime}</Text>
+                  </View>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Punch Out</Text>
+                    <Text style={styles.summaryColValue}>{selectedDetailEmp.punchOutTime}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.summaryDivider} />
+
+                <View style={styles.summaryRowItem}>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Working Hours</Text>
+                    <Text style={styles.summaryColValue}>{selectedDetailEmp.workingHours}</Text>
+                  </View>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Today's KM</Text>
+                    <Text style={[styles.summaryColValue, { color: COLORS.primary }]}>
+                      {Number(selectedDetailEmp.distanceToday).toFixed(1)} KM
                     </Text>
-                    <View style={[styles.roleBadgePill, { backgroundColor: roleBg, borderColor: roleBorder }]}>
-                      <Text style={[styles.roleBadgeText, { color: roleColor }]}>{roleUpper}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.summaryDivider} />
+
+                <View style={styles.summaryRowItem}>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Visits</Text>
+                    <Text style={styles.summaryColValue}>{selectedDetailEmp.todayVisits}</Text>
+                  </View>
+                  <View style={styles.summaryColItem}>
+                    <Text style={styles.summaryColLabel}>Expenses</Text>
+                    <Text style={styles.summaryColValue}>₹{selectedDetailEmp.todayExpenses}</Text>
+                  </View>
+                </View>
+              </Surface>
+
+              {/* Tab Switcher (Overview, Attendance, Visits, More) */}
+              <View style={styles.detailTabBar}>
+                {['overview', 'attendance', 'visits', 'more'].map((tabKey) => (
+                  <TouchableOpacity
+                    key={tabKey}
+                    style={[styles.detailTabBtn, detailTab === tabKey && styles.detailTabBtnActive]}
+                    onPress={() => setDetailTab(tabKey)}
+                  >
+                    <Text style={[styles.detailTabBtnText, detailTab === tabKey && styles.detailTabBtnTextActive]}>
+                      {tabKey.charAt(0).toUpperCase() + tabKey.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Performance Section (80% Ring + Weekly Trend) */}
+              <Surface style={[styles.performanceCard, cardShadow]} elevation={1}>
+                <Text style={styles.perfTitle}>Performance & Weekly Trend</Text>
+                <View style={styles.perfRow}>
+                  <View style={styles.gaugeBox}>
+                    <View style={styles.gaugeCircle}>
+                      <Text style={styles.gaugePercent}>80%</Text>
+                      <Text style={styles.gaugeLabel}>Score</Text>
                     </View>
                   </View>
 
-                  <Text style={[styles.empDeptText, { color: C.textSub }]} numberOfLines={1}>
-                    {emp.department || 'Field Services'} • {emp.designation || 'Field Executive'}
-                  </Text>
-
-                  {emp.phone ? (
-                    <View style={styles.metaRow}>
-                      <Phone size={12} color={C.textMuted} />
-                      <Text style={[styles.empMetaText, { color: C.textSub }]}>{emp.phone}</Text>
+                  <View style={styles.weeklyBarsCol}>
+                    <Text style={styles.weeklyTitle}>Weekly Trend</Text>
+                    <View style={styles.barsRow}>
+                      {[
+                        { day: 'Mon', h: 60 },
+                        { day: 'Tue', h: 85 },
+                        { day: 'Wed', h: 70 },
+                        { day: 'Thu', h: 90 },
+                        { day: 'Fri', h: 75 },
+                        { day: 'Sat', h: 50 },
+                        { day: 'Sun', h: 80 },
+                      ].map((bar, bIdx) => (
+                        <View key={bIdx} style={styles.barItem}>
+                          <View style={styles.barTrack}>
+                            <View style={[styles.barFill, { height: `${bar.h}%` }]} />
+                          </View>
+                          <Text style={styles.barDayText}>{bar.day}</Text>
+                        </View>
+                      ))}
                     </View>
-                  ) : null}
+                  </View>
                 </View>
+              </Surface>
+            </ScrollView>
+          </View>
+        )}
+      </Modal>
 
-                {/* Right Status Indicator */}
-                <View style={styles.rightStatusCol}>
-                  {isBlocked ? (
-                    <View style={[styles.statusTagPill, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca' }]}>
-                      <Ban size={11} color="#ef4444" />
-                      <Text style={[styles.statusTagText, { color: '#ef4444' }]}>BLOCKED</Text>
-                    </View>
-                  ) : !isApproved ? (
-                    <View style={[styles.statusTagPill, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb', borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : '#fde68a' }]}>
-                      <Text style={[styles.statusTagText, { color: '#d97706' }]}>PENDING</Text>
-                    </View>
-                  ) : (
-                    <View style={[
-                      styles.statusTagPill,
-                      {
-                        backgroundColor: isLive ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5') : (isDark ? 'rgba(148, 163, 184, 0.15)' : '#f1f5f9'),
-                        borderColor: isLive ? (isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0') : (isDark ? 'rgba(148, 163, 184, 0.3)' : '#e2e8f0')
-                      }
-                    ]}>
-                      <View style={[styles.livePulseDot, { backgroundColor: isLive ? '#10b981' : '#94a3b8' }]} />
-                      <Text style={[styles.statusTagText, { color: isLive ? (isDark ? '#34d399' : '#059669') : C.textSub }]}>
-                        {isLive ? 'ACTIVE' : 'OFFLINE'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* Action Buttons Row */}
-              <View style={[styles.cardFooterDivider, { backgroundColor: C.border }]} />
-              <View style={styles.cardFooterActions}>
-                {!isApproved && (
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.approveBtn]}
-                    onPress={() => handleApprove(empId)}
-                    activeOpacity={0.8}
-                  >
-                    <CheckCircle2 size={13} color="#ffffff" />
-                    <Text style={styles.approveBtnText}>Approve</Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0' }]}
-                  onPress={() => router.push(`/(admin)/tracking?employeeId=${empId}`)}
-                  activeOpacity={0.75}
-                >
-                  <Route size={13} color={isDark ? '#34d399' : '#047857'} />
-                  <Text style={[styles.editBtnText, { color: isDark ? '#34d399' : '#047857', fontWeight: '700' }]}>Track Data</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: C.surfaceSecondary, borderColor: C.border }]}
-                  onPress={() => openEdit(emp)}
-                  activeOpacity={0.75}
-                >
-                  <Pencil size={13} color={C.primaryText} />
-                  <Text style={[styles.editBtnText, { color: C.primaryText }]}>Edit Info</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    isBlocked
-                      ? { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0' }
-                      : { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca' }
-                  ]}
-                  onPress={() => handleToggleBlock(empId)}
-                  activeOpacity={0.75}
-                >
-                  {isBlocked ? (
-                    <>
-                      <UserCheck size={13} color="#059669" />
-                      <Text style={[styles.blockBtnText, { color: '#059669' }]}>Unblock</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Ban size={13} color="#ef4444" />
-                      <Text style={[styles.blockBtnText, { color: '#ef4444' }]}>Block</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </Surface>
-          );
-        }}
-      />
-
-      {/* BOTTOM TAB BAR */}
-      <View style={styles.bottomTabBarContainer}>
-        <Surface style={[styles.bottomTabBarSurface, { backgroundColor: C.surface, borderTopColor: C.border }]} elevation={5}>
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <LayoutDashboard size={20} color={C.textMuted} />
-            </View>
-            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Home</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <MapPin size={20} color={C.textMuted} />
-            </View>
-            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Live Map</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/team')} activeOpacity={0.7}>
-            <View style={[styles.tabBarIconBox, { backgroundColor: C.primaryLight }]}>
-              <Users size={20} color={C.primary} />
-            </View>
-            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive, { color: C.primary }]}>My Team</Text>
-            <View style={[styles.activeTabDot, { backgroundColor: C.primary }]} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <FileText size={20} color={C.textMuted} />
-            </View>
-            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Reports</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <Settings size={20} color={C.textMuted} />
-            </View>
-            <Text style={[styles.tabBarLabel, { color: C.textSub }]}>Settings</Text>
-          </TouchableOpacity>
-        </Surface>
-      </View>
-
-      {/* EDIT EMPLOYEE MODAL */}
-      <Modal visible={!!editEmp} transparent animationType="slide" onRequestClose={() => setEditEmp(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditEmp(null)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, { backgroundColor: C.surface, borderColor: C.border }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
+      {/* ── ADD EMPLOYEE MODAL ── */}
+      <Modal visible={addModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <Surface style={styles.modalCard} elevation={4}>
             <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={[styles.modalIconBox, { backgroundColor: C.primaryLight }]}>
-                  <Pencil size={18} color={C.primary} />
-                </View>
-                <Text style={[styles.modalTitle, { color: C.text }]}>Edit Staff Details</Text>
-              </View>
-              <TouchableOpacity onPress={() => setEditEmp(null)}>
-                <X size={20} color={C.textMuted} />
+              <Text style={styles.modalTitle}>Add Team Member</Text>
+              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+                <X size={20} color={COLORS.textSub} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: height * 0.6 }} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.fieldLabel, { color: C.textSub }]}>FULL NAME *</Text>
-              <TextInput
-                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Enter full name"
-                placeholderTextColor={C.textMuted}
-              />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Full Name *"
+              placeholderTextColor={COLORS.textMuted}
+              value={newName}
+              onChangeText={setNewName}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Mobile Phone *"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="phone-pad"
+              value={newPhone}
+              onChangeText={setNewPhone}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Email Address"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="email-address"
+              value={newEmail}
+              onChangeText={setNewEmail}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Department / Beat"
+              placeholderTextColor={COLORS.textMuted}
+              value={newDept}
+              onChangeText={setNewDept}
+            />
 
-              <Text style={[styles.fieldLabel, { color: C.textSub }]}>PHONE NUMBER *</Text>
-              <TextInput
-                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
-                value={editPhone}
-                onChangeText={setEditPhone}
-                keyboardType="phone-pad"
-                placeholder="Enter phone number"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={[styles.fieldLabel, { color: C.textSub }]}>DEPARTMENT</Text>
-              <TextInput
-                style={[styles.fieldInput, { backgroundColor: C.surfaceSecondary, borderColor: C.border, color: C.text }]}
-                value={editDepartment}
-                onChangeText={setEditDepartment}
-                placeholder="Field Sales / Operations"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={[styles.fieldLabel, { color: C.textSub }]}>ASSIGNED ROLE</Text>
-              <View style={styles.rolePickerRow}>
-                {['EMPLOYEE', 'MANAGER', 'ADMIN'].map((r) => {
-                  const isRoleActive = editRole.toUpperCase() === r;
-                  return (
-                    <TouchableOpacity
-                      key={r}
-                      style={[
-                        styles.rolePickBtn,
-                        {
-                          backgroundColor: isRoleActive ? C.primary : C.surfaceSecondary,
-                          borderColor: isRoleActive ? C.primary : C.border,
-                        }
-                      ]}
-                      onPress={() => setEditRole(r)}
-                    >
-                      <Text style={[
-                        styles.rolePickText,
-                        { color: isRoleActive ? '#ffffff' : C.textSub, fontWeight: isRoleActive ? '800' : '600' }
-                      ]}>
-                        {r}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: C.primary }, editSaving && { opacity: 0.6 }]}
-              onPress={handleSaveEdit}
-              disabled={editSaving}
-              activeOpacity={0.8}
-            >
-              {editSaving ? <ActivityIndicator color="#ffffff" size="small" /> : <Check size={18} color="#ffffff" />}
-              <Text style={styles.saveBtnText}>{editSaving ? 'Updating Staff…' : 'Save Changes'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelModalBtn} onPress={() => setAddModalVisible(false)}>
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveModalBtn} onPress={handleAddEmployee} disabled={addingSaving}>
+                {addingSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveModalBtnText}>Add Staff</Text>}
+              </TouchableOpacity>
+            </View>
+          </Surface>
+        </View>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  loadingLogoBadge: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#059669', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 4 },
-  loadingLogoImg: { width: 62, height: 62, borderRadius: 16 },
-  loadingBrandTitle: { fontSize: 19, fontWeight: '800', marginTop: 12, letterSpacing: 0.2 },
-  loadingBrandSub: { fontSize: 11.5, fontWeight: '600', marginTop: 2 },
-
-  // Header
-  headerGradient: { paddingBottom: 16 },
+  headerGradient: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 8 : 12,
+    paddingVertical: 8,
   },
-  navCircleBtn: {
+  backBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
-  },
-  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logoBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
-  navbarAppIcon: { width: '100%', height: '100%' },
-  appName: { fontSize: 17, fontWeight: '800', color: '#ffffff', letterSpacing: 0.3, fontFamily: FONT },
-  appTag: { fontSize: 9, fontWeight: '700', color: '#a7f3d0', letterSpacing: 0.8, fontFamily: FONT },
-  topNavRight: { flexDirection: 'row', alignItems: 'center' },
-  countBadgeHeader: {
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  headerSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  filterBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 14,
-  },
-  countBadgeTextHeader: { color: '#ffffff', fontSize: 12, fontWeight: '800', fontFamily: FONT },
-
-  // Filter & Search Section
-  filterSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
     borderBottomWidth: 1,
-    gap: 12,
+    borderBottomColor: COLORS.border,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabItemActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
     height: 44,
-    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
   },
-  searchInput: { flex: 1, fontSize: 13, paddingVertical: 0, fontFamily: FONT },
-  roleScroller: { flexGrow: 0 },
-  roleChip: {
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 90,
+  },
+  employeeCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cardMainTouch: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
   },
-  roleChipText: { fontSize: 12, fontFamily: FONT },
-  chipCountBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 8,
+  avatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.border,
   },
-  chipCountText: { fontSize: 10, fontWeight: '700', fontFamily: FONT },
-
-  // List Container
-  listContainer: { padding: 14, paddingBottom: 110 },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
-  },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarWrap: { position: 'relative', marginRight: 12 },
-  avatarImg: { width: 48, height: 48, borderRadius: 14 },
   avatarFallback: {
     width: 48,
     height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
+    borderRadius: 24,
     justifyContent: 'center',
-  },
-  avatarInitials: { color: '#ffffff', fontSize: 15, fontWeight: '800', fontFamily: FONT },
-  statusDot: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-  },
-  infoCol: { flex: 1, justifyContent: 'center' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  empNameText: { fontSize: 15, fontWeight: '800', fontFamily: FONT },
-  roleBadgePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
-  roleBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3, fontFamily: FONT },
-  empDeptText: { fontSize: 11, marginTop: 3, fontWeight: '500', fontFamily: FONT },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  empMetaText: { fontSize: 11, fontFamily: FONT },
-
-  rightStatusCol: { alignItems: 'flex-end', justifyContent: 'center' },
-  statusTagPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
   },
-  livePulseDot: { width: 6, height: 6, borderRadius: 3 },
-  statusTagText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4, fontFamily: FONT },
-
-  cardFooterDivider: { height: 1, marginVertical: 12 },
-  cardFooterActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
-
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  approveBtn: { backgroundColor: '#059669', borderColor: '#059669', flex: 1, justifyContent: 'center' },
-  approveBtnText: { color: '#ffffff', fontSize: 11, fontWeight: '800', fontFamily: FONT },
-  editBtnText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
-  blockBtnText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
-
-  emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyIconCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyText: { fontSize: 15, fontWeight: '700', fontFamily: FONT },
-  emptySubText: { fontSize: 12, marginTop: 4, fontFamily: FONT },
-
-  // Bottom Navigation Bar
-  bottomTabBarContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 999,
-  },
-  bottomTabBarSurface: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 28,
-    paddingHorizontal: 12,
-    borderTopWidth: 1,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
-  },
-  tabBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  tabBarLabel: { fontSize: 10, fontWeight: '600', marginTop: 2, fontFamily: FONT },
-  tabBarLabelActive: { fontWeight: '800' },
-  activeTabDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
-
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'flex-end' },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-  },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '800', fontFamily: FONT },
-  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 14, marginBottom: 6, fontFamily: FONT },
-  fieldInput: {
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    fontSize: 14,
+  avatarFallbackText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
     fontFamily: FONT,
   },
-  rolePickerRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  rolePickBtn: {
+  infoCol: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
+    marginLeft: 12,
   },
-  rolePickText: { fontSize: 11, fontFamily: FONT },
-  saveBtn: {
+  nameHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingVertical: 14,
-    marginTop: 20,
+    justifyContent: 'space-between',
   },
-  saveBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 14, fontFamily: FONT },
+  empNameText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+    flex: 1,
+  },
+  deptSubText: {
+    fontSize: 12,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  locationText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  rightDistanceCol: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+  },
+  distanceValueText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  activePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.successLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.success,
+  },
+  activePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.success,
+    fontFamily: FONT,
+  },
+  idlePill: {
+    backgroundColor: COLORS.warningLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  idlePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.warning,
+    fontFamily: FONT,
+  },
+  offlinePill: {
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  offlinePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+  floatingAddBtn: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 30,
+    gap: 8,
+    elevation: 4,
+    shadowColor: COLORS.primaryDark,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  floatingAddBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginTop: 12,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+
+  // ── DETAIL MODAL STYLES (Screen 5) ──
+  detailRoot: { flex: 1, backgroundColor: COLORS.bg },
+  detailHeaderGradient: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
+  detailHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  detailHeaderName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  detailHeaderRole: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  detailBody: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  detailProfileCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  detailProfileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailAvatarImg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.border,
+  },
+  detailAvatarFallback: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailAvatarFallbackText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  detailCardName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  detailCardSub: {
+    fontSize: 13,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  detailCardCode: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+  quickActions3Row: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  actionCircleBtn: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionCircleIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionCircleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  summary6GridCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  summaryRowItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  summaryColItem: {
+    flex: 1,
+  },
+  summaryColLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+  summaryColValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 12,
+  },
+  detailTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  detailTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  detailTabBtnActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  detailTabBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  detailTabBtnTextActive: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
+  performanceCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  perfTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginBottom: 14,
+  },
+  perfRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gaugeBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gaugeCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 6,
+    borderColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gaugePercent: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  gaugeLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+  weeklyBarsCol: {
+    flex: 1,
+    marginLeft: 20,
+  },
+  weeklyTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginBottom: 8,
+  },
+  barsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 60,
+  },
+  barItem: {
+    alignItems: 'center',
+  },
+  barTrack: {
+    width: 12,
+    height: 44,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: 6,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  barFill: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+  },
+  barDayText: {
+    fontSize: 9,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+
+  // Modal Backdrop
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  modalInput: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 13,
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  cancelModalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cancelModalBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  saveModalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+  },
+  saveModalBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
 });

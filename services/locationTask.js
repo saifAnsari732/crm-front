@@ -227,6 +227,11 @@ const processLocation = async (location) => {
     console.log('📍 BackgroundTask: Non-numeric GPS payload, skipping.');
     return;
   }
+  // ── Mock Location / GPS Spoofing Guard ──────────────────────────────────────
+  if (location.mocked || location.coords?.isMocked || location.coords?.mocked) {
+    console.log('🛡️ [SECURITY] Mock GPS location detected. Discarding.');
+    return;
+  }
 
   try {
     const sessionId = await storage.getItem('currentTrackingSessionId');
@@ -317,8 +322,8 @@ const processLocation = async (location) => {
         const authoritativeDist = Number.isFinite(serverToday) ? serverToday : serverDist;
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
         const finalDist = Number.isFinite(authoritativeDist)
-          ? Math.max(localDist, authoritativeDist).toFixed(4)
-          : localDist.toFixed(4);
+          ? authoritativeDist.toFixed(2)
+          : localDist.toFixed(2);
 
         const checkpointData = {
           sessionId,

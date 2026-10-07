@@ -9,15 +9,18 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StatusBar,
 } from 'react-native';
 import { Avatar, Surface, Text } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Calendar, RefreshCw, Route, Search, UserRound } from 'lucide-react-native';
 
 import { adminAPI, getAvatarUrl } from '../../../services/api';
 import { useSettings } from '../../../context/SettingsContext';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
 const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -163,16 +166,28 @@ export default function EmployeeKmHistoryScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <View style={[styles.header, { backgroundColor: C.surface, borderColor: C.border }]}>
-        <TouchableOpacity style={[styles.iconBtn, { backgroundColor: C.soft }]} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={C.text} />
-        </TouchableOpacity>
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
-        <View style={styles.headerText}>
-          <Text style={[styles.eyebrow, { color: '#008080' }]}>ADMIN HISTORY</Text>
-          <Text style={[styles.title, { color: C.text }]}>Employee KM History</Text>
-        </View>
-      </View>
+      {/* ── HEADER ── */}
+      <LinearGradient
+        colors={['#047857', '#0d9488', '#0f766e']}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.headerInner}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <ArrowLeft size={20} color="#fff" />
+            </TouchableOpacity>
+
+            <View style={styles.headerText}>
+              <Text style={styles.eyebrow}>ADMIN AUDIT HISTORY</Text>
+              <Text style={styles.title}>Employee KM History</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
       <View style={[styles.filterPanel, { backgroundColor: C.surface, borderColor: C.border }]}>
         <View style={[styles.inputBox, { backgroundColor: C.bg, borderColor: C.border }]}>
@@ -288,11 +303,31 @@ export default function EmployeeKmHistoryScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: Platform.OS === 'ios' ? 54 : 22, paddingBottom: 12, borderBottomWidth: 1 },
-  iconBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
+  headerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerText: { flex: 1, marginLeft: 12 },
-  eyebrow: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5 },
-  title: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+  eyebrow: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5, color: '#a7f3d0' },
+  title: { fontFamily: FONT, fontSize: 17, fontWeight: '800', marginTop: 1, color: '#ffffff' },
   filterPanel: { margin: 12, borderWidth: 1, borderRadius: 12, padding: 10, gap: 8 },
   inputBox: { height: 40, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchBox: { height: 40, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -47,6 +47,18 @@ const canUseNativeLocalNotifications = async () => {
 };
 /* ========================================================================= */
 
+const haversineMeters = (lat1, lon1, lat2, lon2) => {
+  if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) return 0;
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 export default function useLocationTracker() {
   const [isTracking, setIsTracking] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState(null);
@@ -68,12 +80,11 @@ export default function useLocationTracker() {
       if (nextState === 'active') checkActiveSession();
     });
 
-    // ─── IMMORTAL TRACKING WATCHDOG (Fires every 25s) ──────────────────────
-    // If Android OS or Chinese OEM task-killer terminates the GPS background service,
-    // this watchdog automatically resurrects the task immediately.
+    // ─── IMMORTAL TRACKING WATCHDOG (Fires every 15s) ──────────────────────
+    // Checks session health, passive motion for 5-min auto start, and resurrects GPS task if killed.
     const watchdogInterval = setInterval(() => {
       checkActiveSession();
-    }, 25000);
+    }, 15000);
     
     return () => {
       subscription.remove();
@@ -113,6 +124,133 @@ export default function useLocationTracker() {
 
       if (!activeSession) {
         setIsTracking(false);
+        // ─── 5-MINUTE CONTINUOUS TRAVEL MOTION AUTO-START ENGINE ─────────────
+        // If employee forgot to punch in, monitor for 5 continuous minutes of travel.
+        // Captures minute-0 start anchor so 0% distance from the 5-minute trip is lost!
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          try {
+            const userToken = await storage.getItem('userToken');
+            if (userToken) {
+              const currentPos = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              if (
+                currentPos &&
+                currentPos.coords &&
+                Number.isFinite(currentPos.coords.latitude) &&
+                Number.isFinite(currentPos.coords.longitude)
+              ) {
+                const now = Date.now();
+                const currLat = currentPos.coords.latitude;
+                const currLng = currentPos.coords.longitude;
+                const currentAcc = currentPos.coords.accuracy || 100;
+                const rawSpeedKmh =
+                  currentPos.coords.speed && currentPos.coords.speed > 0
+                    ? currentPos.coords.speed * 3.6
+                    : 0;
+
+                // Read last passive sample
+                const lastLatStr = await storage.getItem('passive_last_lat');
+                const lastLngStr = await storage.getItem('passive_last_lng');
+                const lastTimeStr = await storage.getItem('passive_last_time');
+
+                let movedDistMeters = 0;
+                let deltaSpeedKmh = 0;
+
+                if (lastLatStr && lastLngStr && lastTimeStr) {
+                  const lastLat = parseFloat(lastLatStr);
+                  const lastLng = parseFloat(lastLngStr);
+                  const lastTime = parseInt(lastTimeStr, 10);
+                  const elapsedSec = (now - lastTime) / 1000;
+
+                  if (elapsedSec >= 5 && elapsedSec <= 120) {
+                    movedDistMeters = haversineMeters(lastLat, lastLng, currLat, currLng);
+                    deltaSpeedKmh = (movedDistMeters / elapsedSec) * 3.6;
+                  }
+                }
+
+                // Update passive location checkpoint
+                await storage.setItem('passive_last_lat', String(currLat));
+                await storage.setItem('passive_last_lng', String(currLng));
+                await storage.setItem('passive_last_time', String(now));
+
+                const effectiveSpeedKmh = Math.max(rawSpeedKmh, deltaSpeedKmh);
+
+                // Sustained travel signal: moving >= 5 km/h with >= 15m displacement OR raw GPS speed >= 6 km/h with reasonable accuracy
+                const isTravelling =
+                  (effectiveSpeedKmh >= 5.0 && movedDistMeters >= 15 && currentAcc <= 200) ||
+                  (rawSpeedKmh >= 6.0 && currentAcc <= 150);
+
+                if (isTravelling) {
+                  const firstSeenStr = await storage.getItem('passive_motion_first_seen');
+                  const firstSeen = firstSeenStr ? parseInt(firstSeenStr, 10) : null;
+
+                  if (!firstSeen) {
+                    // First movement observation: start 5-minute countdown and record start anchor
+                    await storage.setItem('passive_motion_first_seen', String(now));
+                    await storage.setItem('passive_motion_last_seen', String(now));
+                    await storage.setItem(
+                      'passive_motion_start_coords',
+                      JSON.stringify({
+                        lat: currLat,
+                        lng: currLng,
+                        timestamp: new Date(currentPos.timestamp || now).toISOString(),
+                      })
+                    );
+                    console.log(
+                      `⏳ [SMART_AUTO_START] Travel detected (${effectiveSpeedKmh.toFixed(1)} km/h, moved ${movedDistMeters.toFixed(0)}m). 5-minute continuous travel countdown started...`
+                    );
+                  } else {
+                    const elapsedMs = now - firstSeen;
+                    await storage.setItem('passive_motion_last_seen', String(now));
+
+                    if (elapsedMs >= 5 * 60 * 1000) {
+                      // 5 minutes of continuous travel confirmed!
+                      console.log(
+                        `🚀 [SMART_AUTO_START] 5 minutes of continuous travel confirmed (${(elapsedMs / 60000).toFixed(1)} min at ${effectiveSpeedKmh.toFixed(1)} km/h). Auto-starting duty tracking!`
+                      );
+                      const startCoordsStr = await storage.getItem('passive_motion_start_coords');
+                      let initialCoords = null;
+                      try {
+                        if (startCoordsStr) initialCoords = JSON.parse(startCoordsStr);
+                      } catch (_) {}
+
+                      await storage.removeItem('passive_motion_first_seen');
+                      await storage.removeItem('passive_motion_last_seen');
+                      await storage.removeItem('passive_motion_start_coords');
+                      await storage.removeItem('passive_last_lat');
+                      await storage.removeItem('passive_last_lng');
+                      await storage.removeItem('passive_last_time');
+
+                      await startTracking('', true, initialCoords);
+                      return;
+                    } else {
+                      console.log(
+                        `⏳ [SMART_AUTO_START] Continuous travel in progress: ${(elapsedMs / 60000).toFixed(1)} / 5.0 mins (${effectiveSpeedKmh.toFixed(1)} km/h, moved ${movedDistMeters.toFixed(0)}m)...`
+                      );
+                    }
+                  }
+                } else if (effectiveSpeedKmh < 3.0 && movedDistMeters < 10) {
+                  // If stationary for > 2.5 minutes, reset the 5-minute countdown
+                  const lastSeenStr = await storage.getItem('passive_motion_last_seen');
+                  if (lastSeenStr) {
+                    const lastSeen = parseInt(lastSeenStr, 10);
+                    if (now - lastSeen > 2.5 * 60 * 1000) {
+                      await storage.removeItem('passive_motion_first_seen');
+                      await storage.removeItem('passive_motion_last_seen');
+                      await storage.removeItem('passive_motion_start_coords');
+                      console.log(
+                        'ℹ️ [SMART_AUTO_START] Stopped for > 2.5 mins before 5-minute threshold. Continuous travel timer reset.'
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          } catch (passiveErr) {
+            // Best effort
+          }
+        }
         return;
       }
 
@@ -184,9 +322,9 @@ export default function useLocationTracker() {
    * 5. Camera Permission (Mandatory for selfie check-in)
    * 6. Battery Optimization check (Nudge to set "Unrestricted")
    */
-  const requestPermissions = async () => {
+  const requestPermissions = async (isAutoStart = false) => {
     try {
-      setLoading(true);
+      if (!isAutoStart) setLoading(true);
       
       if (Platform.OS === 'web') {
         setPermissionStatus('granted');
@@ -196,16 +334,18 @@ export default function useLocationTracker() {
       // 0. Check if device Location Services (GPS) are turned ON
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
-        sendGpsDisabledNotification().catch(() => {});
-        showCustomAlert(
-          'GPS Location Disabled',
-          'Phone ka Location / GPS Services OFF hai. Punch In karne se pehle kripya GPS ON karein.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() }
-          ],
-          'warning'
-        );
+        if (!isAutoStart) {
+          sendGpsDisabledNotification().catch(() => {});
+          showCustomAlert(
+            'GPS Location Disabled',
+            'Phone ka Location / GPS Services OFF hai. Punch In karne se pehle kripya GPS ON karein.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            ],
+            'warning'
+          );
+        }
         return false;
       }
 
@@ -215,7 +355,7 @@ export default function useLocationTracker() {
           const hasNotificationPermission = await PermissionsAndroid.check(
             'android.permission.POST_NOTIFICATIONS'
           );
-          if (!hasNotificationPermission) {
+          if (!hasNotificationPermission && !isAutoStart) {
             const status = await PermissionsAndroid.request(
               'android.permission.POST_NOTIFICATIONS',
               {
@@ -236,19 +376,24 @@ export default function useLocationTracker() {
       }
 
       // 2. Foreground Location Permission
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-      if (foregroundStatus !== 'granted') {
-        setPermissionStatus('denied');
-        showCustomAlert(
-          'Location Permission Denied',
-          'Location permission ("Allow") is required to log visits and track shift distance.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() }
-          ],
-          'error'
-        );
-        return false;
+      if (isAutoStart) {
+        const { status: currentFgStatus } = await Location.getForegroundPermissionsAsync();
+        if (currentFgStatus !== 'granted') return false;
+      } else {
+        const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+        if (foregroundStatus !== 'granted') {
+          setPermissionStatus('denied');
+          showCustomAlert(
+            'Location Permission Denied',
+            'Location permission ("Allow") is required to log visits and track shift distance.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            ],
+            'error'
+          );
+          return false;
+        }
       }
 
       // 3. Background Location Permission ("Allow all the time")
@@ -256,6 +401,11 @@ export default function useLocationTracker() {
         const { status: currentBgStatus } = await Location.getBackgroundPermissionsAsync();
 
         if (currentBgStatus !== 'granted') {
+          if (isAutoStart) {
+            // Background permission must be granted beforehand for auto-start
+            return false;
+          }
+
           // Prominent Disclosure before requesting background location (Google Play Policy Requirement)
           const userAgreed = await new Promise((resolve) => {
             showCustomAlert(
@@ -297,21 +447,23 @@ export default function useLocationTracker() {
         }
       }
 
-      // 4. Camera Permission (Mandatory for Selfie Check-in)
-      const { status: cameraStatus } = await ImagePicker.getCameraPermissionsAsync();
-      if (cameraStatus !== 'granted') {
-        const { status: reqCamStatus } = await ImagePicker.requestCameraPermissionsAsync();
-        if (reqCamStatus !== 'granted') {
-          showCustomAlert(
-            'Camera Permission Required',
-            'Camera permission is mandatory to capture a selfie check-in before starting your shift.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open Settings', onPress: () => Linking.openSettings() }
-            ],
-            'error'
-          );
-          return false;
+      // 4. Camera Permission (Mandatory for Selfie Check-in on manual start)
+      if (!isAutoStart) {
+        const { status: cameraStatus } = await ImagePicker.getCameraPermissionsAsync();
+        if (cameraStatus !== 'granted') {
+          const { status: reqCamStatus } = await ImagePicker.requestCameraPermissionsAsync();
+          if (reqCamStatus !== 'granted') {
+            showCustomAlert(
+              'Camera Permission Required',
+              'Camera permission is mandatory to capture a selfie check-in before starting your shift.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+              ],
+              'error'
+            );
+            return false;
+          }
         }
       }
 
@@ -321,21 +473,21 @@ export default function useLocationTracker() {
       console.error('📍 useLocationTracker: Permission request error:', err);
       return false;
     } finally {
-      setLoading(false);
+      if (!isAutoStart) setLoading(false);
     }
   };
 
   /**
    * Start GPS Background Tracking session
    */
-  const startTracking = async (selfieUrl = '') => {
+  const startTracking = async (selfieUrl = '', isAutoStart = false, initialStartCoords = null) => {
     if (isTracking) return { success: true, message: 'Already tracking.' };
 
     try {
       setLoading(true);
 
       // Verify permissions first
-      const hasPermission = await requestPermissions();
+      const hasPermission = await requestPermissions(isAutoStart);
       if (!hasPermission) {
         return { success: false, error: 'Permission not granted.' };
       }
@@ -405,23 +557,58 @@ export default function useLocationTracker() {
       const sessionId = session.sessionId;
 
       // 2. Cache session details locally
-      // Anchor this shift at its own start location. This prevents comparing
-      // against the previous shift while preserving all distance from shift start.
+      // Anchor this shift at initial start location if motion auto-started,
+      // preserving distance from the initial detection point.
+      const anchorLat = (initialStartCoords && Number.isFinite(Number(initialStartCoords.lat))) ? Number(initialStartCoords.lat) : latitude;
+      const anchorLng = (initialStartCoords && Number.isFinite(Number(initialStartCoords.lng))) ? Number(initialStartCoords.lng) : longitude;
+      const anchorTs = initialStartCoords?.timestamp || session.startTime || new Date().toISOString();
+
       await storage.setItem('last_recorded_location', JSON.stringify({
-        lat: latitude,
-        lng: longitude,
+        lat: anchorLat,
+        lng: anchorLng,
         speed: 0,
         accuracy: 0,
-        timestamp: session.startTime || new Date().toISOString(),
+        timestamp: anchorTs,
       }));
       await storage.setItem('currentTrackingSessionId', sessionId);
       await storage.setItem('tracking_accumulated_session_id', sessionId);
-      await storage.setItem('trackingStartTime', session.startTime || new Date().toISOString());
+      await storage.setItem('trackingStartTime', anchorTs);
       const initialDist = typeof startResponse?.data?.totalDistanceToday === 'number'
         ? startResponse.data.totalDistanceToday.toFixed(2)
         : '0.00';
       await storage.setItem('tracking_accumulated_distance', initialDist);
       await scheduleNoMovementNotification(sessionId);
+
+      // If motion auto-started with a 5-minute travel segment, immediately upload both points to backend
+      if (initialStartCoords && (anchorLat !== latitude || anchorLng !== longitude)) {
+        try {
+          const backfillCoords = [
+            {
+              eventId: `${sessionId}:auto:0:${anchorLat.toFixed(6)}:${anchorLng.toFixed(6)}`,
+              lat: anchorLat,
+              lng: anchorLng,
+              speed: 0,
+              accuracy: 20,
+              timestamp: anchorTs,
+              motionState: 'VEHICLE'
+            },
+            {
+              eventId: `${sessionId}:auto:1:${latitude.toFixed(6)}:${longitude.toFixed(6)}`,
+              lat: latitude,
+              lng: longitude,
+              speed: 10,
+              accuracy: 20,
+              timestamp: new Date().toISOString(),
+              motionState: 'VEHICLE'
+            }
+          ];
+          trackingApi.updateLocation(sessionId, backfillCoords).then((res) => {
+            if (res.data?.success && typeof res.data.totalDistance === 'number') {
+              storage.setItem('tracking_accumulated_distance', String(res.data.totalDistance.toFixed(2)));
+            }
+          }).catch(() => {});
+        } catch (_) {}
+      }
 
       // 3. Connect socket & emit tracking_started
       try {
@@ -592,9 +779,8 @@ export default function useLocationTracker() {
         try {
           const finalResponse = await trackingApi.updateLocation(sessionId, [finalCoordinate]);
           if (finalResponse.data?.success) {
-            const currentAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
             const confirmedDist = Number(finalResponse.data.totalDistance) || 0;
-            await storage.setItem('tracking_accumulated_distance', String(Math.max(currentAcc, confirmedDist)));
+            await storage.setItem('tracking_accumulated_distance', String(confirmedDist));
           }
         } catch (finalErr) {
           console.log('⚠️ useLocationTracker: Final coordinate upload deferred:', finalErr.message);
@@ -617,7 +803,7 @@ export default function useLocationTracker() {
       try {
         const response = await trackingApi.stopTracking(sessionId, new Date().toISOString());
         const localAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        totalDistance = Math.max(Number(response.data?.totalDistance) || 0, localAcc);
+        totalDistance = typeof response.data?.totalDistance === 'number' ? response.data.totalDistance : localAcc;
         stopSucceeded = true;
       } catch (netErr) {
         console.log('⚠️ useLocationTracker: Backend unreachable during stop, queueing stop for retry.');

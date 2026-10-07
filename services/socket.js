@@ -95,8 +95,14 @@ class SocketService {
    * Initializes and connects the WebSocket client
    */
   async connect() {
-    if (this.socket && this.socket.connected) {
-      return this.socket;
+    if (this.socket) {
+      if (this.socket.connected) {
+        return this.socket;
+      }
+      try {
+        this.socket.connect();
+        return this.socket;
+      } catch (_) {}
     }
 
     try {

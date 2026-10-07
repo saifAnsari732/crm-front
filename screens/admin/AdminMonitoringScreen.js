@@ -55,7 +55,7 @@ import { cachedFetch, clearCachePrefix } from '../../services/cache';
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
 const COLORS = {
   primary: '#074e26',
@@ -337,11 +337,11 @@ export default function AdminMonitoringScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* ─── 1. EXECUTIVE BRAND HEADER ────────────────────────────────────── */}
       <LinearGradient
-        colors={['#074e26', '#065a29']}
+        colors={['#047857', '#0d9488', '#0f766e']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
@@ -821,8 +821,10 @@ const styles = StyleSheet.create({
   headerGradient: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
   },
   headerNavRow: {
     flexDirection: 'row',

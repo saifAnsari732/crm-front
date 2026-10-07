@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 
 import { adminAPI, getAvatarUrl } from '../../services/api';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const { width, height } = Dimensions.get('window');
 const getToday = () => new Date().toISOString().slice(0, 10);
 const getEmployeeId = (employee) => employee?._id || employee?.employeeId || employee?.id || '';
@@ -125,10 +125,10 @@ export default function AdminHistoryScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#074e26" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* EXECUTIVE TOP HEADER */}
-      <LinearGradient colors={['#074e26', '#065a29']} style={styles.headerGradient}>
+      <LinearGradient colors={['#047857', '#0d9488', '#0f766e']} style={styles.headerGradient}>
         <SafeAreaView edges={['top']}>
           <View style={styles.headerNavRow}>
             <TouchableOpacity
@@ -364,7 +364,14 @@ export default function AdminHistoryScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
-  headerGradient: { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0, paddingBottom: 12 },
+  headerGradient: {
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0,
+    paddingBottom: 14,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   headerNavRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4 },
   backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
   refreshCircleBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },

@@ -8,7 +8,7 @@ import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Layers, CheckCircle2, Sparkles, Shield, Zap } from 'lucide-react-native';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const BG_COLOR = '#f8fafc';
 
 const cardShadow = Platform.OS === 'web'
@@ -40,10 +40,10 @@ export default function AdminPlansScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#e11d48" />
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
 
       {/* HEADER */}
-      <LinearGradient colors={['#e11d48', '#be123c']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
+      <LinearGradient colors={['#047857', '#0d9488', '#0f766e']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
         <SafeAreaView edges={['top']}>
           <View style={styles.headerTitleRow}>
             <View style={styles.headerIconBox}>
@@ -102,11 +102,19 @@ export default function AdminPlansScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG_COLOR },
-  header: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: Platform.OS === 'android' ? 10 : 0 },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', fontFamily: FONT },
-  headerSub: { color: '#ffe4e6', fontSize: 10, marginTop: 1 },
+  headerSub: { color: '#a7f3d0', fontSize: 10, marginTop: 1 },
 
   body: { padding: 14, maxWidth: 720, width: '100%', alignSelf: 'center' },
   plansList: { gap: 16 },

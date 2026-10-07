@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Platform, RefreshControl,
-  StyleSheet, TextInput, TouchableOpacity, View, Image,
+  StyleSheet, TextInput, TouchableOpacity, View, Image, StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CalendarDays, CheckCircle2, Clock3, Search, UserX, X, ArrowLeft, RefreshCw, Calendar, Clock } from 'lucide-react-native';
 import { Avatar, Surface, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 const getToday = () => new Date().toISOString().slice(0, 10);
 const getYesterday = () => {
   const d = new Date();
@@ -70,31 +72,42 @@ export default function AdminAttendanceScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: C.bg, marginTop: 30 }]}>
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+
       {/* Top Header Bar with Back Navigation & Title */}
-      <View style={[styles.topHeader, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace('/(admin)/dashboard');
-          }}
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={20} color={C.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={[styles.topTitle, { color: C.text }]}>Attendance Console</Text>
-          <Text style={[styles.topSub, { color: C.sub }]}>Daily Staff Logs & Punch-ins</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.refreshBtn}
-          onPress={async () => { setRefreshing(true); await fetchAttendance(); }}
-          activeOpacity={0.7}
-        >
-          <RefreshCw size={18} color={C.primary} />
-        </TouchableOpacity>
-      </View>
+      <LinearGradient
+        colors={['#047857', '#0d9488', '#0f766e']}
+        style={styles.topHeader}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={['top']}>
+          <View style={styles.topHeaderInner}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/(admin)/dashboard');
+              }}
+              activeOpacity={0.7}
+            >
+              <ArrowLeft size={20} color="#fff" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.topTitle}>Attendance Console</Text>
+              <Text style={styles.topSub}>Daily Staff Logs & Punch-ins</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.refreshBtn}
+              onPress={async () => { setRefreshing(true); await fetchAttendance(); }}
+              activeOpacity={0.7}
+            >
+              <RefreshCw size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
       <FlatList
         data={filteredRecords}
@@ -256,17 +269,24 @@ function AttendanceCard({ record, colors, onSelfie }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   topHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    borderCurve: 'round',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+  },
+  topHeaderInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 4,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -274,12 +294,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(37,99,235,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topTitle: { fontFamily: FONT, fontSize: 16, fontWeight: '800' },
-  topSub: { fontFamily: FONT, fontSize: 11, fontWeight: '500' },
+  topTitle: { fontFamily: FONT, fontSize: 16, fontWeight: '800', color: '#ffffff' },
+  topSub: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: '#a7f3d0', marginTop: 1 },
   content: { padding: 12, paddingBottom: 60 },
   
   // Quick Presets Row

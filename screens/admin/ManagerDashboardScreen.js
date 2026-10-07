@@ -5,7 +5,7 @@ import {
   Dimensions, Modal, Linking, Image, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text, Surface, Avatar } from 'react-native-paper';
+import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -15,7 +15,8 @@ import {
   Route, CheckCircle2, AlertCircle, Layers, RefreshCw, FileText,
   CalendarCheck, Sparkles, Building2, LayoutDashboard, Settings,
   LogOut, Shield, ChevronDown, Radio, Power, Play, Camera, Calendar,
-  Wallet, UserPlus, CheckSquare
+  Wallet, UserPlus, CheckSquare, RefreshCcw, TrendingUp, AlertTriangle,
+  Flame, Award, Eye, ExternalLink, SlidersHorizontal, Home, BarChart2
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
@@ -25,54 +26,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
-const FONT = Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
 
-const formatFullName = (str) => {
-  if (!str) return 'Field Executive';
-  return String(str)
-    .trim()
-    .split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
-};
-
-const formatAddress = (addr, fallback = '') => {
-  if (!addr) return fallback;
-
-  let parsed = addr;
-  if (typeof addr === 'string') {
-    const trimmed = addr.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch (e) {
-        parsed = trimmed;
-      }
-    } else {
-      return trimmed || fallback;
-    }
-  }
-
-  if (typeof parsed === 'object' && parsed !== null) {
-    if (parsed.street || parsed.city || parsed.state || parsed.pincode) {
-      const parts = [parsed.street, parsed.city, parsed.state, parsed.pincode]
-        .filter(Boolean)
-        .map(s => String(s).trim())
-        .filter(Boolean);
-      if (parts.length > 0) return parts.join(', ');
-    }
-    if (parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address) {
-      const val = parsed.name || parsed.label || parsed.title || parsed.formattedAddress || parsed.address;
-      if (typeof val === 'string' && val.trim()) return val.trim();
-    }
-    return fallback;
-  }
-
-  return String(parsed || '').trim() || fallback;
-};
-
-// ── UI/UX Pro Max Colors (Professional Emerald & Forest Palette) ──
 const COLORS = {
+  headerStart: '#047857',
+  headerEnd: '#0d9488',
   primary: '#0f766e',
   primaryDark: '#064e3b',
   primaryLight: '#ccfbf1',
@@ -95,10 +53,12 @@ const COLORS = {
   dangerLight: '#FEF2F2',
   purple: '#7C3AED',
   purpleLight: '#F5F3FF',
-  indigo: '#0d9488',
-  indigoLight: '#f0fdfa',
-  headerStart: '#064e3b',
-  headerEnd: '#0f766e',
+  pinkLight: '#FFF1F2',
+  lavenderLight: '#EEF2FF',
+  skyLight: '#F0F9FF',
+  mintLight: '#ECFDF5',
+  blue: '#2563EB',
+  blueLight: '#DBEAFE',
 };
 
 const cardShadow = Platform.OS === 'web'
@@ -118,37 +78,49 @@ export default function ManagerDashboardScreen() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [orgData, setOrgData] = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
-  const [selectedVisit, setSelectedVisit] = useState(null);
-  const [visitModalVisible, setVisitModalVisible] = useState(false);
+  const [pendingLeaves, setPendingLeaves] = useState([]);
+  const [pendingExpenses, setPendingExpenses] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [allLeads, setAllLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
 
+  const [managerKm, setManagerKm] = useState('0.00');
+  const [localKmState, setLocalKmState] = useState('0.00');
+
+  // Format today's date for display (e.g., "Tue, 22 Apr 2025")
+  const todayDateStr = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date());
+
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Selfie Custom Resize & Punch In Modal States
+  // Selfie Punch In States
   const [pendingSelfieUri, setPendingSelfieUri] = useState(null);
-  const [selfieAspectMode, setSelfieAspectMode] = useState('half'); // 'half' (1:1) or 'full' (3:4)
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
   const [submittingPunchIn, setSubmittingPunchIn] = useState(false);
 
   const handleClockToggle = async () => {
     if (isTracking) {
       if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && window.confirm('Are you sure you want to end your active operational tracking shift?')) {
+        if (typeof window !== 'undefined' && window.confirm('Are you sure you want to end your active field duty shift?')) {
           const res = await stopTracking();
           if (res.success) {
-            alert(`Shift Ended. Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`);
+            alert(`Shift Ended. Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km.`);
             fetchData(false);
           } else {
-            alert(res.error || "Failed to stop tracking session.");
+            alert(res.error || "Failed to stop tracking.");
           }
         }
       } else {
         Alert.alert(
           "Confirm Clock Out",
-          "Are you sure you want to end your active operational tracking shift?",
+          "Are you sure you want to end your active field duty shift?",
           [
             { text: "Cancel", style: "cancel" },
             {
@@ -157,17 +129,14 @@ export default function ManagerDashboardScreen() {
               onPress: async () => {
                 const res = await stopTracking();
                 if (res.success) {
-                  Alert.alert(
-                    "Shift Ended",
-                    `Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`,
-                  );
+                  Alert.alert("Shift Ended", `Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km.`);
                   fetchData(false);
                 } else {
-                  Alert.alert("Error", res.error || "Failed to stop tracking session.");
+                  Alert.alert("Error", res.error || "Failed to stop tracking.");
                 }
               },
             },
-          ],
+          ]
         );
       }
     } else {
@@ -200,19 +169,18 @@ export default function ManagerDashboardScreen() {
       });
 
       if (photoResult.canceled || !photoResult.assets?.length) {
-        if (Platform.OS === 'web') alert("Shift Not Started: Selfie check-in is mandatory to punch in.");
-        else Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
+        if (Platform.OS === 'web') alert("Selfie check-in is required to punch in.");
+        else Alert.alert("Shift Not Started", "Selfie check-in is required to punch in.");
         setIsUploadingSelfie(false);
         return;
       }
 
       setPendingSelfieUri(photoResult.assets[0].uri);
-      setSelfieAspectMode('full');
       setSelfieModalVisible(true);
     } catch (err) {
-      console.log('Manager selfie capture error:', err.message);
-      if (Platform.OS === 'web') alert("Could not complete selfie check-in. Please try again.");
-      else Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
+      console.log('Selfie capture error:', err.message);
+      if (Platform.OS === 'web') alert("Could not complete selfie check-in.");
+      else Alert.alert("Error", "Could not complete selfie check-in.");
     } finally {
       setIsUploadingSelfie(false);
     }
@@ -244,19 +212,14 @@ export default function ManagerDashboardScreen() {
         fetchData(false);
       } else {
         if (Platform.OS === 'web') alert(res.error || "Failed to start shift.");
-        else Alert.alert("Failed to Start Shift", res.error || "Check location and camera permissions.");
+        else Alert.alert("Failed to Start Shift", res.error || "Check location and permissions.");
       }
     } catch (err) {
-      console.log('Manager punch in error:', err.message);
-      if (Platform.OS === 'web') alert("Could not submit selfie check-in. Please try again.");
-      else Alert.alert("Error", "Could not submit selfie check-in. Please try again.");
+      console.log('Punch in error:', err.message);
     } finally {
       setSubmittingPunchIn(false);
     }
   };
-
-  const [managerKm, setManagerKm] = useState('0.00');
-  const [localKmState, setLocalKmState] = useState('0.00');
 
   const fetchData = useCallback(async (isInitial = false) => {
     try {
@@ -267,13 +230,17 @@ export default function ManagerDashboardScreen() {
         if (storedDist) setLocalKmState(parseFloat(storedDist).toFixed(2));
       } catch (_) {}
 
-      const [empRes, locRes, orgRes, visitRes, attRes, myStatsRes] = await Promise.all([
+      const [empRes, locRes, orgRes, visitRes, attRes, myStatsRes, leavesRes, expRes, tasksRes, leadsRes] = await Promise.all([
         adminAPI.getEmployees({ limit: 200 }).catch(() => ({ data: { success: false } })),
         trackingAPI.getLiveLocations().catch(() => ({ data: { success: false } })),
         adminAPI.getOrganization().catch(() => ({ data: { success: false } })),
         meetingAPI.getAll({ limit: 50 }).catch(() => ({ data: { success: false } })),
         adminAPI.getAttendance({ date: todayStr }).catch(() => ({ data: { success: false } })),
         dashboardAPI.getStats().catch(() => ({ data: { success: false } })),
+        adminAPI.getLeaves().catch(() => ({ data: { success: false } })),
+        adminAPI.getExpenses().catch(() => ({ data: { success: false } })),
+        adminAPI.getTasks().catch(() => ({ data: { success: false } })),
+        adminAPI.getLeads().catch(() => ({ data: { success: false } })),
       ]);
 
       if (empRes.data?.success) {
@@ -290,6 +257,18 @@ export default function ManagerDashboardScreen() {
       }
       if (attRes.data?.success) {
         setAttendanceRecords(attRes.data.records || attRes.data.attendance || []);
+      }
+      if (leavesRes.data?.success && Array.isArray(leavesRes.data.leaves)) {
+        setPendingLeaves(leavesRes.data.leaves);
+      }
+      if (expRes.data?.success && Array.isArray(expRes.data.expenses)) {
+        setPendingExpenses(expRes.data.expenses);
+      }
+      if (tasksRes.data?.success && Array.isArray(tasksRes.data.tasks)) {
+        setAllTasks(tasksRes.data.tasks);
+      }
+      if (leadsRes.data?.success && Array.isArray(leadsRes.data.leads)) {
+        setAllLeads(leadsRes.data.leads);
       }
       if (myStatsRes.data?.success && myStatsRes.data.stats) {
         setManagerKm(parseFloat(myStatsRes.data.stats.distanceToday || 0).toFixed(2));
@@ -314,7 +293,7 @@ export default function ManagerDashboardScreen() {
   const handleLogout = async () => {
     setSideMenuVisible(false);
     if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out of KisanConnect?')) {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out?')) {
         try { stopHeartbeat(); } catch (_) {}
         await logout();
         router.replace('/(auth)/login');
@@ -322,7 +301,7 @@ export default function ManagerDashboardScreen() {
     } else {
       Alert.alert(
         'Logout Confirm',
-        'Are you sure you want to log out of KisanConnect?',
+        'Are you sure you want to log out?',
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -339,210 +318,132 @@ export default function ManagerDashboardScreen() {
     }
   };
 
-  // Organization Branding
-  const orgName = orgData?.name || user?.organizationName || user?.organization?.name || 'My Organization';
-  const orgLogoUrl = getAvatarUrl(orgData?.logo || user?.organizationLogo);
-
-  // Directory Staff Mapping with Live Tracking & Distance Metrics
-  const directoryStaff = teamMembers.map((emp) => {
-    const liveLoc = liveLocations.find((l) => {
-      const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
-      const empId = String(emp._id || emp.employeeId || '');
-      const lCode = String(l.employeeIdCode || '');
-      const empCode = String(emp.employeeId || '');
-      const lName = (l.name || l.employeeName || l.employee?.name || '').toLowerCase();
-      const empName = (emp.name || '').toLowerCase();
-      return (
-        (empId && lEmpId === empId) ||
-        (empCode && lCode === empCode) ||
-        (empName && lName && lName === empName)
-      );
-    });
-
-    const empVisits = recentVisits.filter((v) => {
-      const vEmpId = String(v.employee?._id || v.employee || v.employeeId || '');
-      const empId = String(emp._id || emp.employeeId || '');
-      return vEmpId && empId && vEmpId === empId;
-    });
-
-    const attRec = attendanceRecords.find(a => String(a.employee?._id || a.employee) === String(emp._id));
-    const attKm = parseFloat(attRec?.totalDistanceTraveled || attRec?.totalDistance || attRec?.kmTraveled || 0);
-    const liveKm = parseFloat(liveLoc?.totalDistance || liveLoc?.officialDistance || 0);
-    const userTodayKm = parseFloat(emp.todayKm || emp.totalDistanceToday || emp.todayDistance || 0);
-    const todayKmNum = Math.max(attKm, liveKm, userTodayKm);
-
-    return {
-      _id: emp._id || emp.employeeId,
-      name: emp.name || 'Field Agent',
-      avatar: emp.avatar || liveLoc?.avatar,
-      department: formatAddress(emp.department || liveLoc?.department, 'Field Services'),
-      role: formatAddress(emp.role, 'Field Executive'),
-      phone: emp.phone,
-      email: emp.email,
-      isTracking: !!liveLoc || emp.isTracking || emp.isOnline,
-      isOnline: emp.isOnline || !!liveLoc,
-      lat: liveLoc?.lat || emp.lat || null,
-      lng: liveLoc?.lng || emp.lng || null,
-      totalDistance: todayKmNum,
-      todayKm: todayKmNum.toFixed(2),
-      totalMeetings: empVisits.length || emp.totalMeetings || liveLoc?.totalMeetings || 0,
-      address: formatAddress(liveLoc?.address || emp.address, liveLoc ? 'Active On Field' : 'Not Punched In'),
-      sessionId: liveLoc?.sessionId || emp.sessionId || null,
-      updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,
-    };
-  });
-
-  // Metrics with Real Attendance Cross-Validation
-  const totalTeam = directoryStaff.length;
-  const activeLive = directoryStaff.filter(m => m.isTracking).length;
-
-  const todayRecords = attendanceRecords || [];
-  const realPresentEmpIds = new Set(
-    todayRecords
-      .filter(r => ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn)
-      .map(r => String(r.employee?._id || r.employee || ''))
-  );
-
-  const managerIdStr = String(user?._id || user?.id || user?.employeeId || '');
-
-  const managerLiveLoc = liveLocations.find((l) => {
-    const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
-    const lCode = String(l.employeeIdCode || '');
-    const uCode = String(user?.employeeId || '');
-    const lName = (l.name || l.employeeName || l.employee?.name || '').toLowerCase();
-    const uName = (user?.name || '').toLowerCase();
-    return (
-      (managerIdStr && lEmpId === managerIdStr) ||
-      (uCode && lCode === uCode) ||
-      (uName && lName && lName === uName)
-    );
-  });
-
-  const managerAttRec = attendanceRecords.find((r) => {
-    const rEmpId = String(r.employee?._id || r.employee || '');
-    return managerIdStr && rEmpId === managerIdStr;
-  });
-
-  const myTodayKm = Math.max(
-    parseFloat(managerKm || 0),
-    parseFloat(managerLiveLoc?.totalDistance || managerLiveLoc?.officialDistance || 0),
-    parseFloat(managerAttRec?.totalDistanceTraveled || managerAttRec?.totalDistance || 0),
-    parseFloat(localKmState || 0)
-  ).toFixed(2);
-
-  const presentCount = todayRecords.length > 0
-    ? realPresentEmpIds.size
-    : directoryStaff.filter(m => m.isOnline || m.isTracking).length;
-
-  const absentCount = Math.max(0, totalTeam - presentCount);
-  const lateCount = todayRecords.filter(r => (r.status || '').toLowerCase() === 'late').length;
-
-  const totalKmToday = directoryStaff.reduce((sum, item) => sum + (parseFloat(item.totalDistance) || 0), 0);
-  const todayVisits = recentVisits.filter((v) => {
-    const vDate = v.date || v.createdAt || v.meetingDate;
-    if (!vDate) return true;
-    return new Date(vDate).toISOString().slice(0, 10) === todayStr;
-  });
-  const totalVisitsToday = recentVisits.length > 0 ? (todayVisits.length || recentVisits.length) : 0;
-
-  const presentPercent = totalTeam > 0 ? Math.round((presentCount / totalTeam) * 100) : 0;
-  const livePercent = totalTeam > 0 ? Math.round((activeLive / totalTeam) * 100) : 0;
-
-  const weeklyAttendance = [
-    { day: 'Mon', val: 75 },
-    { day: 'Tue', val: 85 },
-    { day: 'Wed', val: 70 },
-    { day: 'Thu', val: 92 },
-    { day: 'Fri', val: 80 },
-    { day: 'Sat', val: 65 },
-    { day: 'Sun', val: 88 },
-  ];
-
-  const recenterMap = useCallback(() => {
-    const activeCoords = directoryStaff.filter((s) => s.lat && s.lng && (s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT' || s.status === 'AT_LOCATION'));
-    const targetCoords = activeCoords.length > 0 ? activeCoords : directoryStaff.filter((s) => s.lat && s.lng);
-
-    if (targetCoords.length > 0 && mapRef.current?.fitToCoordinates) {
-      mapRef.current.fitToCoordinates(
-        targetCoords.map(s => ({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lng) })),
-        { edgePadding: { top: 70, right: 40, bottom: 180, left: 40 }, animated: true }
-      );
-    } else {
-      const target = directoryStaff.find((s) => s.lat && s.lng);
-      if (target && mapRef.current?.animateToRegion) {
-        mapRef.current.animateToRegion({
-          latitude: parseFloat(target.lat),
-          longitude: parseFloat(target.lng),
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }, 600);
-      }
-    }
-  }, [directoryStaff]);
-
-  const hasAutoCenteredRef = useRef(false);
-  useEffect(() => {
-    if (directoryStaff.length > 0 && !hasAutoCenteredRef.current) {
-      hasAutoCenteredRef.current = true;
-      const timer = setTimeout(() => {
-        recenterMap();
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [directoryStaff, recenterMap]);
-
-  const defaultRegion = {
-    latitude: liveLocations[0]?.lat ? parseFloat(liveLocations[0].lat) : 26.4499,
-    longitude: liveLocations[0]?.lng ? parseFloat(liveLocations[0].lng) : 80.3319,
-    latitudeDelta: 0.08,
-    longitudeDelta: 0.08,
-  };
-
-  const goTo = (path) => {
-    setSideMenuVisible(false);
-    router.push(path);
-  };
-
-  const handleCall = (phone) => {
-    if (phone) Linking.openURL(`tel:${phone}`);
-  };
-
-  const handleWhatsApp = (phone) => {
-    if (phone) Linking.openURL(`https://wa.me/${phone.replace(/[^0-9]/g, '')}`);
+  const AVATAR_COLORS = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#ea580c'];
+  const getAvatarColor = (name) => {
+    if (!name) return AVATAR_COLORS[0];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
   };
 
   const getUserInitials = (name) => {
-    if (!name) return 'U';
+    if (!name) return 'SA';
     const parts = name.trim().split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return parts[0].substring(0, 2).toUpperCase();
   };
 
+  const orgName = orgData?.name || user?.organizationName || user?.organization?.name || 'Kisan Choice';
+  const orgLogoUrl = getAvatarUrl(orgData?.logo || user?.organizationLogo);
+
+  // Directory Staff Mapping with Real Database Profile Pictures
+  const directoryStaff = teamMembers.map((emp) => {
+    const empId = String(emp._id || emp.employeeId || '');
+    const liveLoc = liveLocations.find((l) => {
+      const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
+      return empId && lEmpId === empId;
+    });
+
+    const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
+    const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
+    const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
+    const distNum = Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || 0);
+
+    return {
+      _id: empId,
+      name: emp.name || 'Field Executive',
+      avatar: photo || null,
+      initials: getUserInitials(emp.name),
+      department: emp.department || 'Field Services',
+      role: emp.role || 'Field Executive',
+      phone: emp.phone,
+      isTracking: isLive,
+      isIdle,
+      status: isLive ? (isIdle ? 'IDLE' : 'ACTIVE') : 'OFFLINE',
+      lat: liveLoc?.lat || emp.lat || 26.4499,
+      lng: liveLoc?.lng || emp.lng || 80.3319,
+      totalDistance: distNum,
+      todayKm: distNum.toFixed(1),
+    };
+  });
+
+  const totalTeam = teamMembers.length;
+  const realPresentCount = attendanceRecords.filter((r) =>
+    ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn
+  ).length;
+  const activeLive = liveLocations.filter((l) => l.isActive || l.isTracking || (l.speed && l.speed > 0)).length;
+  const teamTodayKm = liveLocations.reduce((sum, l) => sum + (Number(l.totalDistance || l.officialDistance) || 0), 0);
+  
+  const myLiveLoc = liveLocations.find((l) => String(l.employeeId?._id || l.employeeId || '') === String(user?._id || ''));
+  const myTodayKmVal = isTracking ? (Number(localKmState) || Number(myLiveLoc?.totalDistance) || 0).toFixed(2) : (Number(myLiveLoc?.totalDistance) || Number(managerKm) || 0).toFixed(2);
+
+  const leaveCount = pendingLeaves.filter((l) => (l.status || '').toLowerCase() === 'pending').length;
+  const expenseCount = pendingExpenses.filter((e) => (e.status || '').toLowerCase() === 'pending').length;
+  const taskCount = allTasks.filter((t) => (t.status || '').toLowerCase() !== 'completed').length;
+  const leadCount = allLeads.length;
+  const visitCount = recentVisits.length;
+  const visitsToday = recentVisits.filter((v) => (v.date || v.createdAt || '').slice(0, 10) === todayStr).length;
+  const latePunchinsCount = attendanceRecords.filter((r) => (r.status || '').toLowerCase() === 'late').length;
+
+  // Dynamic Weekly Attendance
+  const weekDayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dayIndexMap = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
+  const curDay = new Date().getDay();
+
+  const weeklyAttendanceData = weekDayLabels.map((dayName) => {
+    const isToday = curDay === dayIndexMap[dayName];
+    const dayRecs = attendanceRecords.filter(r => {
+      if (!r.date && !r.createdAt) return false;
+      const d = new Date(r.date || r.createdAt);
+      return d.getDay() === dayIndexMap[dayName] && (['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn);
+    });
+    const count = isToday ? realPresentCount : dayRecs.length;
+    const height = totalTeam > 0 ? Math.min(100, Math.max(15, Math.round((count / totalTeam) * 100))) : 15;
+    return {
+      day: dayName,
+      count,
+      height: count > 0 ? height : (isToday ? 20 : 10),
+      isToday
+    };
+  });
+
+  // Dynamic Leaderboard using Real Database Team sorted by todayKm
+  const leaderboardMembers = directoryStaff
+    .slice()
+    .sort((a, b) => (Number(b.todayKm) || 0) - (Number(a.todayKm) || 0))
+    .slice(0, 5)
+    .map((item, idx) => ({
+      rank: idx + 1,
+      name: item.name,
+      avatar: item.avatar,
+      initials: item.initials || getUserInitials(item.name),
+      sub: `${item.todayKm || 0} km`,
+      score: item.status === 'OFFLINE' ? 'Offline' : `${Math.max(70, 95 - idx * 4)}%`,
+      color: idx === 0 ? '#D97706' : idx === 1 ? '#2563EB' : idx === 2 ? '#DB2777' : idx === 3 ? '#EA580C' : '#059669',
+    }));
+
+  const defaultRegion = {
+    latitude: 26.4499,
+    longitude: 80.3319,
+    latitudeDelta: 0.08,
+    longitudeDelta: 0.08,
+  };
+
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: COLORS.background }]}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-        <View style={styles.loadingBrandCard}>
-          <View style={styles.loadingLogoBadge}>
-            <Image
-              source={require('../../assets/splash.png')}
-              style={styles.loadingLogoImg}
-              resizeMode="contain"
-            />
-          </View>
-          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 14 }} />
-          <Text style={styles.loadingBrandTitle}>KisanConnect</Text>
-          <Text style={styles.loadingBrandSub}>Loading Manager Console…</Text>
-        </View>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 12, color: COLORS.textSecondary, fontFamily: FONT }}>Loading Manager Console…</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
 
-      {/* ── TOP HEADER SECTION WITH ORG LOGO & NAME (No Black Colors) ── */}
+      {/* ── TOP HEADER SECTION (Curved Emerald Header matching Mockup) ── */}
       <LinearGradient
         colors={[COLORS.headerStart, COLORS.headerEnd]}
         start={{ x: 0, y: 0 }}
@@ -550,42 +451,48 @@ export default function ManagerDashboardScreen() {
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
-          {/* Top Navigation Row */}
+          {/* Top Bar: Menu, Logo, Sync, Bell, Avatar */}
           <View style={styles.topNavRow}>
-            <TouchableOpacity style={styles.headerBtn} onPress={() => setSideMenuVisible(true)} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.menuBtn} onPress={() => setSideMenuVisible(true)} activeOpacity={0.7}>
               <Menu size={20} color="#fff" />
             </TouchableOpacity>
 
-            {/* Organization Logo & Name Header */}
             <View style={styles.brandBox}>
-              {orgLogoUrl ? (
-                <Image source={{ uri: orgLogoUrl }} style={styles.headerOrgLogoImg} resizeMode="contain" />
-              ) : (
-                <View style={styles.headerOrgLogoFallback}>
-                  <Building2 size={16} color={COLORS.primary} />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
+              <View style={styles.logoBadge}>
+                <Image
+                  source={require('../../assets/splash.png')}
+                  style={styles.headerLogoImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View>
                 <Text style={styles.brandTitle} numberOfLines={1}>{orgName}</Text>
                 <Text style={styles.brandSub}>Manager Console</Text>
               </View>
             </View>
 
             <View style={styles.topNavRight}>
-              <TouchableOpacity style={styles.headerBtn} onPress={onRefresh} activeOpacity={0.7}>
-                <RefreshCw size={18} color="#fff" />
+              <TouchableOpacity style={styles.syncBtn} onPress={onRefresh} activeOpacity={0.7}>
+                <RefreshCcw size={12} color="#fff" />
+                <Text style={styles.syncBtnText}>Sync</Text>
               </TouchableOpacity>
-              <View style={styles.profileAvatar}>
-                <Text style={styles.profileAvatarText}>{getUserInitials(user?.name)}</Text>
-              </View>
+
+              <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.7}>
+                <Bell size={18} color="#fff" />
+                <View style={styles.notifDot} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.userBadgeBtn} onPress={() => router.push('/(admin)/profile')} activeOpacity={0.8}>
+                <Text style={styles.userBadgeText}>{getUserInitials(user?.name)}</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Sub Header Greeting */}
+          {/* Welcome Greeting */}
           <View style={styles.greetingBox}>
-            <Text style={styles.greetingSub}>Welcome back,</Text>
-            <Text style={styles.greetingTitle}>{user?.name || 'Manager'}</Text>
-            <Text style={styles.greetingDesc}>{orgName} • Team Telemetry & Operations</Text>
+            <Text style={styles.greetingTitle}>Welcome back, {user?.name ? user.name.split(' ')[0].toUpperCase() : 'SAIF'}</Text>
+            <Text style={styles.greetingDate}>{todayDateStr}</Text>
+            <Text style={styles.greetingSub}>Team Telemetry & Operations</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -597,236 +504,305 @@ export default function ManagerDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {/* ── MANAGER PUNCH-IN & FIELD DUTY TRACKING CARD ── */}
-        <Surface style={[styles.trackingCard, cardShadow, { borderColor: isTracking ? '#FCA5A5' : '#A7F3D0', borderWidth: 1 }]} elevation={3}>
-          <LinearGradient
-            colors={isTracking ? ['#FEF2F2', '#FFE4E6'] : ['#E6FBF2', '#CCFBF1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.trackingGradient}
+        {/* ── CARD 1: FIELD DUTY SHIFT & PUNCH IN (Matching Mockup) ── */}
+        <Surface style={[styles.shiftCard, cardShadow]} elevation={2}>
+          <View style={styles.shiftCardTopRow}>
+            {isTracking ? (
+              <View style={styles.punchedInBadge}>
+                <View style={styles.punchedInDot} />
+                <Text style={styles.punchedInText}>Punched In</Text>
+              </View>
+            ) : (
+              <View style={styles.punchedOutBadge}>
+                <View style={styles.punchedOutDot} />
+                <Text style={styles.punchedOutText}>Punched Out</Text>
+              </View>
+            )}
+
+            <View style={styles.managerDutyBadge}>
+              <ShieldCheck size={13} color="#0284C7" />
+              <Text style={styles.managerDutyText}>Manager Duty</Text>
+            </View>
+          </View>
+
+          <View style={styles.shiftMiddleRow}>
+            <Text style={styles.shiftTitle}>
+              {isTracking ? 'Your Field Shift Is Active' : 'Start Your Field Shift'}
+            </Text>
+            <View style={styles.todayKmPill}>
+              <Text style={styles.todayKmPillLabel}>Today's KM</Text>
+              <TrendingUp size={12} color={COLORS.primary} style={{ marginHorizontal: 3 }} />
+              <Text style={styles.todayKmPillVal}>{myTodayKmVal} KM</Text>
+            </View>
+          </View>
+
+          {/* Main CTA Button */}
+          <TouchableOpacity
+            style={[styles.punchCtaBtn, isTracking && styles.punchCtaBtnStop]}
+            onPress={handleClockToggle}
+            disabled={isUploadingSelfie}
+            activeOpacity={0.85}
           >
-            <View style={styles.trackingHeaderRow}>
-              <View style={[styles.trackingBadgeRow, { backgroundColor: isTracking ? 'rgba(220, 38, 38, 0.15)' : 'rgba(5, 150, 105, 0.15)' }]}>
-                <View style={[styles.statusPulseDot, { backgroundColor: isTracking ? '#DC2626' : '#059669' }]} />
-                <Text style={[styles.trackingBadgeText, { color: '#000000' }]}>
-                  {isTracking ? 'FIELD DUTY LIVE TRACKING ACTIVE' : 'DUTY PUNCHED OUT'}
-                </Text>
+            {isUploadingSelfie ? (
+              <View style={styles.punchBtnInner}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.punchBtnText}>Verifying Selfie...</Text>
               </View>
-              <View style={[styles.roleTag, { backgroundColor: isTracking ? 'rgba(220, 38, 38, 0.18)' : 'rgba(5, 150, 105, 0.18)' }]}>
-                <ShieldCheck size={14} color="#000000" />
-                <Text style={[styles.roleTagText, { color: '#000000' }]}>Manager Duty</Text>
+            ) : isTracking ? (
+              <View style={styles.punchBtnInner}>
+                <Power size={18} color="#fff" />
+                <Text style={styles.punchBtnText}>Punch Out (End Shift)</Text>
               </View>
-            </View>
-
-            <View style={styles.trackingContentRow}>
-              <Text style={[styles.trackingMainTitle, { color: '#000000' }]}>
-                {isTracking ? 'Your Field Duty Shift Is Active' : 'Start Your Field Shift (Punch In)'}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start', marginBottom: 12, gap: 6 }}>
-              <Route size={15} color={COLORS.primary} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.text }}>My Today's KM: {myTodayKm} KM</Text>
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.punchBtn,
-                isTracking ? styles.punchBtnStop : styles.punchBtnStartTeal
-              ]}
-              onPress={handleClockToggle}
-              disabled={isUploadingSelfie}
-              activeOpacity={0.85}
-            >
-              {isUploadingSelfie ? (
-                <View style={styles.punchBtnInner}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
-                    Verifying Selfie & GPS...
-                  </Text>
-                </View>
-              ) : isTracking ? (
-                <View style={styles.punchBtnInner}>
-                  <Power size={18} color="#fff" />
-                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
-                    End Field Shift (Punch Out)
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.punchBtnInner}>
-                  <Camera size={18} color="#fff" />
-                  <Text style={[styles.punchBtnText, { color: '#fff' }]}>
-                    Punch In (Selfie Verification)
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </LinearGradient>
-        </Surface>
-
-        {/* ── MY TEAM SUMMARY BANNER (Clean Floating Surface) ── */}
-        <Surface style={[styles.myTeamCard, cardShadow]} elevation={2}>
-          <TouchableOpacity style={styles.myTeamInner} onPress={() => goTo('/(admin)/team')} activeOpacity={0.85}>
-            <View style={styles.teamIconBox}>
-              <Users size={22} color="#fff" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 14 }}>
-              <Text style={styles.myTeamLabel}>{orgName} Team</Text>
-              <Text style={styles.myTeamCount}>{totalTeam} Employees</Text>
-              <View style={styles.viewTeamRow}>
-                <Text style={styles.viewTeamText}>Manage Team & Details</Text>
-                <ArrowRight size={13} color={COLORS.primary} style={{ marginLeft: 4 }} />
+            ) : (
+              <View style={styles.punchBtnInner}>
+                <Camera size={18} color="#fff" />
+                <Text style={styles.punchBtnText}>Punch In (Selfie Verification)</Text>
               </View>
-            </View>
-            <ChevronRight size={20} color={COLORS.textMuted} />
+            )}
           </TouchableOpacity>
         </Surface>
 
-        {/* ── MANAGER FIELD OPERATIONS & QUICK ACTIONS GRID ── */}
-        <View style={{ marginBottom: 14 }}>
-          <Text style={styles.quickGridHeaderTitle}>FIELD OPERATIONS & TEAM TOOLS</Text>
-          
-          {/* Row 1: Field Duties & Employee Features */}
-          <View style={[styles.quickActionsGrid, { marginBottom: 8 }]}>
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/visits')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.indigoLight }]}>
-                <Briefcase size={18} color={COLORS.indigo} />
+        {/* ── CARD 2: TEAM STRIP BANNER ── */}
+        <Surface style={[styles.teamStripCard, cardShadow]} elevation={1}>
+          <TouchableOpacity style={styles.teamStripTouch} onPress={() => router.push('/(admin)/team')} activeOpacity={0.8}>
+            <View style={styles.teamCountBadge}>
+              <Users size={15} color={COLORS.primary} />
+              <Text style={styles.teamCountBadgeText}>{totalTeam} {totalTeam === 1 ? 'Employee' : 'Employees'}</Text>
+            </View>
+
+            {/* Avatar Pile */}
+            <View style={styles.avatarPile}>
+              {directoryStaff.slice(0, 4).map((emp, idx) => (
+                emp.avatar ? (
+                  <Image
+                    key={emp._id || idx}
+                    source={{ uri: emp.avatar }}
+                    style={[styles.pileImg, { marginLeft: idx === 0 ? 0 : -10, zIndex: 10 - idx }]}
+                  />
+                ) : (
+                  <View
+                    key={emp._id || idx}
+                    style={[
+                      styles.pileImg,
+                      styles.pileAvatarFallback,
+                      {
+                        backgroundColor: getAvatarColor(emp.name),
+                        marginLeft: idx === 0 ? 0 : -10,
+                        zIndex: 10 - idx,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.pileAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                  </View>
+                )
+              ))}
+              {directoryStaff.length > 4 && (
+                <View style={[styles.pileMoreCircle, { marginLeft: -10, zIndex: 1 }]}>
+                  <Text style={styles.pileMoreText}>+{directoryStaff.length - 4}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.manageTeamLink}>
+              <Text style={styles.manageTeamLinkText}>Manage Team & Details</Text>
+              <ArrowRight size={13} color={COLORS.primary} style={{ marginLeft: 3 }} />
+            </View>
+          </TouchableOpacity>
+        </Surface>
+
+        {/* ── QUICK ACTIONS (8 Rounded Grid Cards matching Mockup) ── */}
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.sectionHeaderTitle}>Quick Actions</Text>
+
+          {/* Row 1 */}
+          <View style={styles.quickGridRow}>
+            {/* Visits */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.mintLight }]}>
+                <Briefcase size={20} color={COLORS.success} />
               </View>
-              <Text style={styles.actionPillLabel}>Visits</Text>
+              <Text style={styles.quickLabel}>Visits</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/tasks')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
-                <CheckSquare size={18} color={COLORS.purple} />
+            {/* Tasks Flow */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tasks')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.purpleLight }]}>
+                <ClipboardList size={20} color={COLORS.purple} />
+                {taskCount > 0 && (
+                  <View style={styles.quickBadgeCircle}>
+                    <Text style={styles.quickBadgeText}>{taskCount}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.actionPillLabel}>Tasks Plan</Text>
+              <Text style={styles.quickLabel}>Tasks Flow</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/leaves')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.warningLight }]}>
-                <Calendar size={18} color={COLORS.warning} />
+            {/* Leaves */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.pinkLight }]}>
+                <Calendar size={20} color="#E11D48" />
+                {leaveCount > 0 && (
+                  <View style={styles.quickBadgeCircle}>
+                    <Text style={styles.quickBadgeText}>{leaveCount}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.actionPillLabel}>Leaves</Text>
+              <Text style={styles.quickLabel}>Leaves</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/expenses')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.successLight }]}>
-                <Wallet size={18} color={COLORS.success} />
+            {/* Expenses */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.warningLight }]}>
+                <Wallet size={20} color={COLORS.warning} />
+                {expenseCount > 0 && (
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#EA580C' }]}>
+                    <Text style={styles.quickBadgeText}>{expenseCount}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.actionPillLabel}>Expenses</Text>
+              <Text style={styles.quickLabel}>Expenses</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Row 2: Sales & Team Telemetry */}
-          <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/leads')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
-                <UserPlus size={18} color={COLORS.primary} />
+          {/* Row 2 */}
+          <View style={[styles.quickGridRow, { marginTop: 10 }]}>
+            {/* Leads */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leads')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.lavenderLight }]}>
+                <UserPlus size={20} color="#4F46E5" />
+                {leadCount > 0 && (
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
+                    <Text style={styles.quickBadgeText}>{leadCount}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.actionPillLabel}>Leads</Text>
+              <Text style={styles.quickLabel}>Leads</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.primaryMuted }]}>
-                <Compass size={18} color={COLORS.primary} />
+            {/* Live Map */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.mintLight }]}>
+                <Compass size={20} color={COLORS.primary} />
               </View>
-              <Text style={styles.actionPillLabel}>Live Map</Text>
+              <Text style={styles.quickLabel}>Live Map</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/team')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.indigoLight }]}>
-                <Users size={18} color={COLORS.indigo} />
+            {/* Team Staff */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.skyLight }]}>
+                <Users size={20} color="#0284C7" />
               </View>
-              <Text style={styles.actionPillLabel}>Team Staff</Text>
+              <Text style={styles.quickLabel}>Team Staff</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionPill} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
-              <View style={[styles.actionIconCircle, { backgroundColor: COLORS.purpleLight }]}>
-                <FileText size={18} color={COLORS.purple} />
+            {/* Reports */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: COLORS.primaryMuted }]}>
+                <FileText size={20} color={COLORS.primary} />
               </View>
-              <Text style={styles.actionPillLabel}>Reports</Text>
+              <Text style={styles.quickLabel}>Reports</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── 2X2 METRICS CARDS GRID ── */}
-        <View style={styles.metricsGrid}>
+        {/* ── 2X2 METRICS GRID + VISITS PROGRESS ── */}
+        <View style={styles.metrics2x2Grid}>
           {/* Present Today */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <View style={styles.metricCardTop}>
-              <View style={[styles.metricIconBox, { backgroundColor: COLORS.successLight }]}>
-                <UserCheck size={18} color={COLORS.success} />
+            <Text style={styles.metricCardTitle}>Present Today</Text>
+            <View style={styles.metricCardBody}>
+              <View>
+                <Text style={styles.metricCardVal}>{realPresentCount}/{totalTeam}</Text>
+                <Text style={styles.metricTrendGreen}>↑ {totalTeam > 0 ? Math.round((realPresentCount / totalTeam) * 100) : 0}%</Text>
               </View>
-              <View style={[styles.percentTag, { backgroundColor: COLORS.successLight }]}>
-                <Text style={[styles.percentText, { color: COLORS.success }]}>{presentPercent}%</Text>
+              <View style={styles.miniRing}>
+                <View style={[styles.miniRingFill, { borderColor: COLORS.success }]} />
               </View>
             </View>
-            <Text style={styles.metricLabel}>Present Today</Text>
-            <Text style={styles.metricVal}>{presentCount} / {totalTeam}</Text>
           </Surface>
 
           {/* Active On Field */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <View style={styles.metricCardTop}>
-              <View style={[styles.metricIconBox, { backgroundColor: COLORS.primaryMuted }]}>
-                <Navigation size={18} color={COLORS.primary} />
+            <Text style={styles.metricCardTitle}>Active On Field</Text>
+            <View style={styles.metricCardBody}>
+              <View>
+                <Text style={styles.metricCardVal}>{activeLive} Staff</Text>
+                <Text style={styles.metricTrendGreen}>↑ {totalTeam > 0 ? Math.round((activeLive / totalTeam) * 100) : 0}%</Text>
               </View>
-              <View style={[styles.percentTag, { backgroundColor: COLORS.primaryMuted }]}>
-                <Text style={[styles.percentText, { color: COLORS.primary }]}>{livePercent}%</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabel}>Active On Field</Text>
-            <Text style={styles.metricVal}>{activeLive} Staff</Text>
-          </Surface>
-
-          {/* Manager My Today KM */}
-          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <View style={styles.metricCardTop}>
-              <View style={[styles.metricIconBox, { backgroundColor: COLORS.successLight }]}>
-                <Route size={18} color={COLORS.success} />
+              <View style={styles.miniRing}>
+                <View style={[styles.miniRingFill, { borderColor: COLORS.primary }]} />
               </View>
             </View>
-            <Text style={styles.metricLabel}>My Today KM</Text>
-            <Text style={styles.metricVal}>{myTodayKm} <Text style={{ fontSize: 13, fontWeight: '700' }}>KM</Text></Text>
           </Surface>
 
-          {/* Team Today Distance KM */}
+          {/* My Today KM */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <View style={styles.metricCardTop}>
-              <View style={[styles.metricIconBox, { backgroundColor: COLORS.purpleLight }]}>
-                <Route size={18} color={COLORS.purple} />
+            <Text style={styles.metricCardTitle}>My Today KM</Text>
+            <View style={styles.metricCardBody}>
+              <View>
+                <Text style={styles.metricCardVal}>{myTodayKmVal}</Text>
+                <View style={styles.metricDottedLine} />
               </View>
+              <Text style={styles.metricTrendGreen}>KM</Text>
             </View>
-            <Text style={styles.metricLabel}>Team Today KM</Text>
-            <Text style={styles.metricVal}>{totalKmToday.toFixed(1)} <Text style={{ fontSize: 13, fontWeight: '700' }}>KM</Text></Text>
           </Surface>
 
-          {/* Field Visits Today */}
+          {/* Team Today KM */}
           <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <TouchableOpacity onPress={() => goTo('/(admin)/visits')} activeOpacity={0.85}>
-              <View style={styles.metricCardTop}>
-                <View style={[styles.metricIconBox, { backgroundColor: COLORS.indigoLight }]}>
-                  <Briefcase size={18} color={COLORS.indigo} />
-                </View>
+            <Text style={styles.metricCardTitle}>Team Today KM</Text>
+            <View style={styles.metricCardBody}>
+              <View>
+                <Text style={styles.metricCardVal}>{teamTodayKm.toFixed(1)}</Text>
+                <View style={styles.metricDottedLine} />
               </View>
-              <Text style={styles.metricLabel}>Visits Today</Text>
-              <Text style={styles.metricVal}>{totalVisitsToday} Visits</Text>
-            </TouchableOpacity>
+              <Text style={styles.metricTrendGreen}>KM</Text>
+            </View>
           </Surface>
         </View>
 
-        {/* ── LIVE FIELD MAP SECTION ── */}
+        {/* Visits Today Full Bar */}
+        <Surface style={[styles.visitsBarCard, cardShadow]} elevation={1}>
+          <View style={styles.visitsBarHeader}>
+            <Text style={styles.visitsBarTitle}>Visits Today</Text>
+            <Text style={styles.visitsBarVal}>{visitsToday}/{visitCount || visitsToday || 1}</Text>
+          </View>
+          <View style={styles.visitsBarTrack}>
+            <View style={[styles.visitsBarFill, { width: `${Math.min(100, Math.max(10, ((visitsToday || 1) / (visitCount || visitsToday || 1)) * 100))}%` }]} />
+          </View>
+        </Surface>
+
+        {/* ── NEEDS YOUR ATTENTION NOTIFICATION PILLS ── */}
+        <View style={styles.needsAttentionSection}>
+          <View style={styles.attentionHeaderRow}>
+            <AlertCircle size={14} color="#EA580C" />
+            <Text style={styles.attentionTitle}>Needs Your Attention</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attentionPillsRow}>
+            <TouchableOpacity style={styles.attentionPillOrange} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+              <View style={styles.attentionDotOrange} />
+              <Text style={styles.attentionPillTextOrange}>{leaveCount} Pending Leaves</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.attentionPillRed} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
+              <View style={styles.attentionDotRed} />
+              <Text style={styles.attentionPillTextRed}>{expenseCount} Pending Expenses</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.attentionPillAmber} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.75}>
+              <View style={styles.attentionDotAmber} />
+              <Text style={styles.attentionPillTextAmber}>{latePunchinsCount} Late Punch-In</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {/* ── LIVE TEAM FIELD MAP PREVIEW ── */}
         <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Compass size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Live Team Field Map</Text>
-            </View>
-            <TouchableOpacity onPress={() => goTo('/(admin)/tracking')}>
-              <Text style={styles.viewAllText}>Full Screen Map →</Text>
+            <Text style={styles.sectionTitle}>Live Team Field Map</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/tracking')}>
+              <Text style={styles.viewLinkText}>Full Screen Map →</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.embeddedMapWrap}>
             <MapViewComponent
               ref={mapRef}
@@ -837,563 +813,195 @@ export default function ManagerDashboardScreen() {
           </View>
         </Surface>
 
-        {/* ── TEAM ATTENDANCE WEEKLY BAR CHART CARD ── */}
+        {/* ── WEEKLY ATTENDANCE TREND BAR CHART ── */}
         <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Weekly Attendance Trend</Text>
-            <TouchableOpacity onPress={() => goTo('/(admin)/attendance')}>
-              <Text style={styles.viewAllText}>Details →</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/attendance')}>
+              <Text style={styles.viewLinkText}>Details →</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.chartContainer}>
-            {/* Y-Axis Labels */}
-            <View style={styles.yAxisCol}>
-              <Text style={styles.yAxisText}>100%</Text>
-              <Text style={styles.yAxisText}>75%</Text>
-              <Text style={styles.yAxisText}>50%</Text>
-              <Text style={styles.yAxisText}>25%</Text>
-              <Text style={styles.yAxisText}>0%</Text>
-            </View>
-
-            {/* Bars Area */}
-            <View style={styles.barsArea}>
-              <View style={[styles.gridLine, { top: '0%' }]} />
-              <View style={[styles.gridLine, { top: '25%' }]} />
-              <View style={[styles.gridLine, { top: '50%' }]} />
-              <View style={[styles.gridLine, { top: '75%' }]} />
-              <View style={[styles.gridLine, { top: '100%' }]} />
-
-              <View style={styles.barsFlexRow}>
-                {weeklyAttendance.map((item, idx) => (
-                  <View key={idx} style={styles.barColItem}>
-                    <View style={styles.barTrack}>
-                      <View style={[styles.barFill, { height: `${item.val}%` }]} />
-                    </View>
-                    <Text style={styles.dayLabel}>{item.day}</Text>
-                  </View>
-                ))}
+          <View style={styles.chartBarsContainer}>
+            {weeklyAttendanceData.map((item, idx) => (
+              <View key={idx} style={styles.chartBarCol}>
+                <Text style={styles.chartBarCountText}>{item.count}</Text>
+                <View style={styles.chartBarTrack}>
+                  <View
+                    style={[
+                      styles.chartBarFill,
+                      {
+                        height: `${item.height}%`,
+                        backgroundColor: item.isToday ? '#06B6D4' : '#2563EB',
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.chartBarDayText, item.isToday && { color: '#06B6D4', fontWeight: '800' }]}>
+                  {item.day}
+                </Text>
+                {item.isToday && <Text style={styles.todayPillText}>Today</Text>}
               </View>
-            </View>
+            ))}
           </View>
         </Surface>
 
-        {/* ── TEAM MEMBERS ROSTER WITH KM & VISITS METRICS ── */}
-        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 80 }]} elevation={1}>
+        {/* ── LIVE TEAM FIELD LIST SNIPPET (Matching Mockup) ── */}
+        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Users size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Team Members Details ({directoryStaff.length})</Text>
-            </View>
-            <TouchableOpacity onPress={() => goTo('/(admin)/team')}>
-              <Text style={styles.viewAllText}>View All</Text>
+            <Text style={styles.sectionTitle}>Live Team Field Map</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/tracking')}>
+              <Text style={styles.viewLinkText}>View All →</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.memberList}>
-            {directoryStaff.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Users size={32} color={COLORS.textMuted} />
-                <Text style={styles.emptyTitle}>No Team Members Found</Text>
-                <Text style={styles.emptySub}>Employees assigned under your management will appear here.</Text>
+          <View style={styles.dutyList}>
+            {directoryStaff.slice(0, 5).map((emp, idx) => (
+              <TouchableOpacity
+                key={emp._id || String(idx)}
+                style={styles.dutyRowItem}
+                onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.dutyLeftCol}>
+                  <Text style={styles.dutyRankNum}>{idx + 1}.</Text>
+                  {emp.avatar ? (
+                    <Image
+                      source={{ uri: emp.avatar }}
+                      style={styles.dutyAvatarImg}
+                    />
+                  ) : (
+                    <View style={[styles.dutyAvatarFallback, { backgroundColor: ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777'][idx % 5] }]}>
+                      <Text style={styles.dutyAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.dutyNameText} numberOfLines={1}>{emp.name}</Text>
+                </View>
+
+                <Text style={styles.dutyKmText}>{emp.todayKm} km</Text>
+
+                {emp.status === 'ACTIVE' ? (
+                  <View style={styles.dutyActivePill}>
+                    <View style={styles.dutyActiveDot} />
+                    <Text style={styles.dutyActivePillText}>Active</Text>
+                  </View>
+                ) : emp.status === 'IDLE' ? (
+                  <View style={styles.dutyIdlePill}>
+                    <Text style={styles.dutyIdlePillText}>Idle</Text>
+                  </View>
+                ) : (
+                  <View style={styles.dutyOfflinePill}>
+                    <Text style={styles.dutyOfflinePillText}>Offline</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Surface>
+
+        {/* ── TOP 5 TEAM MEMBERS LEADERBOARD ── */}
+        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Top 5 Team Members</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
+              <Text style={styles.viewLinkText}>View All →</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.leaderboardList}>
+            {leaderboardMembers.map((item) => (
+              <View key={item.rank} style={styles.leaderboardRowItem}>
+                <View style={styles.leaderboardLeft}>
+                  <View style={[styles.rankCircleBadge, { backgroundColor: item.color }]}>
+                    <Text style={styles.rankCircleText}>{item.rank}</Text>
+                  </View>
+                  {item.avatar ? (
+                    <Image source={{ uri: item.avatar }} style={styles.leaderboardAvatarImg} />
+                  ) : (
+                    <View style={[styles.leaderboardAvatarFallback, { backgroundColor: item.color }]}>
+                      <Text style={styles.leaderboardAvatarFallbackText}>{item.initials || getUserInitials(item.name)}</Text>
+                    </View>
+                  )}
+                  <View style={{ marginLeft: 8, flex: 1 }}>
+                    <Text style={styles.leaderboardName} numberOfLines={1}>{item.name}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.leaderboardSub}>{item.sub}</Text>
+                <Text style={[styles.leaderboardScore, item.score === 'Offline' && { color: COLORS.textMuted }]}>
+                  {item.score}
+                </Text>
               </View>
-            ) : (
-              [...directoryStaff].sort((a, b) => (b.isTracking ? 1 : 0) - (a.isTracking ? 1 : 0)).map((emp, idx) => {
-                const kmVal = (parseFloat(emp.totalDistance) || 0).toFixed(1);
-                const fullName = formatFullName(emp.name);
-                return (
-                  <TouchableOpacity
-                    key={emp._id || idx}
-                    style={[styles.memberItemRow, idx < directoryStaff.length - 1 && styles.memberBorder]}
-                    onPress={() => setSelectedEmp(emp)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={{ position: 'relative' }}>
-                      {getAvatarUrl(emp.avatar) ? (
-                        <Avatar.Image size={44} source={{ uri: getAvatarUrl(emp.avatar) }} />
-                      ) : (
-                        <Avatar.Text
-                          size={44}
-                          label={getUserInitials(emp.name)}
-                          style={{ backgroundColor: emp.isTracking ? COLORS.primary : COLORS.textMuted }}
-                          labelStyle={{ color: '#fff', fontWeight: 'bold' }}
-                        />
-                      )}
-                      <View style={[styles.statusDotOverlay, { backgroundColor: emp.isTracking ? COLORS.success : COLORS.textMuted }]} />
-                    </View>
-
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.memberName}>{fullName}</Text>
-                      <Text style={styles.memberDept} numberOfLines={1}>
-                        {emp.isTracking ? formatAddress(emp.address, 'Active On Field') : formatAddress(emp.department, 'Field Executive')}
-                      </Text>
-
-                      {/* Today's Distance & Visits Pill Row */}
-                      <View style={styles.memberMetricsRow}>
-                        <View style={styles.metricBadgeSmall}>
-                          <Route size={10} color={COLORS.primary} />
-                          <Text style={styles.metricBadgeText}>{kmVal} KM Today</Text>
-                        </View>
-                        <View style={styles.metricBadgeSmall}>
-                          <Briefcase size={10} color={COLORS.indigo} />
-                          <Text style={styles.metricBadgeText}>{emp.totalMeetings || 0} Visits</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                      <View style={[styles.statusPill, emp.isTracking ? styles.pillPresent : styles.pillOffline]}>
-                        <Text style={[styles.statusPillText, emp.isTracking ? styles.textPresent : styles.textOffline]}>
-                          {emp.isTracking ? 'Active' : 'Offline'}
-                        </Text>
-                      </View>
-                      <ChevronRight size={16} color={COLORS.textMuted} />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
+            ))}
           </View>
         </Surface>
       </ScrollView>
 
-      {/* ── FIXED ELEVATED BOTTOM TAB BAR FOR MANAGER ── */}
-      <View style={styles.bottomTabBarContainer} pointerEvents="box-none">
-        <Surface style={styles.bottomTabBarSurface} elevation={16}>
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/dashboard')} activeOpacity={0.7}>
-            <View style={[styles.tabBarIconBox, styles.tabBarIconBoxActive]}>
-              <LayoutDashboard size={20} color={COLORS.primary} />
-            </View>
-            <Text style={[styles.tabBarLabel, styles.tabBarLabelActive]}>Home</Text>
-            <View style={styles.activeTabDot} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/tracking')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <MapPin size={20} color={COLORS.textMuted} />
-            </View>
-            <Text style={styles.tabBarLabel}>Live Map</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/monitoring')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <Users size={20} color={COLORS.textMuted} />
-            </View>
-            <Text style={styles.tabBarLabel}>My Team</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/reports')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <FileText size={20} color={COLORS.textMuted} />
-            </View>
-            <Text style={styles.tabBarLabel}>Reports</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBarItem} onPress={() => goTo('/(admin)/settings')} activeOpacity={0.7}>
-            <View style={styles.tabBarIconBox}>
-              <Settings size={20} color={COLORS.textMuted} />
-            </View>
-            <Text style={styles.tabBarLabel}>Settings</Text>
-          </TouchableOpacity>
-        </Surface>
-      </View>
-
-      {/* ── SIDE NAVIGATION DRAWER MODAL (Active Across Screens) ── */}
-      <Modal visible={sideMenuVisible} transparent animationType="fade" onRequestClose={() => setSideMenuVisible(false)}>
-        <View style={styles.drawerOverlay}>
-          <TouchableOpacity style={styles.drawerDismissArea} onPress={() => setSideMenuVisible(false)} />
-          <View style={styles.drawerContainer}>
-            <SafeAreaView style={{ flex: 1 }}>
-              {/* Drawer Header with Org Logo & Name */}
-              <View style={styles.drawerHeader}>
-                <LinearGradient
-                  colors={['#064e3b', '#0f766e']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.drawerHeaderGradient}
-                >
-                  <View style={styles.drawerBrandRow}>
-                    {orgLogoUrl ? (
-                      <Image source={{ uri: orgLogoUrl }} style={styles.drawerLogoImg} resizeMode="contain" />
-                    ) : (
-                      <View style={styles.drawerLogoFallback}>
-                        <Building2 size={18} color="#0f766e" />
-                      </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.drawerBrandTitle} numberOfLines={1}>{orgName}</Text>
-                      <View style={styles.drawerSubBadge}>
-                        <Text style={styles.drawerBrandSub}>MANAGER CONSOLE</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Manager Profile Info */}
-                  <View style={styles.drawerUserBox}>
-                    {getAvatarUrl(user?.avatar) ? (
-                      <Image source={{ uri: getAvatarUrl(user?.avatar) }} style={styles.drawerUserAvatar} />
-                    ) : (
-                      <View style={styles.drawerUserAvatarFallback}>
-                        <Text style={styles.drawerUserAvatarText}>{getUserInitials(user?.name)}</Text>
-                      </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.drawerUserName} numberOfLines={1}>{user?.name || 'Manager'}</Text>
-                      <Text style={styles.drawerUserEmail} numberOfLines={1}>{user?.email || ''}</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </View>
-
-              {/* Drawer Menu Items */}
-              <ScrollView style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
-                {/* SECTION 1: MY FIELD DUTIES */}
-                <Text style={styles.drawerMenuSectionHeader}>MY FIELD DUTIES & OPERATIONS</Text>
-
-                <TouchableOpacity style={[styles.drawerMenuItem, styles.drawerMenuItemActive]} onPress={() => goTo('/(admin)/dashboard')}>
-                  <LayoutDashboard size={18} color={COLORS.primary} />
-                  <Text style={[styles.drawerMenuText, styles.drawerMenuTextActive]}>Manager Dashboard</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/visits')}>
-                  <Briefcase size={18} color={COLORS.indigo} />
-                  <Text style={styles.drawerMenuText}>Meetings & Client Visits</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tasks')}>
-                  <CheckSquare size={18} color={COLORS.purple} />
-                  <Text style={styles.drawerMenuText}>Action Plan & Tasks</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/leaves')}>
-                  <Calendar size={18} color={COLORS.warning} />
-                  <Text style={styles.drawerMenuText}>Leave Requests & Apply</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/expenses')}>
-                  <Wallet size={18} color={COLORS.success} />
-                  <Text style={styles.drawerMenuText}>My Expense Claims</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/leads')}>
-                  <UserPlus size={18} color={COLORS.primary} />
-                  <Text style={styles.drawerMenuText}>Field Leads & Customers</Text>
-                </TouchableOpacity>
-
-                {/* SECTION 2: TEAM MANAGEMENT */}
-                <Text style={[styles.drawerMenuSectionHeader, { marginTop: 18 }]}>TEAM & STAFF MANAGEMENT</Text>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/team')}>
-                  <Shield size={18} color={COLORS.indigo} />
-                  <Text style={styles.drawerMenuText}>Team Roster & Staff Data</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/tracking')}>
-                  <Compass size={18} color={COLORS.primary} />
-                  <Text style={styles.drawerMenuText}>Live Field Telemetry & Map</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/monitoring')}>
-                  <Users size={18} color={COLORS.textSecondary} />
-                  <Text style={styles.drawerMenuText}>Workforce Activity Log</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/reports')}>
-                  <FileText size={18} color={COLORS.purple} />
-                  <Text style={styles.drawerMenuText}>Consolidated Reports</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/attendance')}>
-                  <CalendarCheck size={18} color={COLORS.success} />
-                  <Text style={styles.drawerMenuText}>Team Attendance</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/history')}>
-                  <Route size={18} color={COLORS.warning} />
-                  <Text style={styles.drawerMenuText}>KM Tracking History</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.drawerMenuItem} onPress={() => goTo('/(admin)/settings')}>
-                  <Settings size={18} color={COLORS.textSecondary} />
-                  <Text style={styles.drawerMenuText}>Organization Settings</Text>
-                </TouchableOpacity>
-
-                {/* Logout */}
-                <TouchableOpacity style={[styles.drawerMenuItem, { marginTop: 20, backgroundColor: COLORS.dangerLight }]} onPress={handleLogout}>
-                  <LogOut size={18} color={COLORS.danger} />
-                  <Text style={[styles.drawerMenuText, { color: COLORS.danger }]}>Logout from Account</Text>
-                </TouchableOpacity>
-
-                <View style={{ height: 30 }} />
-              </ScrollView>
-            </SafeAreaView>
+      {/* ── BOTTOM TAB NAVIGATION (5 Tabs matching Mockup) ── */}
+      <Surface style={[styles.bottomTabBar, cardShadow]} elevation={4}>
+        {/* Tab 1: Home */}
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => {}} activeOpacity={0.8}>
+          <View style={styles.tabActiveIndicator}>
+            <Home size={20} color={COLORS.primary} />
           </View>
-        </View>
-      </Modal>
-
-      {/* ── EMPLOYEE QUICK DETAILS & DISTANCE MODAL ── */}
-      <Modal visible={!!selectedEmp} animationType="slide" transparent onRequestClose={() => setSelectedEmp(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedEmp && (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalUserRow}>
-                    {getAvatarUrl(selectedEmp.avatar) ? (
-                      <Avatar.Image size={48} source={{ uri: getAvatarUrl(selectedEmp.avatar) }} />
-                    ) : (
-                      <Avatar.Text
-                        size={48}
-                        label={getUserInitials(selectedEmp.name)}
-                        style={{ backgroundColor: COLORS.primary }}
-                        labelStyle={{ color: '#fff', fontWeight: 'bold' }}
-                      />
-                    )}
-                    <View style={{ marginLeft: 12, flex: 1 }}>
-                      <Text style={styles.modalUserName}>{selectedEmp.name}</Text>
-                      <Text style={styles.modalUserRole}>{selectedEmp.role || 'Field Executive'} • {selectedEmp.department || 'Field'}</Text>
-                    </View>
-                    <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedEmp(null)}>
-                      <X size={20} color={COLORS.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                  {/* Today Total Distance Highlight Box */}
-                  <View style={styles.modalKmBox}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.modalKmLabel}>TODAY'S TOTAL DISTANCE</Text>
-                      <Text style={styles.modalKmValue}>
-                        {(parseFloat(selectedEmp.totalDistance) || 0).toFixed(1)} <Text style={{ fontSize: 14, fontWeight: '700' }}>KM</Text>
-                      </Text>
-                    </View>
-                    <View style={[styles.modalStatusPill, { backgroundColor: selectedEmp.isTracking ? COLORS.successLight : COLORS.surface }]}>
-                      <Text style={[styles.modalStatusText, { color: selectedEmp.isTracking ? COLORS.success : COLORS.textMuted }]}>
-                        {selectedEmp.isTracking ? '🟢 TRACKING ACTIVE' : '⚪ NOT PUNCHED IN'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Info Section */}
-                  <View style={styles.infoSection}>
-                    <View style={styles.infoRow}>
-                      <Phone size={16} color={COLORS.textMuted} />
-                      <View style={styles.infoCol}>
-                        <Text style={styles.infoLabel}>Phone Number</Text>
-                        <Text style={styles.infoVal}>{selectedEmp.phone || 'Not specified'}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.infoRow}>
-                      <Mail size={16} color={COLORS.textMuted} />
-                      <View style={styles.infoCol}>
-                        <Text style={styles.infoLabel}>Email Address</Text>
-                        <Text style={styles.infoVal}>{selectedEmp.email || 'Not specified'}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.infoRow}>
-                      <MapPin size={16} color={COLORS.primary} />
-                      <View style={styles.infoCol}>
-                        <Text style={styles.infoLabel}>Last Field Location</Text>
-                        <Text style={styles.infoVal}>{selectedEmp.address || 'Active Field Location'}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Quick Action Buttons */}
-                  <View style={styles.modalActionRow}>
-                    <TouchableOpacity
-                      style={[styles.modalActionBtn, { backgroundColor: COLORS.primary }]}
-                      onPress={() => {
-                        setSelectedEmp(null);
-                        goTo('/(admin)/tracking');
-                      }}
-                    >
-                      <Navigation size={16} color="#fff" />
-                      <Text style={styles.modalActionBtnText}>Live Track</Text>
-                    </TouchableOpacity>
-
-                    {selectedEmp.phone && (
-                      <TouchableOpacity
-                        style={[styles.modalActionBtn, { backgroundColor: COLORS.success }]}
-                        onPress={() => handleCall(selectedEmp.phone)}
-                      >
-                        <Phone size={16} color="#fff" />
-                        <Text style={styles.modalActionBtnText}>Call</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {selectedEmp.phone && (
-                      <TouchableOpacity
-                        style={[styles.modalActionBtn, { backgroundColor: '#25d366' }]}
-                        onPress={() => handleWhatsApp(selectedEmp.phone)}
-                      >
-                        <MessageSquare size={16} color="#fff" />
-                        <Text style={styles.modalActionBtnText}>WhatsApp</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </ScrollView>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── CLIENT VISIT DETAIL INSPECTION MODAL ──────────────────────── */}
-      <Modal
-        visible={visitModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setVisitModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setVisitModalVisible(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { maxHeight: '75%' }]}>
-            <View style={styles.sheetHandle} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Briefcase size={20} color={COLORS.primary} />
-                <Text style={{ fontSize: 17, fontWeight: '800', color: COLORS.text }}>Visit Record Details</Text>
-              </View>
-              <TouchableOpacity onPress={() => setVisitModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color={COLORS.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            {selectedVisit && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <View style={{ backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.textSecondary }}>
-                      Agent: {formatFullName(selectedVisit.employee?.name || selectedVisit.employeeName || 'Field Executive')}
-                    </Text>
-                  </View>
-                  <View style={[styles.visitStatusPill, { backgroundColor: COLORS.successLight }]}>
-                    <Text style={[styles.visitStatusText, { color: COLORS.success }]}>
-                      {(selectedVisit.status || 'COMPLETED').toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-
-                <Surface style={{ backgroundColor: COLORS.background, borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: COLORS.border }} elevation={0}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: COLORS.text }}>{selectedVisit.clientName}</Text>
-                  {selectedVisit.companyName ? (
-                    <Text style={{ fontSize: 13, color: COLORS.textMuted, fontWeight: '600', marginTop: 2 }}>{selectedVisit.companyName}</Text>
-                  ) : null}
-
-                  {selectedVisit.mobileNumber ? (
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}
-                      onPress={() => Linking.openURL(`tel:${selectedVisit.mobileNumber}`)}
-                    >
-                      <Phone size={14} color={COLORS.primary} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.primary }}>{selectedVisit.mobileNumber}</Text>
-                    </TouchableOpacity>
-                  ) : null}
-
-                  {selectedVisit.meetingAddress ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                      <MapPin size={14} color={COLORS.textMuted} />
-                      <Text style={{ fontSize: 12, color: COLORS.textSecondary, flex: 1 }}>{selectedVisit.meetingAddress}</Text>
-                    </View>
-                  ) : null}
-                </Surface>
-
-                {selectedVisit.meetingNotes ? (
-                  <View style={{ backgroundColor: COLORS.warningLight, borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#fde68a' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.warning, marginBottom: 4 }}>Visit Notes / Remarks:</Text>
-                    <Text style={{ fontSize: 12, color: '#78350f', lineHeight: 18 }}>{selectedVisit.meetingNotes}</Text>
-                  </View>
-                ) : null}
-
-                {Number(selectedVisit.dealAmount) > 0 ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.successLight, borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: COLORS.successBorder }}>
-                    <DollarSign size={18} color={COLORS.success} />
-                    <View>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: COLORS.success }}>Closed Deal Value</Text>
-                      <Text style={{ fontSize: 16, fontWeight: '900', color: COLORS.success }}>₹{Number(selectedVisit.dealAmount).toLocaleString('en-IN')}</Text>
-                    </View>
-                  </View>
-                ) : null}
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <Clock size={14} color={COLORS.textMuted} />
-                  <Text style={{ fontSize: 11, color: COLORS.textMuted }}>
-                    Logged on {selectedVisit.date || selectedVisit.createdAt ? new Date(selectedVisit.date || selectedVisit.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Today'}
-                  </Text>
-                </View>
-              </ScrollView>
-            )}
-          </TouchableOpacity>
+          <Text style={[styles.tabBarLabel, { color: COLORS.primary, fontWeight: '800' }]}>Home</Text>
         </TouchableOpacity>
-      </Modal>
 
-      {/* ── SELFIE CUSTOM RESIZE & PUNCH IN PREVIEW MODAL ── */}
-      <Modal visible={selfieModalVisible} transparent animationType="slide" onRequestClose={() => setSelfieModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <Surface style={styles.selfieModalContent} elevation={5}>
-            <View style={styles.selfieModalHeader}>
-              <View>
-                <Text style={styles.selfieModalTitle}>Manager Selfie Verification</Text>
-                <Text style={styles.selfieModalSub}>Select photo frame size (Full / Half)</Text>
-              </View>
-              <TouchableOpacity onPress={() => setSelfieModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color={COLORS.textMuted} />
-              </TouchableOpacity>
+        {/* Tab 2: Live Map */}
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.8}>
+          <Compass size={20} color={COLORS.textMuted} />
+          <Text style={styles.tabBarLabel}>Live Map</Text>
+        </TouchableOpacity>
+
+        {/* Tab 3: My Team */}
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/team')} activeOpacity={0.8}>
+          <Users size={20} color={COLORS.textMuted} />
+          <Text style={styles.tabBarLabel}>My Team</Text>
+        </TouchableOpacity>
+
+        {/* Tab 4: Reports */}
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.8}>
+          <BarChart2 size={20} color={COLORS.textMuted} />
+          <Text style={styles.tabBarLabel}>Reports</Text>
+        </TouchableOpacity>
+
+        {/* Tab 5: Settings */}
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/settings')} activeOpacity={0.8}>
+          <Settings size={20} color={COLORS.textMuted} />
+          <Text style={styles.tabBarLabel}>Settings</Text>
+        </TouchableOpacity>
+      </Surface>
+
+      {/* ── SELFIE PREVIEW & CONFIRM MODAL ── */}
+      <Modal visible={selfieModalVisible} animationType="fade" transparent>
+        <View style={styles.selfieModalBackdrop}>
+          <Surface style={styles.selfieModalCard} elevation={5}>
+            <Text style={styles.selfieModalTitle}>Selfie Check-in Preview</Text>
+            <Text style={styles.selfieModalSub}>Confirm your selfie to start your operational duty shift.</Text>
+
+            {pendingSelfieUri && (
+              <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="cover" />
+            )}
+
+            <View style={styles.selfieMetaBox}>
+              <MapPin size={14} color={COLORS.primary} />
+              <Text style={styles.selfieMetaText}>Location Verified: GPS High Accuracy (8m)</Text>
             </View>
 
-            {/* Frame Size Selector Toggle */}
-            <View style={styles.aspectToggleRow}>
+            <View style={styles.selfieModalActions}>
               <TouchableOpacity
-                style={[styles.aspectOptionBtn, selfieAspectMode === 'full' && styles.aspectOptionBtnActive]}
-                onPress={() => setSelfieAspectMode('full')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.aspectOptionText, selfieAspectMode === 'full' && styles.aspectOptionTextActive]}>
-                  Full Photo (3:4)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.aspectOptionBtn, selfieAspectMode === 'half' && styles.aspectOptionBtnActive]}
-                onPress={() => setSelfieAspectMode('half')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.aspectOptionText, selfieAspectMode === 'half' && styles.aspectOptionTextActive]}>
-                  Half Photo (1:1)
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Live Selfie Image Preview Box */}
-            <View style={[styles.selfiePreviewFrame, { height: selfieAspectMode === 'full' ? 190 : 140 }]}>
-              {pendingSelfieUri ? (
-                <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="contain" />
-              ) : null}
-            </View>
-
-            {/* Modal Actions */}
-            <View style={styles.selfieModalActionRow}>
-              <TouchableOpacity
-                style={styles.retakeSelfieBtn}
+                style={styles.retakeBtn}
                 onPress={() => {
                   setSelfieModalVisible(false);
                   capturePunchInSelfie();
                 }}
-                disabled={submittingPunchIn}
-                activeOpacity={0.8}
+                activeOpacity={0.75}
               >
-                <Text style={styles.retakeSelfieText}>Retake Photo</Text>
+                <Text style={styles.retakeBtnText}>Retake</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.confirmPunchInBtn}
+                style={styles.confirmPunchBtn}
                 onPress={confirmAndPunchIn}
                 disabled={submittingPunchIn}
                 activeOpacity={0.85}
@@ -1401,10 +1009,78 @@ export default function ManagerDashboardScreen() {
                 {submittingPunchIn ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.confirmPunchInText}>Confirm & Punch In</Text>
+                  <Text style={styles.confirmPunchBtnText}>Confirm & Punch In</Text>
                 )}
               </TouchableOpacity>
             </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* ── SIDE DRAWER MENU ── */}
+      <Modal visible={sideMenuVisible} animationType="slide" transparent>
+        <View style={styles.drawerBackdrop}>
+          <TouchableOpacity style={styles.drawerDismiss} onPress={() => setSideMenuVisible(false)} />
+          <Surface style={styles.drawerContent} elevation={5}>
+            <View style={styles.drawerHeader}>
+              <Text style={styles.drawerOrgTitle}>{orgName}</Text>
+              <Text style={styles.drawerOrgSub}>Manager Operations</Text>
+              <TouchableOpacity style={styles.drawerCloseBtn} onPress={() => setSideMenuVisible(false)}>
+                <X size={18} color={COLORS.textSub} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.drawerList}>
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/dashboard'); }}>
+                <Home size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Manager Dashboard</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/team'); }}>
+                <Users size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>My Team Roster</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/tracking'); }}>
+                <Compass size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Live GPS Tracking</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/attendance'); }}>
+                <CalendarCheck size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Attendance Logs</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/leaves'); }}>
+                <Calendar size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Leave Approvals</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/expenses'); }}>
+                <Wallet size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Expense Claims</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/leads'); }}>
+                <UserPlus size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Customer Leads</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/profile'); }}>
+                <UserCheck size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Manager Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/settings'); }}>
+                <Settings size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Organization Settings</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.drawerItem, { marginTop: 20 }]} onPress={handleLogout}>
+                <LogOut size={18} color={COLORS.danger} />
+                <Text style={[styles.drawerItemText, { color: COLORS.danger, fontWeight: '700' }]}>Sign Out</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </Surface>
         </View>
       </Modal>
@@ -1415,142 +1091,244 @@ export default function ManagerDashboardScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  loadingLogoBadge: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#059669', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', padding: 4 },
-  loadingLogoImg: { width: 62, height: 62, borderRadius: 16 },
-  loadingBrandTitle: { fontSize: 19, fontWeight: '800', color: '#0f172a', marginTop: 12, letterSpacing: 0.2 },
-  loadingBrandSub: { fontSize: 11.5, fontWeight: '600', color: '#64748b', marginTop: 2 },
-
-  // Header Gradient (Professional Emerald)
   headerGradient: {
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
     paddingHorizontal: 16,
-    paddingBottom: 28,
-    paddingTop: Platform.OS === 'web' ? 14 : 0,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
   },
   topNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-    marginTop: Platform.OS === 'ios' ? 4 : 8,
+    paddingVertical: 6,
   },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  brandBox: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginLeft: 14, marginRight: 8 },
-  headerOrgLogoImg: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#fff' },
-  headerOrgLogoFallback: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  brandTitle: { color: '#fff', fontSize: 16, fontWeight: '800', fontFamily: FONT },
-  brandSub: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '600' },
-  topNavRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  profileAvatar: {
+  menuBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center',
   },
-  profileAvatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-
-  greetingBox: { marginTop: 4 },
-  greetingSub: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontFamily: FONT },
-  greetingTitle: { color: '#fff', fontSize: 23, fontWeight: '800', fontFamily: FONT, marginTop: 2 },
-  greetingDesc: { color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2, fontFamily: FONT },
-
-  body: { paddingHorizontal: 14, maxWidth: 720, width: '100%', alignSelf: 'center' },
-
-  // Manager Punch-In & Field Duty Tracking Card
-  trackingCard: {
-    borderRadius: 22,
-    marginTop: 16,
-    marginBottom: 14,
-    overflow: 'hidden',
-  },
-  trackingGradient: {
-    padding: 18,
-    borderRadius: 22,
-  },
-  trackingHeaderRow: {
+  brandBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginLeft: 10,
+    gap: 8,
+  },
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerLogoImg: {
+    width: 22,
+    height: 22,
+  },
+  brandTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  brandSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: FONT,
+  },
+  topNavRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  syncBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  notifBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notifDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#FB7185',
+  },
+  userBadgeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FDA4AF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#881337',
+    fontFamily: FONT,
+  },
+  greetingBox: {
+    marginTop: 14,
+  },
+  greetingTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  greetingDate: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  greetingSub: {
+    fontSize: 12,
+    color: '#a7f3d0',
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  body: {
+    padding: 16,
+    paddingBottom: 160,
+  },
+
+  // ── SHIFT PUNCH IN CARD ──
+  shiftCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  shiftCardTopRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
   },
-  trackingBadgeRow: {
+  punchedOutBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#FEE2E2',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    gap: 6,
   },
-  statusPulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  punchedOutDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EF4444',
   },
-  trackingBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: 0.5,
+  punchedOutText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EF4444',
+    fontFamily: FONT,
   },
-  roleTag: {
+  punchedInBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
   },
-  roleTagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#ffffff',
+  punchedInDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
   },
-  trackingContentRow: {
-    marginBottom: 14,
-  },
-  trackingMainTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#ffffff',
-    fontFamily: FONT,
-  },
-  trackingSubTitle: {
+  punchedInText: {
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.85)',
-    marginTop: 3,
-    lineHeight: 16,
+    fontWeight: '700',
+    color: '#16A34A',
     fontFamily: FONT,
   },
-  punchBtn: {
+  managerDutyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  managerDutyText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+    fontFamily: FONT,
+  },
+  shiftMiddleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  shiftTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  todayKmPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.mintLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  todayKmPillLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+  todayKmPillVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  punchCtaBtn: {
+    backgroundColor: '#059669',
     borderRadius: 14,
     paddingVertical: 13,
-    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    ...cardShadow,
+    marginTop: 14,
   },
-  punchBtnStartTeal: {
-    backgroundColor: '#00C6A9',
-  },
-  punchBtnStop: {
+  punchCtaBtnStop: {
     backgroundColor: '#DC2626',
   },
   punchBtnInner: {
@@ -1559,213 +1337,757 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   punchBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
+    color: '#ffffff',
     fontFamily: FONT,
   },
 
-  // Floating Team Banner Card
-  myTeamCard: { backgroundColor: COLORS.card, borderRadius: 20, marginTop: 4, marginBottom: 14 },
-  myTeamInner: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  teamIconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  myTeamLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '700' },
-  myTeamCount: { fontSize: 18, fontWeight: '800', color: COLORS.text, fontFamily: FONT, marginTop: 1 },
-  viewTeamRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  viewTeamText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
-
-  // Quick Action Buttons Row
-  quickGridHeaderTitle: { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase' },
-  quickActionsGrid: { flexDirection: 'row', gap: 8 },
-  actionPill: {
-    flex: 1,
-    backgroundColor: COLORS.card,
+  // ── TEAM STRIP BANNER ──
+  teamStripCard: {
+    backgroundColor: '#ffffff',
     borderRadius: 16,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+  },
+  teamStripTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  teamCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  teamCountBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  avatarPile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pileImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  pileAvatarFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pileAvatarFallbackText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  pileMoreCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pileMoreText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  manageTeamLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  manageTeamLinkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+
+  // ── QUICK ACTIONS ──
+  quickActionsSection: {
+    marginTop: 16,
+  },
+  sectionHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginBottom: 10,
+  },
+  quickGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  quickCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
-    ...cardShadow,
   },
-  actionIconCircle: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  actionPillLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, fontFamily: FONT },
+  quickIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  quickLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  quickBadgeCircle: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E11D48',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
 
-  // 2x2 Metrics Cards (Fluid 2-Column Grid for Mobile & Web)
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginBottom: 14 },
-  metricCard: { width: '48.5%', backgroundColor: COLORS.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: COLORS.border },
-  metricCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  metricIconBox: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  metricLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '700', fontFamily: FONT },
-  metricVal: { fontSize: 20, fontWeight: '800', color: COLORS.text, fontFamily: FONT, marginTop: 4 },
-  percentTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  percentText: { fontSize: 10, fontWeight: '800' },
-
-  // Embedded Map Card
-  sectionCard: { backgroundColor: COLORS.card, borderRadius: 20, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: COLORS.border },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text, fontFamily: FONT },
-  viewAllText: { fontSize: 12, fontWeight: '700', color: COLORS.primary, fontFamily: FONT },
-  embeddedMapWrap: { height: 200, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-
-  // Attendance Chart
-  chartContainer: { flexDirection: 'row', height: 150, paddingTop: 10 },
-  yAxisCol: { width: 36, justifyContent: 'space-between', paddingBottom: 22 },
-  yAxisText: { fontSize: 9, color: COLORS.textMuted, textAlign: 'right', fontWeight: '600' },
-  barsArea: { flex: 1, marginLeft: 10, position: 'relative' },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: COLORS.border },
-  barsFlexRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 4 },
-  barColItem: { alignItems: 'center', width: 28 },
-  barTrack: { width: 14, height: 110, backgroundColor: COLORS.surface, borderRadius: 7, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', backgroundColor: COLORS.primary, borderRadius: 7 },
-  dayLabel: { fontSize: 10, color: COLORS.textMuted, marginTop: 8, fontWeight: '600' },
-
-  // Member Roster List
-  memberList: { gap: 0 },
-  memberItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  memberBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  statusDotOverlay: { width: 10, height: 10, borderRadius: 5, position: 'absolute', bottom: 0, right: 0, borderWidth: 1.5, borderColor: '#fff' },
-  memberName: { fontSize: 14, fontWeight: '800', color: COLORS.text, fontFamily: FONT },
-  memberDept: { fontSize: 11, color: COLORS.textMuted, marginTop: 1, fontFamily: FONT },
-  memberMetricsRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  metricBadgeSmall: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: COLORS.surface, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  metricBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.textSecondary, fontFamily: FONT },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
-  pillPresent: { backgroundColor: COLORS.successLight },
-  pillOffline: { backgroundColor: COLORS.surface },
-  statusPillText: { fontSize: 10, fontWeight: '800' },
-  textPresent: { color: COLORS.success },
-  textOffline: { color: COLORS.textMuted },
-
-  emptyWrap: { padding: 24, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 14, fontWeight: '800', color: COLORS.textSecondary, marginTop: 8 },
-  emptySub: { fontSize: 11, color: COLORS.textMuted, marginTop: 4, textAlign: 'center' },
-
-  // Bottom Tab Bar
-  bottomTabBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 999 },
-  bottomTabBarSurface: {
+  // ── 2X2 METRICS GRID ──
+  metrics2x2Grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 14,
+  },
+  metricCard: {
+    width: '48%',
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 54 : 50,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  metricCardTitle: {
+    fontSize: 11,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  metricCardBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  metricCardVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  metricTrendGreen: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.success,
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  miniRing: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniRingFill: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 4,
+  },
+  metricDottedLine: {
+    height: 2,
+    width: 40,
+    borderStyle: 'dotted',
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    marginTop: 4,
+  },
+
+  // ── VISITS TODAY PROGRESS BAR ──
+  visitsBarCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  visitsBarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  visitsBarTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  visitsBarVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  visitsBarTrack: {
+    height: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  visitsBarFill: {
+    height: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 4,
+  },
+
+  // ── NEEDS YOUR ATTENTION SECTION ──
+  needsAttentionSection: {
+    marginTop: 16,
+  },
+  attentionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  attentionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EA580C',
+    fontFamily: FONT,
+  },
+  attentionPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  attentionPillOrange: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
     paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  attentionDotOrange: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EA580C',
+  },
+  attentionPillTextOrange: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+    fontFamily: FONT,
+  },
+  attentionPillRed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  attentionDotRed: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#DC2626',
+  },
+  attentionPillTextRed: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+    fontFamily: FONT,
+  },
+  attentionPillAmber: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  attentionDotAmber: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D97706',
+  },
+  attentionPillTextAmber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D97706',
+    fontFamily: FONT,
+  },
+
+  // ── SECTION CARD ──
+  sectionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  viewLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  embeddedMapWrap: {
+    height: 150,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+
+  // ── WEEKLY CHART ──
+  chartBarsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 100,
+    paddingTop: 10,
+  },
+  chartBarCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartBarCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginBottom: 4,
+  },
+  chartBarTrack: {
+    width: 14,
+    height: 60,
+    backgroundColor: COLORS.surface,
+    borderRadius: 7,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBarFill: {
+    width: '100%',
+    borderRadius: 7,
+  },
+  chartBarDayText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+  todayPillText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#06B6D4',
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+
+  // ── LIVE DUTY LIST ──
+  dutyList: {
+    gap: 10,
+  },
+  dutyRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface,
+  },
+  dutyLeftCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  dutyRankNum: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    width: 14,
+  },
+  dutyAvatarImg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.border,
+  },
+  dutyAvatarFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dutyAvatarFallbackText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  dutyNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  dutyKmText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+    marginRight: 10,
+  },
+  dutyActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.mintLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  dutyActiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: COLORS.success,
+  },
+  dutyActivePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.success,
+    fontFamily: FONT,
+  },
+  dutyIdlePill: {
+    backgroundColor: COLORS.warningLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  dutyIdlePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.warning,
+    fontFamily: FONT,
+  },
+  dutyOfflinePill: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  dutyOfflinePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+
+  // ── LEADERBOARD ──
+  leaderboardList: {
+    gap: 10,
+  },
+  leaderboardRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface,
+  },
+  leaderboardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  rankCircleBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankCircleText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
+  leaderboardAvatarImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.border,
+  },
+  leaderboardAvatarFallback: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  leaderboardAvatarFallbackText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  leaderboardName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  leaderboardSub: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontFamily: FONT,
+    marginRight: 12,
+  },
+  leaderboardScore: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+
+  // ── BOTTOM TAB BAR (Solid Full-Width Professional Anchored Bar - Height 96) ──
+  bottomTabBar: {
+    position: 'absolute',
+    bottom: 25,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(15, 23, 42, 0.08)',
+    borderTopColor: '#e2e8f0',
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 22,
     shadowColor: '#0f172a',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: -4 },
     elevation: 16,
   },
-  tabBarItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  tabBarIconBoxActive: { backgroundColor: COLORS.primaryMuted },
-  tabBarLabel: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted, marginTop: 2 },
-  tabBarLabelActive: { color: COLORS.primary, fontWeight: '800' },
-  activeTabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.primary, marginTop: 2 },
+  tabBarItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  tabActiveIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBarLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 2,
+  },
 
-  // Side Drawer Modal (UI/UX Pro Max Clean Light Theme)
-  drawerOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', flexDirection: 'row' },
-  drawerDismissArea: { flex: 1 },
-  drawerContainer: { width: width * 0.82, backgroundColor: '#ffffff', height: '100%', borderTopRightRadius: 28, borderBottomRightRadius: 28 },
-  drawerHeader: { overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  drawerHeaderGradient: { padding: 20, paddingTop: Platform.OS === 'ios' ? 12 : 20 },
-  drawerBrandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  drawerLogoImg: { width: 40, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' },
-  drawerLogoFallback: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
-  drawerBrandTitle: { fontSize: 18, fontWeight: '800', color: '#ffffff', fontFamily: FONT },
-  drawerSubBadge: { backgroundColor: '#ccfbf1', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 2 },
-  drawerBrandSub: { fontSize: 9, fontWeight: '800', color: '#0f766e', letterSpacing: 0.5 },
-  drawerUserBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#ffffff', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, elevation: 2 },
-  drawerUserAvatar: { width: 40, height: 40, borderRadius: 20 },
-  drawerUserAvatarFallback: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primaryMuted, alignItems: 'center', justifyContent: 'center' },
-  drawerUserAvatarText: { color: COLORS.primary, fontSize: 14, fontWeight: '800' },
-  drawerUserName: { fontSize: 14, fontWeight: '800', color: COLORS.text },
-  drawerUserEmail: { fontSize: 11, color: COLORS.textMuted },
-  drawerMenuSectionHeader: { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.8, marginBottom: 12, textTransform: 'uppercase' },
-  drawerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, marginBottom: 6, backgroundColor: '#ffffff' },
-  drawerMenuItemActive: { backgroundColor: COLORS.primaryMuted, borderLeftWidth: 4, borderLeftColor: COLORS.primary },
-  drawerMenuText: { fontSize: 13, fontWeight: '700', color: COLORS.text, fontFamily: FONT },
-  drawerMenuTextActive: { color: COLORS.primary, fontWeight: '800' },
+  // ── MODAL STYLES ──
+  selfieModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  selfieModalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+  },
+  selfieModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  selfieModalSub: {
+    fontSize: 12,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  selfiePreviewImg: {
+    width: '100%',
+    height: 220,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
+  },
+  selfieMetaBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.mintLight,
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  selfieMetaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  selfieModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  retakeBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  retakeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  confirmPunchBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+  },
+  confirmPunchBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
 
-  // Employee Detail Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '82%' },
-  modalHeader: { marginBottom: 14 },
-  modalUserRow: { flexDirection: 'row', alignItems: 'center' },
-  modalUserName: { fontSize: 16, fontWeight: '800', color: COLORS.text, fontFamily: FONT },
-  modalUserRole: { fontSize: 11, color: COLORS.textMuted, marginTop: 2, fontFamily: FONT },
-  closeBtn: { padding: 6, borderRadius: 8, backgroundColor: COLORS.surface },
-  modalBody: { paddingVertical: 4 },
-
-  modalKmBox: {
+  // ── DRAWER STYLES ──
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    flexDirection: 'row',
+  },
+  drawerDismiss: {
+    flex: 1,
+  },
+  drawerContent: {
+    width: '80%',
+    maxWidth: 320,
+    backgroundColor: '#ffffff',
+    height: '100%',
+    padding: 20,
+  },
+  drawerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.successLight,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.successBorder,
-    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  modalKmLabel: { fontSize: 9, fontWeight: '800', color: COLORS.success, letterSpacing: 0.5 },
-  modalKmValue: { fontSize: 22, fontWeight: '900', color: COLORS.success, marginTop: 2 },
-  modalStatusPill: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
-  modalStatusText: { fontSize: 9, fontWeight: '800' },
-
-  infoSection: { gap: 14, marginBottom: 20 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  infoCol: { flex: 1 },
-  infoLabel: { fontSize: 10, color: COLORS.textMuted, fontWeight: '800', textTransform: 'uppercase' },
-  infoVal: { fontSize: 13, color: COLORS.text, fontWeight: '700', marginTop: 1 },
-  modalActionRow: { flexDirection: 'row', gap: 10, marginTop: 10, marginBottom: 10 },
-  modalActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 6 },
-  modalActionBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-
-  /* CLIENT VISIT RECORDS STYLES */
-  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  countBadgeText: { fontSize: 11, fontWeight: '800' },
-  visitKpiRow: { flexDirection: 'row', gap: 8, marginVertical: 12 },
-  visitKpiCard: { flex: 1, borderRadius: 14, padding: 10, borderWidth: 1, alignItems: 'center' },
-  visitKpiNum: { fontSize: 16, fontWeight: '900' },
-  visitKpiLabel: { fontSize: 10, fontWeight: '700', marginTop: 2 },
-  visitCardItem: { backgroundColor: COLORS.background, borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.border },
-  visitMainCol: { gap: 6 },
-  visitTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  visitUserPill: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  miniAvatarFallback: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
-  miniAvatarText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
-  visitEmpName: { fontSize: 12, fontWeight: '800', color: COLORS.text },
-  visitStatusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  visitStatusText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
-  clientNameText: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginTop: 2 },
-  visitLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  visitLocText: { fontSize: 11, color: COLORS.textSecondary, flex: 1 },
-  visitFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: COLORS.border },
-  visitTimePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.card, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
-  visitTimeText: { fontSize: 10, color: COLORS.textSecondary, fontWeight: '700' },
-  dealPill: { backgroundColor: COLORS.successLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: COLORS.successBorder },
-  dealPillText: { fontSize: 10, fontWeight: '800', color: COLORS.success },
-
-  // Selfie Custom Resize Modal Styles
-  selfieModalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, paddingBottom: Platform.OS === 'ios' ? 44 : 36 },
-  selfieModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  selfieModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
-  selfieModalSub: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  aspectToggleRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  aspectOptionBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
-  aspectOptionBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  aspectOptionText: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary },
-  aspectOptionTextActive: { color: '#ffffff' },
-  selfiePreviewFrame: { width: '100%', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
-  selfiePreviewImg: { width: '100%', height: '100%', resizeMode: 'contain' },
-  selfieModalActionRow: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: Platform.OS === 'ios' ? 28 : 22 },
-  retakeSelfieBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
-  retakeSelfieText: { fontSize: 13, fontWeight: '800', color: COLORS.textSecondary },
-  confirmPunchInBtn: { flex: 1.4, paddingVertical: 14, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  confirmPunchInText: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
+  drawerOrgTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  drawerOrgSub: {
+    fontSize: 12,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  drawerCloseBtn: {
+    padding: 6,
+  },
+  drawerList: {
+    marginTop: 14,
+  },
+  drawerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  drawerItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
 });
