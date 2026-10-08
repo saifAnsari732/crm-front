@@ -332,8 +332,9 @@ export default function AdminLeadsScreen() {
                 </View>
               </View>
             </Surface>
-          )}
-        />
+          );
+        }}
+      />
       )}
     </View>
   );

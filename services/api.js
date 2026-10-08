@@ -353,31 +353,7 @@ export const uploadAPI = {
   },
 };
 
-// â”€â”€â”€ Leaves â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const leaveAPI = {
-  apply: (data) => API.post('/leaves/apply', data),
-  getMy: () => API.get('/leaves/my'),
-  getAll: (params) => API.get('/leaves/all', { params }),
-  updateStatus: (id, data) => API.patch(`/leaves/${id}/status`, data),
-};
-
-// â”€â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const taskAPI = {
-  create: (data) => API.post('/tasks', data),
-  getAll: (params) => API.get('/tasks/all', { params }),
-  getMy: (params) => API.get('/tasks/my', { params }),
-  updateStatus: (id, data) => API.patch(`/tasks/${id}/status`, data),
-};
-
-// â”€â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const leadAPI = {
-  create: (data) => API.post('/leads', data),
-  getAll: () => API.get('/leads'),
-  update: (id, data) => API.put(`/leads/${id}`, data),
-  delete: (id) => API.delete(`/leads/${id}`),
-};
-
-// â”€â”€â”€ Travel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Travel ───────────────────────────────────────────────────────────────────
 export const travelAPI = {
   create: (data) => API.post('/travel', data),
   getAll: (params) => API.get('/travel', { params }),

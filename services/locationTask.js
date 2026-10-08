@@ -237,8 +237,9 @@ const processLocation = async (location) => {
     const sessionId = await storage.getItem('currentTrackingSessionId');
     if (!sessionId) return; // No active session
 
-    // Ensure session tracking ID is synchronized locally
+    // Ensure session tracking ID and last GPS received timestamp are synchronized locally
     await storage.setItem('tracking_accumulated_session_id', sessionId);
+    await storage.setItem('last_gps_received_at', String(Date.now()));
 
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
     updateMotionState(Number.isFinite(speed) ? speed : 0);
@@ -392,4 +393,84 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REAL-TIME GPS RECOVERY ENGINE & WATCHDOG
+// ─────────────────────────────────────────────────────────────────────────────
+let _recoveryInProgress = false;
+let _recoveryAttempts = 0;
+
+export async function detectTrackingFailure() {
+  const sessionId = await storage.getItem('currentTrackingSessionId');
+  if (!sessionId) return 'NO_SESSION';
+
+  const taskRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+  const lastGps = Number(await storage.getItem('last_gps_received_at')) || 0;
+  const gpsAge = Date.now() - lastGps;
+
+  if (!taskRunning) return 'SERVICE_INTERRUPTED';
+  if (gpsAge > 90000) return 'GPS_STALE';
+  if (gpsAge > 30000) return 'DEGRADED';
+  return 'HEALTHY';
+}
+
+function calculateRecoveryDelay(attempt) {
+  const base = Math.min(120000, 5000 * Math.pow(2, Math.max(0, attempt - 1)));
+  const jitter = Math.floor(Math.random() * 2000);
+  return base + jitter;
+}
+
+export async function safeRecoverLocation(reason = 'HEALTH_CHECK_FAILED') {
+  if (_recoveryInProgress) {
+    console.log('🔄 GPS Recovery: Single-flight lock active. Recovery already running.');
+    return false;
+  }
+  _recoveryInProgress = true;
+
+  try {
+    const sessionId = await storage.getItem('currentTrackingSessionId');
+    if (!sessionId) return false;
+
+    _recoveryAttempts++;
+    const delayMs = calculateRecoveryDelay(_recoveryAttempts);
+    console.log(`🔄 GPS RECOVERY started (${reason}). Attempt #${_recoveryAttempts}. Backoff: ${(delayMs / 1000).toFixed(1)}s`);
+
+    await storage.setItem('tracking_recovery_state', 'RECOVERING');
+
+    const running = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+    if (!running) {
+      await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 10000,
+        distanceInterval: 0,
+        pausesUpdatesAutomatically: false,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: '🟢 Shift Active — Location Tracking ON',
+          notificationBody: 'Field App is tracking continuous travel distance.',
+          notificationColor: '#059669',
+          killServiceOnDestroy: false,
+        },
+      });
+    }
+
+    const restarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+    if (restarted) {
+      _recoveryAttempts = 0;
+      await storage.setItem('tracking_recovery_state', 'GPS_RECOVERED');
+      await storage.setItem('tracking_last_recovery_at', new Date().toISOString());
+      console.log('✅ GPS location service recovered successfully!');
+      return true;
+    } else {
+      throw new Error('Location task restart verification returned false');
+    }
+  } catch (error) {
+    await storage.setItem('tracking_recovery_state', 'RECOVERY_FAILED');
+    console.error('❌ GPS location service recovery failed:', error.message);
+    return false;
+  } finally {
+    _recoveryInProgress = false;
+  }
+}
+
 export { processLocation };
+

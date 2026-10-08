@@ -7,7 +7,7 @@ import { showCustomAlert } from '../components/GlobalAlert';
 import { storage } from '../services/storage';
 import { trackingApi } from '../services/api';
 import socketService from '../services/socket';
-import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat, sendHeartbeatNow } from '../services/locationTask';
+import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat, sendHeartbeatNow, detectTrackingFailure, safeRecoverLocation } from '../services/locationTask';
 import { enqueueCoordinate, enqueueStop, getQueueSize, flushOfflineQueue } from '../services/offlineSync';
 import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification, sendGpsDisabledNotification } from '../services/trackingNotification';
 import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
@@ -89,8 +89,15 @@ export default function useLocationTracker() {
 
     // ─── IMMORTAL TRACKING WATCHDOG (Fires every 15s) ──────────────────────
     // Checks session health, passive motion for 5-min auto start, and resurrects GPS task if killed.
-    const watchdogInterval = setInterval(() => {
-      checkActiveSession();
+    const watchdogInterval = setInterval(async () => {
+      await checkActiveSession();
+      try {
+        const health = await detectTrackingFailure();
+        if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
+          console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
+          await safeRecoverLocation(health);
+        }
+      } catch (_) {}
     }, 15000);
     
     return () => {
