@@ -77,7 +77,14 @@ export default function useLocationTracker() {
       setIsTracking(newState);
     });
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') checkActiveSession();
+      if (nextState === 'active') {
+        checkActiveSession();
+        if (Platform.OS !== 'web') {
+          Location.getBackgroundPermissionsAsync().then(({ status }) => {
+            if (status === 'granted') setPermissionStatus('granted');
+          }).catch(() => {});
+        }
+      }
     });
 
     // ─── IMMORTAL TRACKING WATCHDOG (Fires every 15s) ──────────────────────
@@ -279,9 +286,9 @@ export default function useLocationTracker() {
         try {
           console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
           await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
-            accuracy: Location.Accuracy.High,
+            accuracy: Location.Accuracy.BestForNavigation,
             timeInterval: 10000,
-            distanceInterval: 10,
+            distanceInterval: 0,
             foregroundService: {
               notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
               notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
@@ -296,6 +303,20 @@ export default function useLocationTracker() {
           console.log('⚠️ [IMMORTAL_WATCHDOG] Auto-recovery of location task failed:', recoverErr.message);
         }
       }
+
+      // Dual-Layer Redundancy: Active Watchdog position poll to guarantee zero point loss
+      if (Platform.OS !== 'web' && !isExpoGo) {
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, maximumAge: 5000 })
+          .then((pos) => {
+            if (pos && pos.coords) {
+              const locationTaskModule = require('../services/locationTask');
+              if (locationTaskModule && typeof locationTaskModule.processLocation === 'function') {
+                locationTaskModule.processLocation(pos).catch(() => {});
+              }
+            }
+          }).catch(() => {});
+      }
+
       setIsTracking(true);
     } catch (e) {
       console.error('📍 useLocationTracker: Session check failed:', e);
@@ -638,14 +659,14 @@ export default function useLocationTracker() {
           }
 
           await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
-            // High accuracy ensures real GPS chip is used, avoiding "cutting corners" on curved roads.
-            accuracy: Location.Accuracy.High,
+            // BestForNavigation accuracy forces true hardware GPS chip to remain active
+            accuracy: Location.Accuracy.BestForNavigation,
 
-            // Android: poll every 10 seconds (was 15s). More frequent = better curve capture in pocket mode.
+            // Android: poll continuously every 10 seconds without stopping
             timeInterval: 10000,
 
-            // Send update after moving at least 10 meters to perfectly capture road curves
-            distanceInterval: 10,
+            // Set distanceInterval to 0 so Android FusedLocationProvider never suppresses callbacks when stopped
+            distanceInterval: 0,
 
             // ── CRITICAL: Android Foreground Service config ────────────────────
             // This is what allows GPS to continue running after the USER swipes the app away.
@@ -672,6 +693,10 @@ export default function useLocationTracker() {
           console.log('📍 useLocationTracker: Background GPS task started ✅ (survives app kill)');
         } catch (taskErr) {
           console.error('⚠️ useLocationTracker: Background TaskManager registration failed:', taskErr.message);
+          // Rollback backend session so server doesn't leave an inactive 1-point 0.0km session active
+          try {
+            await trackingApi.stopTracking(sessionId);
+          } catch (_) {}
           // Clean up local session storage to avoid broken half-state
           await storage.removeItem('currentTrackingSessionId');
           await storage.removeItem('tracking_accumulated_session_id');

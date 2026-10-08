@@ -237,6 +237,13 @@ export default function EmployeeDashboardScreen() {
     if (!pendingSelfieUri) return;
     try {
       setSubmittingPunchIn(true);
+      // Hardened Gate: Re-verify location permissions right before uploading selfie & starting shift
+      const hasAllPermissions = await requestPermissions();
+      if (!hasAllPermissions) {
+        setSubmittingPunchIn(false);
+        return;
+      }
+
       let uploadRes;
 
       if (Platform.OS === 'web') {

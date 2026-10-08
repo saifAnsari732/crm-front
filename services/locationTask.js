@@ -391,3 +391,5 @@ TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, e
     await processLocation(loc);
   }
 });
+
+export { processLocation };

@@ -3,7 +3,7 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "orientation": "portrait",
     "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kisanteam.crm",
-      "buildNumber": "47",
+      "buildNumber": "48",
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "contain",
@@ -33,7 +33,7 @@
       }
     },
     "android": {
-      "versionCode": 47,
+      "versionCode": 48,
       "package": "com.kisanteam.crm",
       "splash": {
         "image": "./assets/splash.png",
@@ -93,8 +93,11 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Kisan Team to track employee duty and shift route.",
+          "locationAlwaysPermission": "Allow Kisan Team to track employee duty and shift route in background.",
+          "locationWhenInUsePermission": "Allow Kisan Team to access location during active duty.",
           "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
+          "isAndroidForegroundServiceEnabled": true,
+          "foregroundServiceType": "location"
         }
       ],
       [
