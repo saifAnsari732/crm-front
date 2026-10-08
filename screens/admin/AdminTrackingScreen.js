@@ -169,11 +169,14 @@ export default function AdminTrackingScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
+            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
             setLiveLocations((prev) => {
               const idx = prev.findIndex((l) => l.employeeId === data.employeeId || l.sessionId === data.sessionId);
               if (idx > -1) {
                 const upd = [...prev];
-                upd[idx] = { ...upd[idx], lat: data.lat, lng: data.lng, totalDistance: data.totalDistance, address: data.address || upd[idx].address, updatedAt: new Date().toISOString() };
+                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
+                const finalDist = Math.max(existingDist, incomingDist);
+                upd[idx] = { ...upd[idx], lat: data.lat, lng: data.lng, totalDistance: finalDist, officialDistance: finalDist, address: data.address || upd[idx].address, updatedAt: new Date().toISOString() };
                 return upd;
               }
               return prev;
