@@ -178,26 +178,31 @@ export default function AdminMonitoringScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
+            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
             setLiveLocations((prev) => {
               const idx = prev.findIndex(l => l.employeeId === data.employeeId || l.sessionId === data.sessionId);
               if (idx > -1) {
                 const upd = [...prev];
-                upd[idx] = { ...upd[idx], ...data, totalDistance: data.totalDistance, updatedAt: new Date().toISOString() };
+                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
+                const finalDist = Math.max(existingDist, incomingDist);
+                upd[idx] = { ...upd[idx], ...data, totalDistance: finalDist, officialDistance: finalDist, updatedAt: new Date().toISOString() };
                 return upd;
               }
-              return [...prev, { ...data, updatedAt: new Date().toISOString() }];
+              return [...prev, { ...data, totalDistance: incomingDist, officialDistance: incomingDist, updatedAt: new Date().toISOString() }];
             });
 
             // Update in employees list as well
             setEmployees((prev) =>
               prev.map((e) => {
                 if (String(e._id) === String(data.employeeId)) {
+                  const existingEmpDist = Number(e.totalDistance || e.totalDistanceToday || 0);
+                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
                   return {
                     ...e,
                     isTracking: true,
                     isLive: true,
-                    totalDistance: data.totalDistance,
-                    totalDistanceToday: data.totalDistance,
+                    totalDistance: finalEmpDist,
+                    totalDistanceToday: finalEmpDist,
                     lastPing: new Date().toISOString(),
                   };
                 }
