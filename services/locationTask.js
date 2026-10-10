@@ -344,8 +344,20 @@ const processLocation = async (location) => {
         const serverDist = Number(response.data.totalDistance);
         const authoritativeDist = Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist;
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist > 0 ? authoritativeDist : 0;
-        const finalNum = Math.max(validServerDist, localDist);
+        const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist >= 0 ? authoritativeDist : 0;
+
+        // Server Authoritative Sync:
+        // If server returns an authoritative valid distance, sync local storage to match server.
+        // Force-resync if local storage has a stale high value that server corrected.
+        let finalNum = validServerDist;
+        if (validServerDist === 0 && localDist > 0 && localDist < 5.0) {
+          finalNum = localDist;
+        } else if (Math.abs(localDist - validServerDist) > 3.0) {
+          console.log(`🔄 [KM_SYNC] Resynced local KM (${localDist}) to server authoritative KM (${validServerDist})`);
+          finalNum = validServerDist;
+        } else {
+          finalNum = Math.max(validServerDist, localDist);
+        }
         const finalDist = finalNum.toFixed(2);
 
         const checkpointData = {

@@ -100,6 +100,44 @@ export async function getQueueSize() {
   }
 }
 
+// ─── Coalesce consecutive tracking coordinates ───────────────────────────────
+function coalesceQueue(queue) {
+  if (!queue || queue.length <= 1) return queue;
+  const coalesced = [];
+  let currentBatchItem = null;
+
+  for (const item of queue) {
+    if (
+      item.endpoint === '/tracking/update' &&
+      item.method === 'POST' &&
+      Array.isArray(item.data?.coordinates) &&
+      item.data.coordinates.length > 0 &&
+      !item.kind
+    ) {
+      if (
+        currentBatchItem &&
+        currentBatchItem.data.sessionId === item.data.sessionId &&
+        currentBatchItem.data.coordinates.length < 100
+      ) {
+        currentBatchItem.data.coordinates.push(...item.data.coordinates);
+      } else {
+        currentBatchItem = {
+          ...item,
+          data: {
+            ...item.data,
+            coordinates: [...item.data.coordinates]
+          }
+        };
+        coalesced.push(currentBatchItem);
+      }
+    } else {
+      currentBatchItem = null;
+      coalesced.push(item);
+    }
+  }
+  return coalesced;
+}
+
 // ─── Main flush function ──────────────────────────────────────────────────────
 async function flushOfflineQueueUnlocked() {
   try {
@@ -113,8 +151,11 @@ async function flushOfflineQueueUnlocked() {
     const queueStr = await storage.getItem(QUEUE_KEY);
     if (!queueStr) return true;
 
-    const queue = JSON.parse(queueStr);
-    if (!queue || queue.length === 0) return true;
+    const rawQueue = JSON.parse(queueStr);
+    if (!rawQueue || rawQueue.length === 0) return true;
+
+    // Coalesce consecutive tracking coordinates for the same session to avoid API overload and race conditions
+    const queue = coalesceQueue(rawQueue);
 
     const token = await storage.getItem('userToken');
     if (!token) {
@@ -130,13 +171,24 @@ async function flushOfflineQueueUnlocked() {
     const blockedSessions = new Set();
     let successCount = 0;
 
-    console.log(`📦 OfflineSync: Starting flush of ${queue.length} queued requests...`);
+    console.log(`📦 OfflineSync: Starting flush of ${rawQueue.length} queued requests (compressed to ${queue.length} batch requests)...`);
 
     for (const item of queue) {
       const itemSessionId = item.data?.sessionId;
       if (itemSessionId && blockedSessions.has(itemSessionId)) {
         failedItems.push(item);
         continue;
+      }
+
+      // Suppress stale queued stop requests if the mobile app is currently actively tracking this session
+      if (item.kind === 'stop') {
+        const isTrackingActive = await storage.getItem('isTrackingActive');
+        const currentSessionId = await storage.getItem('currentTrackingSessionId');
+        if (isTrackingActive === 'true' && currentSessionId === itemSessionId) {
+          console.log(`📦 OfflineSync: Suppressed stale queued stop for active session ${itemSessionId}`);
+          delete retryCounts[item.id];
+          continue;
+        }
       }
 
       const retries = retryCounts[item.id] || 0;
@@ -150,13 +202,16 @@ async function flushOfflineQueueUnlocked() {
           timeout: 8000,
         });
         successCount++;
-        const serverDistance = Number(response.data?.totalDistance);
-        if (Number.isFinite(serverDistance)) {
+        const serverDistance = Number(response.data?.totalDistanceToday ?? response.data?.totalDistance);
+        if (Number.isFinite(serverDistance) && serverDistance >= 0) {
           const cachedDistance = Number.parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-          await storage.setItem(
-            'tracking_accumulated_distance',
-            Math.max(cachedDistance, serverDistance).toFixed(3)
-          );
+          let finalKm = serverDistance;
+          if (Math.abs(cachedDistance - serverDistance) > 3.0) {
+            finalKm = serverDistance;
+          } else {
+            finalKm = Math.max(cachedDistance, serverDistance);
+          }
+          await storage.setItem('tracking_accumulated_distance', finalKm.toFixed(2));
         }
         delete retryCounts[item.id];
         if (item.kind === 'stop') {
