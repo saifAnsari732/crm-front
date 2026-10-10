@@ -15,6 +15,8 @@
  *  6. DUPLICATE SUPPRESSION — eventId deduplication prevents replay inflation.
  */
 
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import { storage } from './storage';
@@ -22,6 +24,8 @@ import axios from 'axios';
 import { BASE_URL, trackingAPI } from './api';
 import { enqueueCoordinate, flushOfflineQueue, haversineKm } from './offlineSync';
 import { scheduleNoMovementNotification } from './trackingNotification';
+
+const isExpoGo = Constants.appOwnership === 'expo';
 
 export const BACKGROUND_TRACKING_TASK = 'BACKGROUND_TRACKING';
 
@@ -271,6 +275,11 @@ const processLocation = async (location) => {
 
         if (valid) {
           calculatedDistKm = distKm;
+          if (calculatedDistKm > 0) {
+            const currentLocal = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+            const updatedLocal = (currentLocal + calculatedDistKm).toFixed(2);
+            await storage.setItem('tracking_accumulated_distance', updatedLocal);
+          }
         }
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
@@ -300,6 +309,19 @@ const processLocation = async (location) => {
     // Always update last_recorded_location anchor so location moves forward
     await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
 
+    // ── Smart Stationary vs Moving Upload Filter ─────────────────────────────
+    // If stationary with 0 km added, suppress uploading duplicate noise coordinates every 4s.
+    // Heartbeat ping handles session keepalive. If MOVING, upload 100% instantly!
+    const isStationaryNoise = _currentMotionState === 'STATIONARY' && calculatedDistKm === 0;
+    if (isStationaryNoise) {
+      const lastStationaryUpload = parseInt(await storage.getItem('last_stationary_upload_ts'), 10) || 0;
+      if (Date.now() - lastStationaryUpload < 5 * 60 * 1000) {
+        // Skip duplicate stationary noise upload to save battery and DB space
+        return;
+      }
+      await storage.setItem('last_stationary_upload_ts', String(Date.now()));
+    }
+
     // ── Try uploading to server ───────────────────────────────────────────────
     const token = await storage.getItem('userToken');
     if (!token) {
@@ -320,11 +342,11 @@ const processLocation = async (location) => {
       if (response.data?.success) {
         const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
-        const authoritativeDist = Number.isFinite(serverToday) ? serverToday : serverDist;
+        const authoritativeDist = Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist;
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        const finalDist = Number.isFinite(authoritativeDist)
-          ? authoritativeDist.toFixed(2)
-          : localDist.toFixed(2);
+        const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist > 0 ? authoritativeDist : 0;
+        const finalNum = Math.max(validServerDist, localDist);
+        const finalDist = finalNum.toFixed(2);
 
         const checkpointData = {
           sessionId,
@@ -400,6 +422,8 @@ let _recoveryInProgress = false;
 let _recoveryAttempts = 0;
 
 export async function detectTrackingFailure() {
+  if (Platform.OS === 'web' || isExpoGo) return 'HEALTHY';
+
   const sessionId = await storage.getItem('currentTrackingSessionId');
   if (!sessionId) return 'NO_SESSION';
 
@@ -420,6 +444,10 @@ function calculateRecoveryDelay(attempt) {
 }
 
 export async function safeRecoverLocation(reason = 'HEALTH_CHECK_FAILED') {
+  if (Platform.OS === 'web' || isExpoGo) {
+    return false;
+  }
+
   if (_recoveryInProgress) {
     console.log('🔄 GPS Recovery: Single-flight lock active. Recovery already running.');
     return false;

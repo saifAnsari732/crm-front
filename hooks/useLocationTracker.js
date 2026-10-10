@@ -59,6 +59,9 @@ const haversineMeters = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+let _globalWatchdogInterval = null;
+let _watchdogSubscribers = 0;
+
 export default function useLocationTracker() {
   const [isTracking, setIsTracking] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState(null);
@@ -87,23 +90,34 @@ export default function useLocationTracker() {
       }
     });
 
-    // ─── IMMORTAL TRACKING WATCHDOG (Fires every 15s) ──────────────────────
-    // Checks session health, passive motion for 5-min auto start, and resurrects GPS task if killed.
-    const watchdogInterval = setInterval(async () => {
-      await checkActiveSession();
-      try {
-        const health = await detectTrackingFailure();
-        if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
-          console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
-          await safeRecoverLocation(health);
-        }
-      } catch (_) {}
-    }, 15000);
+    // ─── SINGLETON IMMORTAL TRACKING WATCHDOG (Fires every 15s) ───────────
+    // Multi-screen guard: ensures only ONE global timer runs across all screens
+    _watchdogSubscribers++;
+    if (!_globalWatchdogInterval) {
+      console.log('🛡️ [SINGLETON_WATCHDOG] Initialized single global immortal watchdog.');
+      _globalWatchdogInterval = setInterval(async () => {
+        try {
+          const sessionId = await storage.getItem('currentTrackingSessionId');
+          if (sessionId) {
+            const health = await detectTrackingFailure();
+            if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
+              console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
+              await safeRecoverLocation(health);
+            }
+          }
+        } catch (_) {}
+      }, 15000);
+    }
     
     return () => {
       subscription.remove();
       appStateSubscription.remove();
-      clearInterval(watchdogInterval);
+      _watchdogSubscribers = Math.max(0, _watchdogSubscribers - 1);
+      if (_watchdogSubscribers === 0 && _globalWatchdogInterval) {
+        clearInterval(_globalWatchdogInterval);
+        _globalWatchdogInterval = null;
+        console.log('🛡️ [SINGLETON_WATCHDOG] Cleared global watchdog interval.');
+      }
     };
   }, []);
 
@@ -288,26 +302,28 @@ export default function useLocationTracker() {
       }
 
       // Auto-recover background location task if OS killed it
-      const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-      if (!isTaskRegistered && Platform.OS !== 'web' && !isExpoGo) {
-        try {
-          console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
-          await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
-            accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 10000,
-            distanceInterval: 0,
-            foregroundService: {
-              notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
-              notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
-              notificationColor: '#0a3d3c',
-              killServiceOnDestroy: false,
-            },
-            showsBackgroundLocationIndicator: true,
-            pausesUpdatesAutomatically: false,
-          });
-          console.log('🛡️ [IMMORTAL_WATCHDOG] Background GPS task resurrected successfully! ✅');
-        } catch (recoverErr) {
-          console.log('⚠️ [IMMORTAL_WATCHDOG] Auto-recovery of location task failed:', recoverErr.message);
+      if (Platform.OS !== 'web' && !isExpoGo) {
+        const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+        if (!isTaskRegistered) {
+          try {
+            console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
+            await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
+              accuracy: Location.Accuracy.BestForNavigation,
+              timeInterval: 10000,
+              distanceInterval: 0,
+              foregroundService: {
+                notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
+                notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
+                notificationColor: '#0a3d3c',
+                killServiceOnDestroy: false,
+              },
+              showsBackgroundLocationIndicator: true,
+              pausesUpdatesAutomatically: false,
+            });
+            console.log('🛡️ [IMMORTAL_WATCHDOG] Background GPS task resurrected successfully! ✅');
+          } catch (recoverErr) {
+            console.log('⚠️ [IMMORTAL_WATCHDOG] Auto-recovery of location task failed:', recoverErr.message);
+          }
         }
       }
 
@@ -699,19 +715,8 @@ export default function useLocationTracker() {
           });
           console.log('📍 useLocationTracker: Background GPS task started ✅ (survives app kill)');
         } catch (taskErr) {
-          console.error('⚠️ useLocationTracker: Background TaskManager registration failed:', taskErr.message);
-          // Rollback backend session so server doesn't leave an inactive 1-point 0.0km session active
-          try {
-            await trackingApi.stopTracking(sessionId);
-          } catch (_) {}
-          // Clean up local session storage to avoid broken half-state
-          await storage.removeItem('currentTrackingSessionId');
-          await storage.removeItem('tracking_accumulated_session_id');
-          await storage.removeItem('trackingStartTime');
-          return { 
-            success: false, 
-            error: 'Background GPS service start failed. Please ensure location permission is set to "Allow all the time" in Phone Settings.' 
-          };
+          console.warn('⚠️ useLocationTracker: Background TaskManager registration deferred, watchdog/foreground engine will recover:', taskErr.message);
+          // Zero Data Loss Policy: NEVER auto-rollback or cancel active shift. Keep session in storage.
         }
       }
 
@@ -754,12 +759,14 @@ export default function useLocationTracker() {
       const sessionId = await storage.getItem('currentTrackingSessionId');
       
       if (!sessionId) {
-        // Fallback: stop task if registered (Mobile only)
-        if (Platform.OS !== 'web') {
-          const isRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-          if (isRegistered) {
-            await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-          }
+        // Fallback: stop task if registered (Mobile native only)
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          try {
+            const isRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+            if (isRegistered) {
+              await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+            }
+          } catch (_) {}
         }
         setIsTracking(false);
         return { success: true };
@@ -822,11 +829,13 @@ export default function useLocationTracker() {
       }
 
       // 2. Stop native TaskManager location feeds
-      if (Platform.OS !== 'web') {
-        const isRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-        if (isRegistered) {
-          await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-        }
+      if (Platform.OS !== 'web' && !isExpoGo) {
+        try {
+          const isRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+          if (isRegistered) {
+            await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+          }
+        } catch (_) {}
       }
 
       // 3. Stop backend session via REST API
@@ -898,9 +907,11 @@ export default function useLocationTracker() {
       }
       await cancelNoMovementNotification();
       stopHeartbeat();
-      try {
-        await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK);
-      } catch {}
+      if (Platform.OS !== 'web' && !isExpoGo) {
+        try {
+          await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+        } catch {}
+      }
       setIsTracking(false);
       DeviceEventEmitter.emit('TrackingStateChanged', false);
 

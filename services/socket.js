@@ -117,11 +117,11 @@ class SocketService {
       this.socket = io(this.serverUrl, {
         auth: { token },
         reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 3000,
+        reconnectionDelayMax: 15000,
         timeout: 10000,
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
       });
 
       // Bind common lifecycle handlers

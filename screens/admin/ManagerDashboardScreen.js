@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, RefreshControl, StatusBar,
-  Dimensions, Modal, Linking, Image, Alert
+  Dimensions, Modal, Linking, Image, Alert, AppState
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import {
   Menu, Bell, MapPin, Users, UserCheck, Navigation, Clock,
   ClipboardList, UserMinus, ChevronRight, Phone, Mail, Briefcase,
@@ -22,6 +23,8 @@ import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
 import { storage } from '../../services/storage';
 import useLocationTracker from '../../hooks/useLocationTracker';
+import { processLocation } from '../../services/locationTask';
+import socketService from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -65,6 +68,55 @@ const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05)' }
   : { elevation: 2, shadowColor: '#64748B', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } };
 
+// 📏 Haversine distance in meters helper for precise movement detection
+const haversineMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// 🧮 2D LatLng Extended Kalman Filter (EKF) for Real-Time Path Smoothing & Jitter Reduction
+class LatLngKalmanFilter {
+  constructor() {
+    this.lat = 0;
+    this.lng = 0;
+    this.variance = -1;
+    this.lastTimestampMs = 0;
+  }
+
+  process(lat, lng, accuracyM, timestampMs) {
+    if (this.variance < 0) {
+      this.lat = lat;
+      this.lng = lng;
+      this.variance = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+      this.lastTimestampMs = timestampMs;
+      return { lat, lng };
+    }
+
+    const dt = Math.max(0.5, (timestampMs - this.lastTimestampMs) / 1000);
+    this.lastTimestampMs = timestampMs;
+
+    const Q = 0.00000005 * Math.min(dt, 15);
+    const predVariance = this.variance + Q;
+    const R = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+
+    const K = predVariance / (predVariance + R);
+    this.lat = this.lat + K * (lat - this.lat);
+    this.lng = this.lng + K * (lng - this.lng);
+    this.variance = (1 - K) * predVariance;
+
+    return { lat: this.lat, lng: this.lng };
+  }
+
+  reset() {
+    this.variance = -1;
+  }
+}
+
 export default function ManagerDashboardScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -72,6 +124,20 @@ export default function ManagerDashboardScreen() {
 
   const { isTracking, startTracking, stopTracking, requestPermissions } = useLocationTracker();
   const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
+
+  // 🎯 Dynamic Motion State & Coordinate Engine state (Manager Side)
+  const [isMoving, setIsMoving] = useState(false);
+  const [motionStatusLabel, setMotionStatusLabel] = useState('STATIONARY');
+  const [managerSpeed, setManagerSpeed] = useState('0');
+  const [managerAddress, setManagerAddress] = useState('');
+  
+  const totalDistanceRef = useRef(0.0);
+  const lastConfirmedCoordRef = useRef(null);
+  const stationaryAnchorRef = useRef(null);
+  const lastGeocodedCoordRef = useRef(null);
+  const lastGeocodedAddressRef = useRef('');
+  const kalmanRef = useRef(new LatLngKalmanFilter());
+  const locationIntervalRef = useRef(null);
 
   const [teamMembers, setTeamMembers] = useState([]);
   const [liveLocations, setLiveLocations] = useState([]);
@@ -290,6 +356,299 @@ export default function ManagerDashboardScreen() {
   useEffect(() => {
     fetchData(true);
   }, [fetchData]);
+
+  // 📡 1. Real-Time Socket.IO Telemetry Listener
+  useEffect(() => {
+    let socket;
+    const initSocket = async () => {
+      try {
+        socket = await socketService.connect();
+        if (socket) {
+          socket.on('employee_location', (data) => {
+            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            setLiveLocations((prev) => {
+              const idx = prev.findIndex((l) => (l.employeeId?._id || l.employeeId) === data.employeeId || l.sessionId === data.sessionId);
+              if (idx > -1) {
+                const upd = [...prev];
+                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
+                const finalDist = Math.max(existingDist, incomingDist);
+                upd[idx] = {
+                  ...upd[idx],
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: data.speed,
+                  motionState: data.motionState,
+                  totalDistance: finalDist,
+                  officialDistance: finalDist,
+                  address: data.address || upd[idx].address,
+                  updatedAt: new Date().toISOString()
+                };
+                return upd;
+              }
+              return prev;
+            });
+
+            // If incoming socket data belongs to this manager, update local state immediately
+            if (String(data.employeeId) === String(user?._id)) {
+              if (incomingDist > 0) {
+                totalDistanceRef.current = Math.max(totalDistanceRef.current, incomingDist);
+                const distStr = totalDistanceRef.current.toFixed(2);
+                setLocalKmState(distStr);
+                setManagerKm(distStr);
+              }
+            }
+          });
+
+          socket.on('employee_tracking_started', () => fetchData(false));
+          socket.on('employee_tracking_stopped', () => fetchData(false));
+        }
+      } catch (e) {
+        console.log('📍 Manager Dashboard: Socket init error:', e.message);
+      }
+    };
+
+    initSocket();
+    return () => {
+      if (socket) {
+        socket.off('employee_location');
+        socket.off('employee_tracking_started');
+        socket.off('employee_tracking_stopped');
+      }
+    };
+  }, [fetchData, user?._id]);
+
+  // 💾 2. Local Cache & AppState Sync for Active Manager Session Distance
+  useEffect(() => {
+    let appStateSubscription = null;
+    let syncInterval = null;
+
+    const loadLocalCachedDistance = async () => {
+      try {
+        const sessionId = await storage.getItem('currentTrackingSessionId');
+        if (!sessionId) {
+          totalDistanceRef.current = 0;
+          return;
+        }
+        const cachedDist = await storage.getItem('tracking_accumulated_distance');
+        if (cachedDist) {
+          const parsed = parseFloat(cachedDist) || 0.0;
+          totalDistanceRef.current = parsed;
+          const distStr = parsed.toFixed(2);
+          setLocalKmState(distStr);
+          setManagerKm(distStr);
+          console.log('📍 Manager Dashboard: Initialized distance from local cache:', parsed);
+        }
+      } catch (err) {
+        console.log('📍 Manager Dashboard: Failed to load cached distance:', err);
+      }
+    };
+
+    const syncDistanceWithBackend = async () => {
+      try {
+        const response = await trackingAPI.getTodaySessions();
+        if (response && response.data && response.data.success) {
+          const totalToday = typeof response.data.totalDistanceToday === 'number'
+            ? response.data.totalDistanceToday
+            : null;
+
+          const sessionId = await storage.getItem('currentTrackingSessionId');
+          const activeSession = sessionId
+            ? (response.data.sessions || []).find(s => s.sessionId === sessionId)
+            : null;
+
+          const backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
+          const synchronizedDistance = (typeof totalToday === 'number' && totalToday > 0)
+            ? totalToday
+            : backendDistance;
+
+          if (synchronizedDistance > 0) {
+            console.log('📍 Manager Dashboard: Synchronized distance with backend:', synchronizedDistance);
+            totalDistanceRef.current = Math.max(totalDistanceRef.current, synchronizedDistance);
+            const distStr = totalDistanceRef.current.toFixed(2);
+            setLocalKmState(distStr);
+            setManagerKm(distStr);
+            await storage.setItem('tracking_accumulated_distance', distStr);
+          }
+        }
+      } catch (err) {
+        console.log('📍 Manager Dashboard: Failed to sync distance with backend:', err);
+      }
+    };
+
+    if (isTracking) {
+      loadLocalCachedDistance().then(() => {
+        syncDistanceWithBackend();
+      });
+
+      // 30-second polling interval for distance reconciliation
+      syncInterval = setInterval(() => {
+        syncDistanceWithBackend();
+      }, 30000);
+
+      appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
+        if (nextAppState === 'active') {
+          console.log('📍 Manager Dashboard: App returned to active foreground. Syncing distance telemetry...');
+          await loadLocalCachedDistance();
+          await syncDistanceWithBackend();
+        }
+      });
+    }
+
+    return () => {
+      if (appStateSubscription) appStateSubscription.remove();
+      if (syncInterval) clearInterval(syncInterval);
+    };
+  }, [isTracking]);
+
+  // 🛰️ 3. High-Precision Foreground Coordinate Engine for Active Manager (Zero KM Loss: Hardware watchPositionAsync + Polling Fallback)
+  useEffect(() => {
+    let watchSubscription = null;
+
+    if (isTracking) {
+      const handleCoordinateFix = async (position) => {
+        try {
+          if (position && position.coords) {
+            const { latitude: rawLat, longitude: rawLng, speed: mps, accuracy: acc } = position.coords;
+
+            // 🧮 2D Extended Kalman Filter smoothing
+            const smoothed = kalmanRef.current.process(rawLat, rawLng, acc, position.timestamp);
+            const lat = smoothed.lat;
+            const lng = smoothed.lng;
+
+            const currentSpeedKmh = mps && mps > 0.1 ? Math.round(mps * 3.6) : 0;
+            setManagerSpeed(currentSpeedKmh.toString());
+
+            // 🎯 DYNAMIC MOTION ENGINE: 12m & 1.8 km/h Centroid Micro-Geofence
+            if (!lastConfirmedCoordRef.current) {
+              lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+              stationaryAnchorRef.current = { lat, lng };
+              setIsMoving(false);
+              setMotionStatusLabel('STATIONARY');
+            } else {
+              const distFromAnchorM = haversineMeters(
+                stationaryAnchorRef.current.lat,
+                stationaryAnchorRef.current.lng,
+                lat,
+                lng
+              );
+              const distFromLastM = haversineMeters(
+                lastConfirmedCoordRef.current.lat,
+                lastConfirmedCoordRef.current.lng,
+                lat,
+                lng
+              );
+              const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
+              const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
+
+              // If movement from anchor < 12m AND speed < 1.8 km/h -> MANAGER IS STOPPED!
+              if (distFromAnchorM < 12 && currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.2) {
+                setIsMoving(false);
+                setMotionStatusLabel('STATIONARY');
+                // Exponential Moving Average to smooth out indoor GPS drift
+                stationaryAnchorRef.current = {
+                  lat: 0.95 * stationaryAnchorRef.current.lat + 0.05 * lat,
+                  lng: 0.95 * stationaryAnchorRef.current.lng + 0.05 * lng,
+                };
+              } else {
+                // COORDINATES CHANGED -> MANAGER MOVED!
+                setIsMoving(true);
+                setMotionStatusLabel('MOVING');
+
+                if (calculatedSpeedKmh < 180 && distFromLastM > 4) {
+                  const addedKm = distFromLastM / 1000;
+                  totalDistanceRef.current += addedKm;
+                  const newTotalStr = totalDistanceRef.current.toFixed(2);
+                  setLocalKmState(newTotalStr);
+                  setManagerKm(newTotalStr);
+
+                  // Store accumulated distance in local storage immediately
+                  storage.setItem('tracking_accumulated_distance', newTotalStr).catch(() => {});
+                  console.log(`📍 Manager Tracking Engine: [MOVED!] +${addedKm.toFixed(3)} km added. Total: ${newTotalStr} km.`);
+                }
+
+                lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                stationaryAnchorRef.current = { lat, lng };
+              }
+            }
+
+            // 🎯 DIRECT COORDINATE STORE & CALCULATE: Feed screen GPS fixes into processLocation engine
+            await processLocation(position).catch(() => {});
+
+            // 🎯 SMART GEONAME API SAVER (80m displacement cache)
+            try {
+              const distFromLastGeocoded = lastGeocodedCoordRef.current
+                ? haversineMeters(lastGeocodedCoordRef.current.lat, lastGeocodedCoordRef.current.lng, lat, lng)
+                : 999;
+
+              if (!lastGeocodedAddressRef.current || distFromLastGeocoded > 80) {
+                const geo = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+                if (geo && geo[0]) {
+                  const item = geo[0];
+                  const formatted = [item.name, item.street, item.subregion || item.city, item.region]
+                    .filter(Boolean)
+                    .join(', ');
+                  if (formatted) {
+                    lastGeocodedCoordRef.current = { lat, lng };
+                    lastGeocodedAddressRef.current = formatted;
+                    setManagerAddress(formatted);
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+        } catch (e) {
+          console.log('📍 Manager Dashboard: Foreground coordinate capture error:', e.message);
+        }
+      };
+
+      const fetchLiveCoords = async () => {
+        try {
+          const position = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (position) {
+            await handleCoordinateFix(position);
+          }
+        } catch (e) {
+          console.log('📍 Manager Dashboard: Polling fix error:', e.message);
+        }
+      };
+
+      // Continuous OS Hardware GPS Callbacks (0 ms lag on turns and acceleration)
+      if (Platform.OS !== 'web') {
+        Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 4000,
+            distanceInterval: 2,
+          },
+          (pos) => {
+            handleCoordinateFix(pos);
+          }
+        ).then((sub) => {
+          watchSubscription = sub;
+          console.log('📡 Manager Dashboard: Native hardware watchPositionAsync active! ✅');
+        }).catch((err) => {
+          console.log('⚠️ Manager Dashboard: watchPositionAsync fallback to polling:', err.message);
+        });
+      }
+
+      fetchLiveCoords();
+      locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
+    } else {
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+      kalmanRef.current.reset();
+      lastConfirmedCoordRef.current = null;
+      stationaryAnchorRef.current = null;
+      setIsMoving(false);
+      setMotionStatusLabel('STATIONARY');
+    }
+
+    return () => {
+      if (watchSubscription) watchSubscription.remove();
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+    };
+  }, [isTracking]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -542,6 +901,23 @@ export default function ManagerDashboardScreen() {
               <Text style={styles.todayKmPillVal}>{myTodayKmVal} KM</Text>
             </View>
           </View>
+
+          {/* Dynamic Motion State Live Banner (Manager Side) */}
+          {isTracking && (
+            <View style={[styles.motionStateBanner, { backgroundColor: isMoving ? '#dcfce7' : '#f1f5f9', borderColor: isMoving ? '#bbf7d0' : '#e2e8f0' }]}>
+              <View style={[styles.motionStateDot, { backgroundColor: isMoving ? '#16a34a' : '#64748b' }]} />
+              <Text style={[styles.motionStateText, { color: isMoving ? '#15803d' : '#475569' }]}>
+                {isMoving ? `🟢 MOVING — Travel Recording Active (${managerSpeed} km/h)` : '⏸️ STATIONARY — 0 KM Added (At Spot)'}
+              </Text>
+            </View>
+          )}
+
+          {isTracking && managerAddress ? (
+            <View style={styles.managerAddressRow}>
+              <MapPin size={12} color={COLORS.primary} />
+              <Text style={styles.managerAddressText} numberOfLines={1}>{managerAddress}</Text>
+            </View>
+          ) : null}
 
           {/* Main CTA Button */}
           <TouchableOpacity
@@ -1326,6 +1702,40 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: COLORS.primary,
     fontFamily: FONT,
+  },
+  motionStateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+    gap: 8,
+  },
+  motionStateDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  motionStateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: FONT,
+  },
+  managerAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  managerAddressText: {
+    fontSize: 11.5,
+    color: COLORS.textSecondary,
+    fontFamily: FONT,
+    fontWeight: '500',
+    flex: 1,
   },
   punchCtaBtn: {
     backgroundColor: '#059669',

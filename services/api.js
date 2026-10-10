@@ -12,7 +12,7 @@ export const setUnauthorizedCallback = (callback) => {
 // =========================================================================
 // BACKEND API CONFIGURATION
 export const PROD_URL = 'https://kisanteamapp.online/api';
-export const LOCAL_URL = 'http://192.168.0.107:5000/api';
+// export const LOCAL_URL = 'http://192.168.0.107:5000/api';
 
 // Set to false for Production Server
 const USE_LOCAL = false;

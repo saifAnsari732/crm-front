@@ -6,6 +6,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import {
   ArrowLeft, Users, LocateFixed, RefreshCw, Route, MapPin, ChevronRight, X, Clock, Activity
 } from 'lucide-react-native';
@@ -13,6 +14,9 @@ import MapViewComponent from '../../components/MapViewComponent';
 import { trackingAPI, adminAPI, getAvatarUrl } from '../../services/api';
 import { cachedFetch, clearCachePrefix } from '../../services/cache';
 import socketService from '../../services/socket';
+import { storage } from '../../services/storage';
+import useLocationTracker from '../../hooks/useLocationTracker';
+import { processLocation } from '../../services/locationTask';
 import { useAuth } from '../../context/AuthContext';
 import { cleanTrackingRoute } from '../../utils/trackingRoute';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,9 +29,58 @@ const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.08)' }
   : { elevation: 3, shadowColor: '#0f172a', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } };
 
+// 📏 Haversine distance in meters helper for precise movement detection
+const haversineMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// 🧮 2D LatLng Extended Kalman Filter (EKF) for Real-Time Path Smoothing & Jitter Reduction
+class LatLngKalmanFilter {
+  constructor() {
+    this.lat = 0;
+    this.lng = 0;
+    this.variance = -1;
+    this.lastTimestampMs = 0;
+  }
+
+  process(lat, lng, accuracyM, timestampMs) {
+    if (this.variance < 0) {
+      this.lat = lat;
+      this.lng = lng;
+      this.variance = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+      this.lastTimestampMs = timestampMs;
+      return { lat, lng };
+    }
+
+    const dt = Math.max(0.5, (timestampMs - this.lastTimestampMs) / 1000);
+    this.lastTimestampMs = timestampMs;
+
+    const Q = 0.00000005 * Math.min(dt, 15);
+    const predVariance = this.variance + Q;
+    const R = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+
+    const K = predVariance / (predVariance + R);
+    this.lat = this.lat + K * (lat - this.lat);
+    this.lng = this.lng + K * (lng - this.lng);
+    this.variance = (1 - K) * predVariance;
+
+    return { lat: this.lat, lng: this.lng };
+  }
+
+  reset() {
+    this.variance = -1;
+  }
+}
+
 const STATUS_META = {
-  ON_FIELD: { label: 'On Field', color: '#047857', bg: '#ecfdf5', pin: '#10b981' },
-  IN_TRANSIT: { label: 'In Transit', color: '#1d4ed8', bg: '#eff6ff', pin: '#3b82f6' },
+  ON_FIELD: { label: 'On Field • At Spot', color: '#047857', bg: '#ecfdf5', pin: '#10b981' },
+  IN_TRANSIT: { label: 'Moving • In Transit', color: '#1d4ed8', bg: '#eff6ff', pin: '#3b82f6' },
   GPS_STALE: { label: 'GPS Weak / Waiting', color: '#ca8a04', bg: '#fefce8', pin: '#eab308' },
   IDLE_ONLINE: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
   AT_LOCATION: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
@@ -121,6 +174,11 @@ export default function AdminTrackingScreen() {
   const autoSelectedRef = useRef('');
   const mapRef = useRef(null);
 
+  const { isTracking: isSelfTracking } = useLocationTracker();
+  const selfKalmanRef = useRef(new LatLngKalmanFilter());
+  const selfLastCoordRef = useRef(null);
+  const selfAnchorRef = useRef(null);
+
   const [liveLocations, setLiveLocations] = useState([]);
   const [allEmployeesList, setAllEmployeesList] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -131,6 +189,70 @@ export default function AdminTrackingScreen() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 🛰️ Active Manager Self Foreground Tracking Engine (0% KM Loss while viewing Admin Tracking)
+  useEffect(() => {
+    if (!isSelfTracking) {
+      selfKalmanRef.current.reset();
+      selfLastCoordRef.current = null;
+      selfAnchorRef.current = null;
+      return;
+    }
+
+    const fetchSelfLiveCoords = async () => {
+      try {
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        if (position && position.coords) {
+          const { latitude: rawLat, longitude: rawLng, speed: mps, accuracy: acc } = position.coords;
+          const smoothed = selfKalmanRef.current.process(rawLat, rawLng, acc, position.timestamp);
+          const lat = smoothed.lat;
+          const lng = smoothed.lng;
+          const currentSpeedKmh = mps && mps > 0.1 ? Math.round(mps * 3.6) : 0;
+
+          if (!selfLastCoordRef.current) {
+            selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
+            selfAnchorRef.current = { lat, lng };
+          } else {
+            const distFromAnchorM = haversineMeters(selfAnchorRef.current.lat, selfAnchorRef.current.lng, lat, lng);
+            const distFromLastM = haversineMeters(selfLastCoordRef.current.lat, selfLastCoordRef.current.lng, lat, lng);
+            const timeDiffSecs = Math.max(0.5, (position.timestamp - selfLastCoordRef.current.timestamp) / 1000);
+            const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
+
+            if (distFromAnchorM < 12 && currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.2) {
+              selfAnchorRef.current = {
+                lat: 0.95 * selfAnchorRef.current.lat + 0.05 * lat,
+                lng: 0.95 * selfAnchorRef.current.lng + 0.05 * lng,
+              };
+            } else {
+              if (calculatedSpeedKmh < 180 && distFromLastM > 5) {
+                const addedKm = distFromLastM / 1000;
+                try {
+                  const storedDist = await storage.getItem('tracking_accumulated_distance');
+                  const currentTotal = parseFloat(storedDist) || 0.0;
+                  const newTotalStr = (currentTotal + addedKm).toFixed(2);
+                  await storage.setItem('tracking_accumulated_distance', newTotalStr);
+                } catch (_) {}
+              }
+              selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
+              selfAnchorRef.current = { lat, lng };
+            }
+          }
+
+          // Feed into processLocation engine
+          await processLocation(position).catch(() => {});
+        }
+      } catch (e) {
+        console.log('📍 Admin Tracking: Self coordinate capture error:', e.message);
+      }
+    };
+
+    fetchSelfLiveCoords();
+    const interval = setInterval(fetchSelfLiveCoords, 10000);
+    return () => clearInterval(interval);
+  }, [isSelfTracking]);
 
   const fetchLiveLocations = useCallback(async (force = false) => {
     try {
@@ -170,14 +292,49 @@ export default function AdminTrackingScreen() {
         if (socket) {
           socket.on('employee_location', (data) => {
             const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            const speedVal = Number(data.speed || 0);
+            const isMovingNow = (speedVal >= 1.8) || data.motionState === 'MOVING';
+            const motionStateVal = data.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY');
+
             setLiveLocations((prev) => {
-              const idx = prev.findIndex((l) => l.employeeId === data.employeeId || l.sessionId === data.sessionId);
+              const idx = prev.findIndex((l) => (l.employeeId?._id || l.employeeId) === data.employeeId || l.sessionId === data.sessionId);
               if (idx > -1) {
                 const upd = [...prev];
                 const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
                 const finalDist = Math.max(existingDist, incomingDist);
-                upd[idx] = { ...upd[idx], lat: data.lat, lng: data.lng, totalDistance: finalDist, officialDistance: finalDist, address: data.address || upd[idx].address, updatedAt: new Date().toISOString() };
+                upd[idx] = {
+                  ...upd[idx],
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: speedVal,
+                  motionState: motionStateVal,
+                  totalDistance: finalDist,
+                  officialDistance: finalDist,
+                  address: data.address || upd[idx].address,
+                  updatedAt: new Date().toISOString()
+                };
                 return upd;
+              }
+              return prev;
+            });
+
+            setSelectedEmployee((prev) => {
+              if (!prev) return prev;
+              const pId = String(prev._id || prev.employeeId || '');
+              const targetId = String(data.employeeId || data.sessionId || '');
+              if (pId === targetId) {
+                const currentDist = Number(prev.totalDistance || 0);
+                const newDist = Math.max(currentDist, incomingDist);
+                return {
+                  ...prev,
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: speedVal,
+                  motionState: motionStateVal,
+                  totalDistance: newDist,
+                  address: data.address || prev.address,
+                  updatedAt: new Date().toISOString()
+                };
               }
               return prev;
             });
@@ -224,15 +381,19 @@ export default function AdminTrackingScreen() {
       seen.add(idStr);
 
       const empMatch = allEmployeesList.find(e => String(e._id) === idStr);
+      const isMovingNow = (Number(loc.speed) >= 1.8) || loc.motionState === 'MOVING';
+
       result.push({
         _id: idStr,
         name: empMatch?.name || loc.name || loc.employeeName || loc.employee?.name || 'Field Executive',
         avatar: empMatch?.avatar || loc.avatar,
         department: empMatch?.department || loc.department || '',
         phone: empMatch?.phone || loc.phone,
-        status: 'ON_FIELD',
+        status: isMovingNow ? 'IN_TRANSIT' : 'ON_FIELD',
         isTracking: true,
         isOnline: true,
+        speed: Number(loc.speed || 0),
+        motionState: loc.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: loc.lat || loc.latitude,
         lng: loc.lng || loc.longitude,
         totalDistance: Number(loc.totalDistance || loc.officialDistance || empMatch?.totalDistance || empMatch?.todayKm || 0),
@@ -252,9 +413,11 @@ export default function AdminTrackingScreen() {
         || liveLocationIndex.byEmployeeCode.get(String(emp.employeeId || ''))
         || liveLocationIndex.byName.get((emp.name || '').toLowerCase());
       const tracking = !!liveLoc || emp.isTracking;
+      const isMovingNow = (Number(liveLoc?.speed) >= 1.8) || liveLoc?.motionState === 'MOVING';
+
       let memberStatus = 'OFFLINE';
       if (tracking) {
-        memberStatus = 'ON_FIELD';
+        memberStatus = isMovingNow ? 'IN_TRANSIT' : 'ON_FIELD';
       } else if (emp.isOnline) {
         memberStatus = 'IDLE_ONLINE';
       } else {
@@ -270,6 +433,8 @@ export default function AdminTrackingScreen() {
         status: memberStatus,
         isTracking: tracking,
         isOnline: emp.isOnline,
+        speed: Number(liveLoc?.speed || 0),
+        motionState: liveLoc?.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: liveLoc?.lat || emp.lat || null,
         lng: liveLoc?.lng || emp.lng || null,
         totalDistance: Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.totalDistance || emp.todayKm || 0),
@@ -282,11 +447,11 @@ export default function AdminTrackingScreen() {
     return result;
   }, [allEmployeesList, liveLocations, liveLocationIndex]);
 
-  const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD').length;
+  const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT').length;
 
   // Compute map region dynamically to fit ALL active employees on the map automatically
   const defaultRegion = useMemo(() => {
-    const activeStaffWithCoords = directoryStaff.filter(s => (s.isTracking || s.status === 'ON_FIELD') && s.lat && s.lng);
+    const activeStaffWithCoords = directoryStaff.filter(s => (s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT') && s.lat && s.lng);
     if (activeStaffWithCoords.length > 0) {
       const lats = activeStaffWithCoords.map(s => parseFloat(s.lat)).filter(n => !isNaN(n));
       const lngs = activeStaffWithCoords.map(s => parseFloat(s.lng)).filter(n => !isNaN(n));
@@ -734,6 +899,25 @@ export default function AdminTrackingScreen() {
                   </View>
                 </View>
 
+                {/* Dynamic Motion State Live Banner */}
+                {selectedEmployee.isTracking && (
+                  <View style={[styles.modalMotionBanner, {
+                    backgroundColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#dcfce7' : '#f1f5f9',
+                    borderColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#bbf7d0' : '#e2e8f0',
+                  }]}>
+                    <View style={[styles.modalMotionDot, {
+                      backgroundColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#16a34a' : '#64748b',
+                    }]} />
+                    <Text style={[styles.modalMotionText, {
+                      color: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#15803d' : '#475569',
+                    }]}>
+                      {(selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8)
+                        ? `🟢 MOVING — Active Travel (${Math.round(Number(selectedEmployee.speed) || 0)} km/h)`
+                        : '⏸️ STATIONARY — 0 KM Added (At Spot)'}
+                    </Text>
+                  </View>
+                )}
+
                 {/* GPS Trajectory Timeline Card */}
                 {fullSessionData.length > 0 && (
                   <View style={styles.routeSummaryCard}>
@@ -908,6 +1092,27 @@ const styles = StyleSheet.create({
   modalLiveBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ecfdf5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
   modalLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
   modalLiveText: { fontFamily: FONT, fontSize: 8.5, fontWeight: '800', color: '#047857' },
+
+  modalMotionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 12,
+    gap: 8,
+  },
+  modalMotionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  modalMotionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: FONT,
+  },
 
   modalStatsRow: { flexDirection: 'row', paddingTop: 14, gap: 12 },
   modalStatBoxPrimary: { flex: 1, backgroundColor: '#ecfdf5', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#a7f3d0' },

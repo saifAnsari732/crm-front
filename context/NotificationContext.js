@@ -41,7 +41,7 @@ if (!isExpoGo && Platform.OS !== 'web') {
 
 const NotificationContext = createContext({});
 
-const POLL_INTERVAL = 8000; // 8 seconds
+const POLL_INTERVAL = 45000; // 45 seconds fallback (Socket.IO delivers real-time notifications instantly)
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();

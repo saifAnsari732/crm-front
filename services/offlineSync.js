@@ -168,19 +168,9 @@ async function flushOfflineQueueUnlocked() {
         }
       } catch (err) {
         if (err?.response?.data?.sessionClosed === true || err?.response?.status === 409) {
-          // If this was a regular coordinate, don't drop blindly; re-anchor to current active session ID
-          if (item.endpoint === '/tracking/update' && item.data?.coordinates?.length > 0) {
-            const currentActive = await storage.getItem('currentTrackingSessionId');
-            if (currentActive && currentActive !== itemSessionId) {
-              item.data.sessionId = currentActive;
-              retryCounts[item.id] = (retryCounts[item.id] || 0) + 1;
-              failedItems.push(item);
-              console.log(`📦 OfflineSync: Re-anchoring queued item ${item.id} to active session ${currentActive}`);
-              continue;
-            }
-          }
+          // Closed or invalid session: drop stale item cleanly without transferring into a new shift
           delete retryCounts[item.id];
-          console.log(`📦 OfflineSync: Cleared stale session item ${item.id}.`);
+          console.log(`📦 OfflineSync: Dropped stale point for closed session ${itemSessionId}.`);
           continue;
         }
         // Keep in queue for next retry
