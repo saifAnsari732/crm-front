@@ -10,7 +10,7 @@ export const setUnauthorizedCallback = (callback) => {
 };
 
 // =========================================================================
-// BACKEND API CONFIGURATION
+// BACKEND API CONFIGURATION  ddtky
 export const PROD_URL = 'https://kisanteamapp.online/api';
 // export const LOCAL_URL = 'http://192.168.0.107:5000/api';
 
