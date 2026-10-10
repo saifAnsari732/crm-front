@@ -481,7 +481,7 @@ export async function safeRecoverLocation(reason = 'HEALTH_CHECK_FAILED') {
       await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
         accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 10000,
-        distanceInterval: 0,
+        distanceInterval: 8,
         pausesUpdatesAutomatically: false,
         showsBackgroundLocationIndicator: true,
         foregroundService: {

@@ -123,6 +123,13 @@ export default function useLocationTracker() {
 
   const checkActiveSession = async () => {
     try {
+      const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+      if (manuallyPunchedOut === 'true') {
+        console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out. Auto-start/auto-heal disabled.');
+        setIsTracking(false);
+        return;
+      }
+
       let activeSession = await storage.getItem('currentTrackingSessionId');
 
       // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
@@ -310,7 +317,7 @@ export default function useLocationTracker() {
             await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
               accuracy: Location.Accuracy.BestForNavigation,
               timeInterval: 10000,
-              distanceInterval: 0,
+              distanceInterval: 8,
               foregroundService: {
                 notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
                 notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
@@ -530,6 +537,19 @@ export default function useLocationTracker() {
     try {
       setLoading(true);
 
+      // Hard Lock Gate: If user manually punched out, block all auto-start attempts!
+      if (isAutoStart) {
+        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+        if (manuallyPunchedOut === 'true') {
+          console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] Blocked auto-start attempt for manually punched out employee.');
+          return { success: false, error: 'Shift was manually ended by employee.' };
+        }
+      }
+
+      if (!isAutoStart) {
+        await storage.removeItem('user_manually_punched_out');
+      }
+
       // Verify permissions first
       const hasPermission = await requestPermissions(isAutoStart);
       if (!hasPermission) {
@@ -688,8 +708,8 @@ export default function useLocationTracker() {
             // Android: poll continuously every 10 seconds without stopping
             timeInterval: 10000,
 
-            // Set distanceInterval to 0 so Android FusedLocationProvider never suppresses callbacks when stopped
-            distanceInterval: 0,
+            // Set distanceInterval to 8m so Android FusedLocationProvider filters indoor desk jitter
+            distanceInterval: 8,
 
             // ── CRITICAL: Android Foreground Service config ────────────────────
             // This is what allows GPS to continue running after the USER swipes the app away.
@@ -756,7 +776,17 @@ export default function useLocationTracker() {
   const stopTracking = async () => {
     try {
       setLoading(true);
+      
+      // Lock manual punch out so auto-start/auto-heal engines never resurrect this shift
+      await storage.setItem('user_manually_punched_out', 'true');
       const sessionId = await storage.getItem('currentTrackingSessionId');
+      
+      // Always purge current session keys immediately from local storage
+      await storage.removeItem('currentTrackingSessionId');
+      await storage.removeItem('trackingStartTime');
+      await storage.removeItem('tracking_accumulated_distance');
+      await storage.removeItem('tracking_accumulated_session_id');
+      await storage.removeItem('last_recorded_location');
       
       if (!sessionId) {
         // Fallback: stop task if registered (Mobile native only)
