@@ -238,6 +238,11 @@ const processLocation = async (location) => {
   }
 
   try {
+    const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+    if (manuallyPunchedOut === 'true') {
+      return; // User explicitly clocked out; suppress all GPS telemetry processing
+    }
+
     const sessionId = await storage.getItem('currentTrackingSessionId');
     if (!sessionId) return; // No active session
 

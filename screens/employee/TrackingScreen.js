@@ -179,6 +179,9 @@ export default function ActiveShiftMapScreen() {
 
     const syncDistanceWithBackend = async () => {
       try {
+        const token = await storage.getItem('userToken') || await storage.getItem('token');
+        if (!token) return;
+
         const response = await trackingApi.getTodaySessions();
         if (response && response.data && response.data.success) {
           const totalToday = typeof response.data.totalDistanceToday === 'number'
@@ -228,19 +231,28 @@ export default function ActiveShiftMapScreen() {
       });
     } else {
       // When not tracking, display today's total distance if available instead of resetting to 0.00
-      trackingApi.getTodaySessions().then(response => {
-        if (response?.data?.success && typeof response.data.totalDistanceToday === 'number') {
-          const todayDist = response.data.totalDistanceToday;
-          totalDistanceRef.current = todayDist;
-          setDistance(todayDist.toFixed(2));
-        } else {
+      (async () => {
+        try {
+          const token = await storage.getItem('userToken') || await storage.getItem('token');
+          if (!token) {
+            totalDistanceRef.current = 0.0;
+            setDistance('0.00');
+            return;
+          }
+          const response = await trackingApi.getTodaySessions();
+          if (response?.data?.success && typeof response.data.totalDistanceToday === 'number') {
+            const todayDist = response.data.totalDistanceToday;
+            totalDistanceRef.current = todayDist;
+            setDistance(todayDist.toFixed(2));
+          } else {
+            totalDistanceRef.current = 0.0;
+            setDistance('0.00');
+          }
+        } catch {
           totalDistanceRef.current = 0.0;
           setDistance('0.00');
         }
-      }).catch(() => {
-        totalDistanceRef.current = 0.0;
-        setDistance('0.00');
-      });
+      })();
     }
 
     return () => {
@@ -297,44 +309,47 @@ export default function ActiveShiftMapScreen() {
               const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
 
-              // If movement from anchor < 12m AND speed < 1.8 km/h -> EMPLOYEE IS STOPPED!
-              if (distFromAnchorM < 12 && currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.2) {
+              // 🎯 ADAPTIVE STATIONARY GATE: Eliminates indoor GPS drift & false movement
+              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 15;
+              const anchorThresholdM = Math.max(16, Math.min(35, gpsAcc * 0.75));
+              const isSpeedStationary = currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.0;
+              const isWithinAnchor = distFromAnchorM < anchorThresholdM;
+
+              if (isSpeedStationary || isWithinAnchor) {
+                // EMPLOYEE IS STATIONARY (At Spot / Indoors / Sitting) -> 0 False Movement
                 setIsMoving(false);
                 setMotionStatusLabel('STATIONARY');
-                // Exponential Moving Average to smooth out indoor GPS drift
                 stationaryAnchorRef.current = {
                   lat: 0.95 * stationaryAnchorRef.current.lat + 0.05 * lat,
                   lng: 0.95 * stationaryAnchorRef.current.lng + 0.05 * lng,
                 };
               } else {
-                // COORDINATES CHANGED -> EMPLOYEE MOVED!
+                // EMPLOYEE IS TRULY TRAVELING!
                 setIsMoving(true);
                 setMotionStatusLabel('MOVING');
 
-                if (calculatedSpeedKmh < 180 && distFromLastM > 4) {
-                  // Local KM is display-only (real-time feel). Server is the authority.
-                  // Local accumulation provides instant UI feedback between 30s server syncs.
+                if (calculatedSpeedKmh < 160 && distFromLastM > 8) {
                   const addedKm = distFromLastM / 1000;
                   totalDistanceRef.current += addedKm;
                   setDistance(totalDistanceRef.current.toFixed(2));
-
-                  console.log(`📍 TrackingScreen: [MOVED] +${addedKm.toFixed(3)} km (local display). Server syncs every 30s.`);
                 }
 
                 lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                 stationaryAnchorRef.current = { lat, lng };
+
+                // Only append to map route when genuinely traveling to avoid stationary map hairballs
+                setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+                  latitude: lat,
+                  longitude: lng,
+                  timestamp: position.timestamp,
+                }]).slice(-600));
               }
             }
 
-            // 🎯 DIRECT COORDINATE STORE & CALCULATE: Feed screen GPS fixes into processLocation engine
+            // Feed screen GPS fix to location processor
             await processLocation(position).catch(() => {});
 
             lastCoordRef.current = { lat, lng };
-            setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-              latitude: lat,
-              longitude: lng,
-              timestamp: position.timestamp,
-            }]).slice(-600));
 
             // 🎯 SMART GEONAME API SAVER:
             // Reverse geocode ONLY if address is empty OR moved > 80 meters from last geocoded point

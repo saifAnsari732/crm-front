@@ -177,7 +177,11 @@ export default function EmployeeKmHistoryScreen() {
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.headerInner}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.7}
+            >
               <ArrowLeft size={20} color="#fff" />
             </TouchableOpacity>
 

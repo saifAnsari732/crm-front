@@ -158,7 +158,11 @@ export default function AdminExpensesScreen() {
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNavRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.7}
+            >
               <ArrowLeft size={22} color="#fff" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>

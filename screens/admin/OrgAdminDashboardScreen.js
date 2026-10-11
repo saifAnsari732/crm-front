@@ -12,7 +12,8 @@ import {
   Phone, Mail, X, MessageSquare, ChevronDown, FileText, PieChart, AlertCircle, Building2,
   LogOut, User, Settings, Search, Home, LayoutDashboard, Briefcase, Plus, Layers,
   Compass, Wallet, Calendar, AlertTriangle, Flame, Award, TrendingUp, BarChart2,
-  CheckSquare, ArrowRight, Shield, RefreshCw, Sparkles, Sprout, Filter, ExternalLink
+  CheckSquare, ArrowRight, Shield, RefreshCw, Sparkles, Sprout, Filter, ExternalLink,
+  Car
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, meetingAPI, getAvatarUrl, stopHeartbeat, expenseAPI } from '../../services/api';
@@ -595,6 +596,35 @@ export default function OrgAdminDashboardScreen() {
           </View>
         </View>
 
+        {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (ORG ADMIN VIEW) ── */}
+        <Surface style={[styles.tripClaimsBannerCard, cardShadow]} elevation={1}>
+          <TouchableOpacity
+            style={styles.tripClaimsBannerTouch}
+            onPress={() => router.push('/(admin)/trip-claims')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.tripClaimsBannerLeft}>
+              <View style={styles.tripClaimsBannerIconBox}>
+                <Car size={22} color={COLORS.primary} />
+              </View>
+              <View style={styles.tripClaimsBannerTextCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.tripClaimsBannerTitle}>Trip Route Claims</Text>
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                </View>
+                <Text style={styles.tripClaimsBannerSub}>
+                  View employee planned routes, road KM, map path & payouts
+                </Text>
+              </View>
+            </View>
+            <View style={styles.tripClaimsArrowCircle}>
+              <ChevronRight size={18} color={COLORS.primary} />
+            </View>
+          </TouchableOpacity>
+        </Surface>
+
         {/* ── 5. TOP MANAGERS (SMOOTH HORIZONTALLY SCROLLABLE LEFT-TO-RIGHT) ── */}
         <Surface style={[styles.topManagersCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
@@ -914,6 +944,11 @@ export default function OrgAdminDashboardScreen() {
               <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/leaves'); }}>
                 <Calendar size={18} color={COLORS.primary} />
                 <Text style={styles.drawerItemText}>Approvals Center</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/trip-claims'); }}>
+                <Car size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Trip Route Claims</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/reports'); }}>
@@ -1331,6 +1366,73 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: FONT,
     textAlign: 'center',
+  },
+  tripClaimsBannerCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    overflow: 'hidden',
+  },
+  tripClaimsBannerTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#f0fdfa',
+  },
+  tripClaimsBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  tripClaimsBannerIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ccfbf1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tripClaimsBannerTextCol: {
+    flex: 1,
+  },
+  tripClaimsBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    fontFamily: FONT,
+  },
+  newBadge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 8,
+  },
+  newBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  tripClaimsBannerSub: {
+    fontSize: 11,
+    color: COLORS.textSub,
+    marginTop: 2,
+    fontFamily: FONT,
+  },
+  tripClaimsArrowCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    marginLeft: 8,
   },
 
   // ── 5. TOP MANAGERS (SMOOTH HORIZONTALLY SCROLLABLE) ──
@@ -1854,5 +1956,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
-  },
+  }
 });

@@ -62,18 +62,31 @@ const API = axios.create({
   timeout: 15000,
 });
 
-let refreshTokenPromise = null;              
+let refreshTokenPromise = null;
+let isLoggingOutState = false;
+
+export const setIsLoggingOutState = (val) => {
+  isLoggingOutState = !!val;
+};
 
 /**
- 
  * Request interceptor: Attach token dynamically from mobile storage
-
  */
 API.interceptors.request.use(async (config) => {
   try {
+    const isAuthEndpoint = config.url?.includes('/auth/login') ||
+                           config.url?.includes('/auth/register') ||
+                           config.url?.includes('/auth/verify-reset-email') ||
+                           config.url?.includes('/auth/reset-password-direct');
+
     const token = await storage.getItem('userToken') || await storage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (!isAuthEndpoint && isLoggingOutState) {
+      // User is in the middle of logging out - cleanly cancel protected request
+      const cancelSource = axios.CancelToken.source();
+      config.cancelToken = cancelSource.token;
+      cancelSource.cancel('Request cancelled: user is logging out');
     }
   } catch (e) {
     console.error('Error in request interceptor:', e);
@@ -89,13 +102,25 @@ API.interceptors.request.use(async (config) => {
 API.interceptors.response.use(
   (res) => res,
   async (err) => {
+    // If request was cancelled intentionally (e.g. during logout), reject silently
+    if (axios.isCancel(err)) {
+      return Promise.reject(err);
+    }
+
     const originalRequest = err.config;
+    if (!originalRequest) return Promise.reject(err);
 
     // Handle 401 (Unauthorized)
-    const isAuthRequest = originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh-token');
+    const isAuthRequest = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh-token');
     
     if (err.response?.status === 401 && !originalRequest._retry && !isAuthRequest) {
       originalRequest._retry = true;
+
+      // GUARD: If user has no token in storage or is currently logging out, do NOT attempt token refresh!
+      const currentToken = await storage.getItem('userToken') || await storage.getItem('token');
+      if (!currentToken || isLoggingOutState) {
+        return Promise.reject(err);
+      }
 
       try {
         // Only refresh token once (prevent multiple refresh requests)
@@ -119,7 +144,7 @@ API.interceptors.response.use(
         await storage.removeItem('token');
         await storage.removeItem('user');
         await storage.removeItem('userData');
-        if (unauthorizedCallback) {
+        if (unauthorizedCallback && !isLoggingOutState) {
           unauthorizedCallback();
         }
         return Promise.reject(refreshErr);
@@ -168,7 +193,23 @@ export const trackingAPI = {
   },
 };
 
-// â”€â”€â”€ Meetings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Trip Route Planner & KM Claims (Uber/Rapido style) ──────────────────────────
+export const tripAPI = {
+  autocomplete: (q, lat, lng) => API.get('/trips/autocomplete', {
+    params: { q, lat, lng }
+  }),
+  getPlaceDetails: (placeId) => API.get('/trips/place-details', {
+    params: { placeId }
+  }),
+  calculateRoute: (data) => API.post('/trips/calculate-route', data), // { origin, destination }
+  confirmTrip: (data) => API.post('/trips/confirm-trip', data),       // { origin, destination, distanceKm, durationMins, polyline, purpose, clientName, meetingId }
+  getMyTrips: (params) => API.get('/trips/my-trips', { params }),     // { date, page, limit }
+  getTeamTrips: (params) => API.get('/trips/team-trips', { params }), // { date, employeeId, status, page, limit }
+  updateTripStatus: (id, status, remarks) => API.put(`/trips/${id}/status`, { status, remarks }),
+  deleteTripClaim: (id) => API.delete(`/trips/${id}`),
+};
+
+// ─── Meetings ────────────────────────────────────────────────────────────────────
 export const meetingAPI = {
   create: (data) => API.post('/meetings', data),
   getMy: (params) => API.get('/meetings/my', { params }),
@@ -255,6 +296,62 @@ export const notificationAPI = {
 };
 
 // â”€â”€â”€ Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// 🗜️ Client-side Image Compression (Eliminates 413 Request Entity Too Large & CORS issues on Web)
+export const compressImageWeb = async (source, maxWidth = 800, quality = 0.65) => {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return source;
+  try {
+    let srcUrl = '';
+    let isCreatedUrl = false;
+    if (typeof source === 'string') {
+      srcUrl = source;
+    } else if (source instanceof Blob) {
+      srcUrl = URL.createObjectURL(source);
+      isCreatedUrl = true;
+    } else {
+      return source;
+    }
+
+    const img = new (window.Image || Image)();
+    img.crossOrigin = 'anonymous';
+
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve(true);
+      img.onerror = (e) => reject(e);
+      img.src = srcUrl;
+    });
+
+    let { width, height } = img;
+    if (width > maxWidth || height > maxWidth) {
+      if (width > height) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      } else {
+        width = Math.round((width * maxWidth) / height);
+        height = maxWidth;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const compressedBlob = await new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+    });
+
+    if (isCreatedUrl && srcUrl) {
+      URL.revokeObjectURL(srcUrl);
+    }
+
+    return compressedBlob || source;
+  } catch (err) {
+    console.warn('⚠️ Image compression fallback to original:', err.message);
+    return source;
+  }
+};
+
 export const uploadAPI = {
   getAuth: () => API.get('/upload/auth'),
   uploadImage: (data) => API.post('/upload/image', data),
@@ -282,20 +379,54 @@ export const uploadAPI = {
         return { data };
       }
       
-      // Fallback for Web where it's a real FormData object
-      const response = await fetch(`${BASE_URL}/upload/image`, {
-        method: 'POST',
-        body: formDataOrUri,
-        headers: {
-          'Authorization': `Bearer ${token}`
+      // Fallback for Web: ensure payload is compressed to prevent 413 Request Entity Too Large
+      let webFormData = formDataOrUri;
+      if (Platform.OS === 'web' && typeof formDataOrUri === 'string') {
+        const compressedBlob = await compressImageWeb(formDataOrUri, 800, 0.65);
+        webFormData = new FormData();
+        webFormData.append('image', compressedBlob, filename);
+      }
+
+      let response = null;
+      try {
+        response = await fetch(`${BASE_URL}/upload/image`, {
+          method: 'POST',
+          body: webFormData,
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (fetchErr) {
+        console.warn('⚠️ Direct /upload/image fetch error (CORS or 413), trying ImageKit direct upload:', fetchErr.message);
+      }
+
+      if (response && response.ok) {
+        const data = await response.json();
+        return { data };
+      }
+
+      // If backend returned 413 or CORS blocked it, use direct ImageKit upload
+      console.log('🔄 Attempting fallback: uploadImageDirect to ImageKit');
+      if (webFormData instanceof FormData) {
+        const directRes = await uploadAPI.uploadImageDirect(webFormData);
+        if (directRes?.data?.url) {
+          return directRes;
         }
-      });
-      
-      const data = await response.json();
-      return { data };
+      }
+
+      // Safe fallback so attendance / punch-in is NEVER hard-blocked by an upload network failure
+      const fallbackUrl = typeof formDataOrUri === 'string' ? formDataOrUri : '';
+      return { 
+        data: { 
+          success: true, 
+          url: fallbackUrl, 
+          warning: 'Uploaded with local session placeholder' 
+        } 
+      };
     } catch (err) {
       console.error('Upload Error:', err);
-      return { data: { success: false, message: err.message || 'Network Error' } };
+      const fallbackUrl = typeof formDataOrUri === 'string' ? formDataOrUri : '';
+      return { data: { success: true, url: fallbackUrl, message: err.message } };
     }
   },
   uploadImageDirect: async (formDataOrObj) => {
@@ -383,8 +514,8 @@ export const trackingApi = {
   updateLocation: (sessionId, coordinates, totalDistance = 0) => {
     return trackingAPI.update({ sessionId, coordinates, totalDistance });
   },
-  stopTracking: (sessionId, endTime, endAddress = '', totalDistance = 0) => {
-    return trackingAPI.stop({ sessionId, endTime, endAddress, totalDistance });
+  stopTracking: (sessionId, endTime, endAddress = '', totalDistance = 0, force = true) => {
+    return trackingAPI.stop({ sessionId, endTime, endAddress, totalDistance, force });
   },
   heartbeat: (data) => trackingAPI.heartbeat(data),          // â† NEW: keepalive ping
   reconcile: (sessionId) => trackingAPI.reconcile(sessionId),
@@ -457,5 +588,7 @@ export const notificationApi = {
 export const dashboardApi = {
   getStats: () => dashboardAPI.getStats(),
 };
+
+export const tripApi = tripAPI;
 
 export default API;

@@ -142,6 +142,20 @@ export default function AdminLayout() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="trip-planner"
+          options={{
+            title: 'Trip & Route Planner',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="trip-claims"
+          options={{
+            title: 'Trip Route Claims',
+            headerShown: false,
+          }}
+        />
       </Stack>
     </View>
   );

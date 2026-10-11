@@ -166,11 +166,13 @@ const getRouteSummary = (coordinates = []) => {
   };
 };
 
-export default function AdminTrackingScreen() {
+export default function AdminTrackingScreen(props = {}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { employeeId: requestedEmployeeId, sessionId: requestedSessionId } = useLocalSearchParams();
+  const searchParams = useLocalSearchParams();
+  const requestedEmployeeId = props.employeeId || searchParams.employeeId;
+  const requestedSessionId = props.sessionId || searchParams.sessionId;
   const autoSelectedRef = useRef('');
   const mapRef = useRef(null);
 
@@ -647,13 +649,16 @@ export default function AdminTrackingScreen() {
       handleSelectEmployee(employee, sessionId);
     } else if (employeeId && allEmployeesList.length > 0) {
       const matchInAll = allEmployeesList.find(e => String(e._id) === String(employeeId));
+      autoSelectedRef.current = requestKey;
       if (matchInAll) {
-        autoSelectedRef.current = requestKey;
         handleSelectEmployee(matchInAll, sessionId);
       } else {
-        autoSelectedRef.current = requestKey;
         handleSelectEmployee({ _id: employeeId, name: 'Field Executive' }, sessionId);
       }
+    } else if (employeeId) {
+      // Immediate lookup fallback without waiting for full employee directory
+      autoSelectedRef.current = requestKey;
+      handleSelectEmployee({ _id: employeeId, name: 'Field Executive' }, sessionId);
     }
   }, [directoryStaff, allEmployeesList, requestedEmployeeId, requestedSessionId, handleSelectEmployee]);
 

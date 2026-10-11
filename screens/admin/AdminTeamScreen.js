@@ -266,7 +266,11 @@ export default function AdminTeamScreen() {
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNav}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.75}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
+              activeOpacity={0.75}
+            >
               <ArrowLeft size={20} color="#ffffff" />
             </TouchableOpacity>
 
@@ -414,15 +418,7 @@ export default function AdminTeamScreen() {
         />
       )}
 
-      {/* ── FLOATING ADD EMPLOYEE BUTTON ── */}
-      <TouchableOpacity
-        style={styles.floatingAddBtn}
-        onPress={() => setAddModalVisible(true)}
-        activeOpacity={0.85}
-      >
-        <UserPlus size={20} color="#fff" />
-        <Text style={styles.floatingAddBtnText}>Add Employee</Text>
-      </TouchableOpacity>
+
 
       {/* ── SCREEN 5: EMPLOYEE DETAIL MODAL (Matching Screen 5 Mockup) ── */}
       <Modal visible={!!selectedDetailEmp} animationType="slide" transparent={false}>

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { storage } from '../services/storage';
 import socketService from '../services/socket';
-import { setUnauthorizedCallback } from '../services/api';
+import { setUnauthorizedCallback, setIsLoggingOutState } from '../services/api';
 
 const AuthContext = createContext({});
 
@@ -67,6 +67,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       console.log('🔐 AuthContext: Initiating logout sequence...');
+      setIsLoggingOutState(true);
       
       // Stop tracking if active before cleaning tokens
       try {
@@ -81,10 +82,16 @@ export const AuthProvider = ({ children }) => {
 
       socketService.disconnect();
       await storage.removeItem('userToken');
+      await storage.removeItem('token');
       await storage.removeItem('userData');
+      await storage.removeItem('user');
       setUser(null);
     } catch (err) {
       console.error('Failed to execute logout sequence:', err);
+    } finally {
+      setTimeout(() => {
+        setIsLoggingOutState(false);
+      }, 2500);
     }
   };
 

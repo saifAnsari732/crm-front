@@ -17,10 +17,12 @@ import {
   CalendarCheck, Sparkles, Building2, LayoutDashboard, Settings,
   LogOut, Shield, ChevronDown, Radio, Power, Play, Camera, Calendar,
   Wallet, UserPlus, CheckSquare, RefreshCcw, TrendingUp, AlertTriangle,
-  Flame, Award, Eye, ExternalLink, SlidersHorizontal, Home, BarChart2
+  Flame, Award, Eye, ExternalLink, SlidersHorizontal, Home, BarChart2,
+  Car
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
-import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat } from '../../services/api';
+import { adminAPI, trackingAPI, uploadAPI, meetingAPI, dashboardAPI, getAvatarUrl, stopHeartbeat, compressImageWeb } from '../../services/api';
+import { reverseGeocodeLocation } from '../../services/geocoding';
 import { storage } from '../../services/storage';
 import useLocationTracker from '../../hooks/useLocationTracker';
 import { processLocation } from '../../services/locationTask';
@@ -266,16 +268,27 @@ export default function ManagerDashboardScreen() {
       let selfieUrl = '';
 
       if (Platform.OS === 'web') {
+        let uploadBlob = null;
+        try {
+          const resp = await fetch(pendingSelfieUri);
+          const rawBlob = await resp.blob();
+          uploadBlob = await compressImageWeb(rawBlob, 800, 0.65);
+        } catch (_) {}
+
         const formData = new FormData();
-        const filename = pendingSelfieUri.split('/').pop() || 'selfie.jpg';
-        const resp = await fetch(pendingSelfieUri);
-        const blob = await resp.blob();
-        formData.append('image', blob, filename);
+        const filename = 'selfie.jpg';
+        if (uploadBlob) {
+          formData.append('image', uploadBlob, filename);
+        } else {
+          const resp = await fetch(pendingSelfieUri);
+          const rawBlob = await resp.blob();
+          formData.append('image', rawBlob, filename);
+        }
         const uploadRes = await uploadAPI.uploadImageFormData(formData);
-        selfieUrl = uploadRes.data?.url || '';
+        selfieUrl = uploadRes.data?.url || uploadRes.data?.imageUrl || '';
       } else {
         const uploadRes = await uploadAPI.uploadImageFormData(pendingSelfieUri);
-        selfieUrl = uploadRes.data?.url || '';
+        selfieUrl = uploadRes.data?.url || uploadRes.data?.imageUrl || '';
       }
 
       const res = await startTracking(selfieUrl);
@@ -445,6 +458,9 @@ export default function ManagerDashboardScreen() {
 
     const syncDistanceWithBackend = async () => {
       try {
+        const token = await storage.getItem('userToken') || await storage.getItem('token');
+        if (!token) return;
+
         const response = await trackingAPI.getTodaySessions();
         if (response && response.data && response.data.success) {
           const totalToday = typeof response.data.totalDistanceToday === 'number'
@@ -480,10 +496,10 @@ export default function ManagerDashboardScreen() {
         syncDistanceWithBackend();
       });
 
-      // 30-second polling interval for distance reconciliation
+      // 15-second polling interval for distance reconciliation
       syncInterval = setInterval(() => {
         syncDistanceWithBackend();
-      }, 30000);
+      }, 15000);
 
       appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
         if (nextAppState === 'active') {
@@ -540,30 +556,31 @@ export default function ManagerDashboardScreen() {
               const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
 
-              // If movement from anchor < 12m AND speed < 1.8 km/h -> MANAGER IS STOPPED!
-              if (distFromAnchorM < 12 && currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.2) {
+              // 🎯 ADAPTIVE STATIONARY GATE: Eliminates indoor GPS drift & false movement (Manager Side)
+              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 15;
+              const anchorThresholdM = Math.max(16, Math.min(35, gpsAcc * 0.75));
+              const isSpeedStationary = currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.0;
+              const isWithinAnchor = distFromAnchorM < anchorThresholdM;
+
+              if (isSpeedStationary || isWithinAnchor) {
+                // MANAGER IS STATIONARY (At Desk / In Office) -> 0 False Movement
                 setIsMoving(false);
                 setMotionStatusLabel('STATIONARY');
-                // Exponential Moving Average to smooth out indoor GPS drift
                 stationaryAnchorRef.current = {
                   lat: 0.95 * stationaryAnchorRef.current.lat + 0.05 * lat,
                   lng: 0.95 * stationaryAnchorRef.current.lng + 0.05 * lng,
                 };
               } else {
-                // COORDINATES CHANGED -> MANAGER MOVED!
+                // MANAGER IS TRULY TRAVELING!
                 setIsMoving(true);
                 setMotionStatusLabel('MOVING');
 
-                if (calculatedSpeedKmh < 180 && distFromLastM > 4) {
+                if (calculatedSpeedKmh < 160 && distFromLastM > 8) {
                   const addedKm = distFromLastM / 1000;
                   totalDistanceRef.current += addedKm;
                   const newTotalStr = totalDistanceRef.current.toFixed(2);
                   setLocalKmState(newTotalStr);
                   setManagerKm(newTotalStr);
-
-                  // Store accumulated distance in local storage immediately
-                  storage.setItem('tracking_accumulated_distance', newTotalStr).catch(() => {});
-                  console.log(`📍 Manager Tracking Engine: [MOVED!] +${addedKm.toFixed(3)} km added. Total: ${newTotalStr} km.`);
                 }
 
                 lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
@@ -581,17 +598,26 @@ export default function ManagerDashboardScreen() {
                 : 999;
 
               if (!lastGeocodedAddressRef.current || distFromLastGeocoded > 80) {
-                const geo = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-                if (geo && geo[0]) {
-                  const item = geo[0];
-                  const formatted = [item.name, item.street, item.subregion || item.city, item.region]
-                    .filter(Boolean)
-                    .join(', ');
-                  if (formatted) {
-                    lastGeocodedCoordRef.current = { lat, lng };
-                    lastGeocodedAddressRef.current = formatted;
-                    setManagerAddress(formatted);
+                let formatted = '';
+                if (Platform.OS === 'web') {
+                  formatted = await reverseGeocodeLocation(lat, lng).catch(() => '');
+                } else {
+                  try {
+                    const geo = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+                    if (geo && geo[0]) {
+                      const item = geo[0];
+                      formatted = [item.name, item.street, item.subregion || item.city, item.region]
+                        .filter(Boolean)
+                        .join(', ');
+                    }
+                  } catch (_) {
+                    formatted = await reverseGeocodeLocation(lat, lng).catch(() => '');
                   }
+                }
+                if (formatted && formatted !== 'Current Location') {
+                  lastGeocodedCoordRef.current = { lat, lng };
+                  lastGeocodedAddressRef.current = formatted;
+                  setManagerAddress(formatted);
                 }
               }
             } catch (_) {}
@@ -620,7 +646,7 @@ export default function ManagerDashboardScreen() {
           {
             accuracy: Location.Accuracy.Balanced,
             timeInterval: 4000,
-            distanceInterval: 2,
+            distanceInterval: 8,
           },
           (pos) => {
             handleCoordinateFix(pos);
@@ -856,9 +882,16 @@ export default function ManagerDashboardScreen() {
 
           {/* Welcome Greeting */}
           <View style={styles.greetingBox}>
-            <Text style={styles.greetingTitle}>Welcome back, {user?.name ? user.name.split(' ')[0].toUpperCase() : 'SAIF'}</Text>
-            <Text style={styles.greetingDate}>{todayDateStr}</Text>
-            <Text style={styles.greetingSub}>Team Telemetry & Operations</Text>
+            <View style={styles.greetingHeaderRow}>
+              <Text style={styles.greetingTitle}>
+                Welcome back, {user?.name ? user.name.split(' ')[0] : 'Saif'} 👋
+              </Text>
+              <View style={styles.livePulsePill}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.livePulseText}>{activeLive} on field</Text>
+              </View>
+            </View>
+            <Text style={styles.greetingDate}>{todayDateStr} • {realPresentCount}/{totalTeam} Present Today</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -870,9 +903,9 @@ export default function ManagerDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {/* ── CARD 1: FIELD DUTY SHIFT & PUNCH IN (Matching Mockup) ── */}
-        <Surface style={[styles.shiftCard, cardShadow]} elevation={2}>
-          <View style={styles.shiftCardTopRow}>
+        {/* ── SECTION 1: UNIFIED FIELD DUTY & SHIFT HUB ── */}
+        <Surface style={[styles.cleanHeroCard, cardShadow]} elevation={2}>
+          <View style={styles.heroTopRow}>
             {isTracking ? (
               <View style={styles.punchedInBadge}>
                 <View style={styles.punchedInDot} />
@@ -885,21 +918,22 @@ export default function ManagerDashboardScreen() {
               </View>
             )}
 
-            <View style={styles.managerDutyBadge}>
-              <ShieldCheck size={13} color="#0284C7" />
-              <Text style={styles.managerDutyText}>Manager Duty</Text>
+            <View style={styles.heroTopRight}>
+              <View style={styles.managerDutyBadge}>
+                <ShieldCheck size={13} color="#0284C7" />
+                <Text style={styles.managerDutyText}>Manager Duty</Text>
+              </View>
+              <View style={styles.todayKmPill}>
+                <TrendingUp size={12} color={COLORS.primary} style={{ marginRight: 3 }} />
+                <Text style={styles.todayKmPillVal}>{myTodayKmVal} KM</Text>
+              </View>
             </View>
           </View>
 
-          <View style={styles.shiftMiddleRow}>
-            <Text style={styles.shiftTitle}>
+          <View style={styles.heroMiddleRow}>
+            <Text style={styles.heroTitle}>
               {isTracking ? 'Your Field Shift Is Active' : 'Start Your Field Shift'}
             </Text>
-            <View style={styles.todayKmPill}>
-              <Text style={styles.todayKmPillLabel}>Today's KM</Text>
-              <TrendingUp size={12} color={COLORS.primary} style={{ marginHorizontal: 3 }} />
-              <Text style={styles.todayKmPillVal}>{myTodayKmVal} KM</Text>
-            </View>
           </View>
 
           {/* Dynamic Motion State Live Banner (Manager Side) */}
@@ -943,87 +977,199 @@ export default function ManagerDashboardScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* Integrated Route Tools (Plan Trip & Claims) */}
+          <View style={styles.heroRouteBar}>
+            <TouchableOpacity
+              style={styles.heroRouteBtn}
+              onPress={() => router.push('/(admin)/trip-planner')}
+              activeOpacity={0.8}
+            >
+              <Car size={15} color="#E11D48" />
+              <Text style={styles.heroRouteBtnText}>Plan Trip Route</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.heroRouteBtn}
+              onPress={() => router.push('/(admin)/trip-claims')}
+              activeOpacity={0.8}
+            >
+              <Route size={15} color="#E11D48" />
+              <Text style={styles.heroRouteBtnText}>Team Claims</Text>
+            </TouchableOpacity>
+          </View>
         </Surface>
 
-        {/* ── CARD 2: TEAM STRIP BANNER ── */}
-        <Surface style={[styles.teamStripCard, cardShadow]} elevation={1}>
-          <TouchableOpacity style={styles.teamStripTouch} onPress={() => router.push('/(admin)/team')} activeOpacity={0.8}>
-            <View style={styles.teamCountBadge}>
-              <Users size={15} color={COLORS.primary} />
-              <Text style={styles.teamCountBadgeText}>{totalTeam} {totalTeam === 1 ? 'Employee' : 'Employees'}</Text>
-            </View>
-
-            {/* Avatar Pile */}
-            <View style={styles.avatarPile}>
-              {directoryStaff.slice(0, 4).map((emp, idx) => (
-                emp.avatar ? (
-                  <Image
-                    key={emp._id || idx}
-                    source={{ uri: emp.avatar }}
-                    style={[styles.pileImg, { marginLeft: idx === 0 ? 0 : -10, zIndex: 10 - idx }]}
-                  />
-                ) : (
-                  <View
-                    key={emp._id || idx}
-                    style={[
-                      styles.pileImg,
-                      styles.pileAvatarFallback,
-                      {
-                        backgroundColor: getAvatarColor(emp.name),
-                        marginLeft: idx === 0 ? 0 : -10,
-                        zIndex: 10 - idx,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.pileAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+        {/* ── SECTION 2: CONSOLIDATED TEAM PULSE & OVERVIEW CARD ── */}
+        <Surface style={[styles.cleanTeamCard, cardShadow]} elevation={1}>
+          {/* Header Row: Team size + Avatar Pile + Manage Team Link */}
+          <View style={styles.teamCardHeaderRow}>
+            <View style={styles.teamHeaderLeft}>
+              <Text style={styles.teamHeaderTitle}>Team Pulse</Text>
+              {/* Avatar Pile */}
+              <View style={styles.avatarPile}>
+                {directoryStaff.slice(0, 3).map((emp, idx) => (
+                  emp.avatar ? (
+                    <Image
+                      key={emp._id || idx}
+                      source={{ uri: emp.avatar }}
+                      style={[styles.pileImg, { marginLeft: idx === 0 ? 0 : -8, zIndex: 10 - idx }]}
+                    />
+                  ) : (
+                    <View
+                      key={emp._id || idx}
+                      style={[
+                        styles.pileImg,
+                        styles.pileAvatarFallback,
+                        {
+                          backgroundColor: getAvatarColor(emp.name),
+                          marginLeft: idx === 0 ? 0 : -8,
+                          zIndex: 10 - idx,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.pileAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                    </View>
+                  )
+                ))}
+                {directoryStaff.length > 3 && (
+                  <View style={[styles.pileMoreCircle, { marginLeft: -8, zIndex: 1 }]}>
+                    <Text style={styles.pileMoreText}>+{directoryStaff.length - 3}</Text>
                   </View>
-                )
-              ))}
-              {directoryStaff.length > 4 && (
-                <View style={[styles.pileMoreCircle, { marginLeft: -10, zIndex: 1 }]}>
-                  <Text style={styles.pileMoreText}>+{directoryStaff.length - 4}</Text>
-                </View>
-              )}
+                )}
+              </View>
             </View>
 
-            <View style={styles.manageTeamLink}>
-              <Text style={styles.manageTeamLinkText}>Manage Team & Details</Text>
-              <ArrowRight size={13} color={COLORS.primary} style={{ marginLeft: 3 }} />
+            <TouchableOpacity
+              style={styles.teamManageLink}
+              onPress={() => router.push('/(admin)/team')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.teamManageLinkText}>Manage ({totalTeam})</Text>
+              <ArrowRight size={13} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* 2x2 Clean KPI Grid */}
+          <View style={styles.teamKpiGrid}>
+            {/* KPI 1: Present Today */}
+            <View style={styles.teamKpiBox}>
+              <Text style={styles.teamKpiLabel}>Present Today</Text>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{realPresentCount}/{totalTeam}</Text>
+              </View>
+              <Text style={styles.teamKpiSub}>
+                ↑ {totalTeam > 0 ? Math.round((realPresentCount / totalTeam) * 100) : 0}% attended
+              </Text>
             </View>
-          </TouchableOpacity>
+
+            {/* KPI 2: Active On Field */}
+            <View style={styles.teamKpiBox}>
+              <Text style={styles.teamKpiLabel}>Active On Field</Text>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{activeLive}</Text>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Staff</Text>
+              </View>
+              <Text style={[styles.teamKpiSub, { color: activeLive > 0 ? '#0284C7' : '#64748b' }]}>
+                {activeLive > 0 ? '● Live on duty' : '○ None active'}
+              </Text>
+            </View>
+
+            {/* KPI 3: Team Travel */}
+            <View style={styles.teamKpiBox}>
+              <Text style={styles.teamKpiLabel}>Team Travel</Text>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{teamTodayKm.toFixed(1)}</Text>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>KM</Text>
+              </View>
+              <Text style={styles.teamKpiSub}>Total logged today</Text>
+            </View>
+
+            {/* KPI 4: Visits Done */}
+            <View style={styles.teamKpiBox}>
+              <Text style={styles.teamKpiLabel}>Visits Done</Text>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{visitsToday}/{visitCount || visitsToday || 0}</Text>
+              </View>
+              <Text style={[styles.teamKpiSub, { color: '#7c3aed' }]}>Client meetings</Text>
+            </View>
+          </View>
+
+          {/* Integrated Visits Progress Bar */}
+          <View style={styles.teamVisitsProgressWrap}>
+            <View style={styles.teamVisitsProgressHeader}>
+              <Text style={styles.teamVisitsProgressTitle}>Client Visits Target</Text>
+              <Text style={styles.teamVisitsProgressVal}>{visitsToday}/{visitCount || visitsToday || 1} Completed</Text>
+            </View>
+            <View style={styles.teamVisitsTrack}>
+              <View
+                style={[
+                  styles.teamVisitsFill,
+                  { width: `${Math.min(100, Math.max(8, ((visitsToday || 0) / (visitCount || visitsToday || 1)) * 100))}%` }
+                ]}
+              />
+            </View>
+          </View>
         </Surface>
 
-        {/* ── QUICK ACTIONS (8 Rounded Grid Cards matching Mockup) ── */}
-        <View style={styles.quickActionsSection}>
-          <Text style={styles.sectionHeaderTitle}>Quick Actions</Text>
+        {/* ── SECTION 3: ATTENTION ALERT BANNER (Only when action required) ── */}
+        {(leaveCount > 0 || expenseCount > 0 || latePunchinsCount > 0) && (
+          <Surface style={[styles.attentionAlertCard, cardShadow]} elevation={1}>
+            <View style={styles.attentionAlertLeft}>
+              <AlertCircle size={16} color="#d97706" />
+              <Text style={styles.attentionAlertText} numberOfLines={1}>
+                Action Required: {[
+                  leaveCount > 0 && `${leaveCount} Leave${leaveCount > 1 ? 's' : ''}`,
+                  expenseCount > 0 && `${expenseCount} Expense${expenseCount > 1 ? 's' : ''}`,
+                  latePunchinsCount > 0 && `${latePunchinsCount} Late`
+                ].filter(Boolean).join(' • ')}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.attentionAlertBtn}
+              onPress={() => {
+                if (leaveCount > 0) router.push('/(admin)/leaves');
+                else if (expenseCount > 0) router.push('/(admin)/expenses');
+                else router.push('/(admin)/attendance');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.attentionAlertBtnText}>Review →</Text>
+            </TouchableOpacity>
+          </Surface>
+        )}
+
+        {/* ── SECTION 4: QUICK OPERATIONS GRID ── */}
+        <View style={styles.cleanQuickSection}>
+          <Text style={styles.sectionHeaderTitle}>Quick Operations</Text>
 
           {/* Row 1 */}
           <View style={styles.quickGridRow}>
             {/* Visits */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.mintLight }]}>
-                <Briefcase size={20} color={COLORS.success} />
+              <View style={[styles.quickIconBox, { backgroundColor: '#ecfdf5' }]}>
+                <Briefcase size={20} color="#059669" />
               </View>
               <Text style={styles.quickLabel}>Visits</Text>
             </TouchableOpacity>
 
             {/* Tasks Flow */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tasks')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.purpleLight }]}>
-                <ClipboardList size={20} color={COLORS.purple} />
+              <View style={[styles.quickIconBox, { backgroundColor: '#f5f3ff' }]}>
+                <ClipboardList size={20} color="#7c3aed" />
                 {taskCount > 0 && (
                   <View style={styles.quickBadgeCircle}>
                     <Text style={styles.quickBadgeText}>{taskCount}</Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.quickLabel}>Tasks Flow</Text>
+              <Text style={styles.quickLabel}>Tasks</Text>
             </TouchableOpacity>
 
             {/* Leaves */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.pinkLight }]}>
-                <Calendar size={20} color="#E11D48" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#fff1f2' }]}>
+                <Calendar size={20} color="#e11d48" />
                 {leaveCount > 0 && (
                   <View style={styles.quickBadgeCircle}>
                     <Text style={styles.quickBadgeText}>{leaveCount}</Text>
@@ -1035,10 +1181,10 @@ export default function ManagerDashboardScreen() {
 
             {/* Expenses */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.warningLight }]}>
-                <Wallet size={20} color={COLORS.warning} />
+              <View style={[styles.quickIconBox, { backgroundColor: '#fffbeb' }]}>
+                <Wallet size={20} color="#d97706" />
                 {expenseCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#EA580C' }]}>
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#ea580c' }]}>
                     <Text style={styles.quickBadgeText}>{expenseCount}</Text>
                   </View>
                 )}
@@ -1051,10 +1197,10 @@ export default function ManagerDashboardScreen() {
           <View style={[styles.quickGridRow, { marginTop: 10 }]}>
             {/* Leads */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leads')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.lavenderLight }]}>
-                <UserPlus size={20} color="#4F46E5" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#eff6ff' }]}>
+                <UserPlus size={20} color="#2563eb" />
                 {leadCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#2563eb' }]}>
                     <Text style={styles.quickBadgeText}>{leadCount}</Text>
                   </View>
                 )}
@@ -1064,118 +1210,28 @@ export default function ManagerDashboardScreen() {
 
             {/* Live Map */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.mintLight }]}>
-                <Compass size={20} color={COLORS.primary} />
+              <View style={[styles.quickIconBox, { backgroundColor: '#f0fdfa' }]}>
+                <Compass size={20} color="#0d9488" />
               </View>
               <Text style={styles.quickLabel}>Live Map</Text>
             </TouchableOpacity>
 
             {/* Team Staff */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.skyLight }]}>
-                <Users size={20} color="#0284C7" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#f0f9ff' }]}>
+                <Users size={20} color="#0284c7" />
               </View>
               <Text style={styles.quickLabel}>Team Staff</Text>
             </TouchableOpacity>
 
             {/* Reports */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: COLORS.primaryMuted }]}>
-                <FileText size={20} color={COLORS.primary} />
+              <View style={[styles.quickIconBox, { backgroundColor: '#f1f5f9' }]}>
+                <FileText size={20} color="#475569" />
               </View>
               <Text style={styles.quickLabel}>Reports</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* ── 2X2 METRICS GRID + VISITS PROGRESS ── */}
-        <View style={styles.metrics2x2Grid}>
-          {/* Present Today */}
-          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <Text style={styles.metricCardTitle}>Present Today</Text>
-            <View style={styles.metricCardBody}>
-              <View>
-                <Text style={styles.metricCardVal}>{realPresentCount}/{totalTeam}</Text>
-                <Text style={styles.metricTrendGreen}>↑ {totalTeam > 0 ? Math.round((realPresentCount / totalTeam) * 100) : 0}%</Text>
-              </View>
-              <View style={styles.miniRing}>
-                <View style={[styles.miniRingFill, { borderColor: COLORS.success }]} />
-              </View>
-            </View>
-          </Surface>
-
-          {/* Active On Field */}
-          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <Text style={styles.metricCardTitle}>Active On Field</Text>
-            <View style={styles.metricCardBody}>
-              <View>
-                <Text style={styles.metricCardVal}>{activeLive} Staff</Text>
-                <Text style={styles.metricTrendGreen}>↑ {totalTeam > 0 ? Math.round((activeLive / totalTeam) * 100) : 0}%</Text>
-              </View>
-              <View style={styles.miniRing}>
-                <View style={[styles.miniRingFill, { borderColor: COLORS.primary }]} />
-              </View>
-            </View>
-          </Surface>
-
-          {/* My Today KM */}
-          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <Text style={styles.metricCardTitle}>My Today KM</Text>
-            <View style={styles.metricCardBody}>
-              <View>
-                <Text style={styles.metricCardVal}>{myTodayKmVal}</Text>
-                <View style={styles.metricDottedLine} />
-              </View>
-              <Text style={styles.metricTrendGreen}>KM</Text>
-            </View>
-          </Surface>
-
-          {/* Team Today KM */}
-          <Surface style={[styles.metricCard, cardShadow]} elevation={1}>
-            <Text style={styles.metricCardTitle}>Team Today KM</Text>
-            <View style={styles.metricCardBody}>
-              <View>
-                <Text style={styles.metricCardVal}>{teamTodayKm.toFixed(1)}</Text>
-                <View style={styles.metricDottedLine} />
-              </View>
-              <Text style={styles.metricTrendGreen}>KM</Text>
-            </View>
-          </Surface>
-        </View>
-
-        {/* Visits Today Full Bar */}
-        <Surface style={[styles.visitsBarCard, cardShadow]} elevation={1}>
-          <View style={styles.visitsBarHeader}>
-            <Text style={styles.visitsBarTitle}>Visits Today</Text>
-            <Text style={styles.visitsBarVal}>{visitsToday}/{visitCount || visitsToday || 1}</Text>
-          </View>
-          <View style={styles.visitsBarTrack}>
-            <View style={[styles.visitsBarFill, { width: `${Math.min(100, Math.max(10, ((visitsToday || 1) / (visitCount || visitsToday || 1)) * 100))}%` }]} />
-          </View>
-        </Surface>
-
-        {/* ── NEEDS YOUR ATTENTION NOTIFICATION PILLS ── */}
-        <View style={styles.needsAttentionSection}>
-          <View style={styles.attentionHeaderRow}>
-            <AlertCircle size={14} color="#EA580C" />
-            <Text style={styles.attentionTitle}>Needs Your Attention</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attentionPillsRow}>
-            <TouchableOpacity style={styles.attentionPillOrange} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={styles.attentionDotOrange} />
-              <Text style={styles.attentionPillTextOrange}>{leaveCount} Pending Leaves</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.attentionPillRed} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
-              <View style={styles.attentionDotRed} />
-              <Text style={styles.attentionPillTextRed}>{expenseCount} Pending Expenses</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.attentionPillAmber} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.75}>
-              <View style={styles.attentionDotAmber} />
-              <Text style={styles.attentionPillTextAmber}>{latePunchinsCount} Late Punch-In</Text>
-            </TouchableOpacity>
-          </ScrollView>
         </View>
 
         {/* ── LIVE TEAM FIELD MAP PREVIEW ── */}
@@ -1444,6 +1500,11 @@ export default function ManagerDashboardScreen() {
                 <Text style={styles.drawerItemText}>Expense Claims</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/trip-claims'); }}>
+                <Car size={18} color={COLORS.primary} />
+                <Text style={styles.drawerItemText}>Trip Route Claims</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.drawerItem} onPress={() => { setSideMenuVisible(false); router.push('/(admin)/leads'); }}>
                 <UserPlus size={18} color={COLORS.primary} />
                 <Text style={styles.drawerItemText}>Customer Leads</Text>
@@ -1579,6 +1640,32 @@ const styles = StyleSheet.create({
   greetingBox: {
     marginTop: 14,
   },
+  greetingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  livePulsePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  livePulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#34d399',
+  },
+  livePulseText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: FONT,
+  },
   greetingTitle: {
     fontSize: 20,
     fontWeight: '800',
@@ -1600,6 +1687,220 @@ const styles = StyleSheet.create({
   body: {
     padding: 16,
     paddingBottom: 160,
+  },
+
+  // ── UNIFIED FIELD DUTY HERO CARD ──
+  cleanHeroCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroMiddleRow: {
+    marginTop: 12,
+  },
+  heroTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  heroRouteBar: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  heroRouteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  heroRouteBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E11D48',
+    fontFamily: FONT,
+  },
+
+  // ── CONSOLIDATED TEAM PULSE CARD ──
+  cleanTeamCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  teamCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  teamHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  teamHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  teamManageLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  teamManageLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  teamKpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  teamKpiBox: {
+    width: '48%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  teamKpiLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    fontFamily: FONT,
+  },
+  teamKpiValRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 4,
+  },
+  teamKpiVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  teamKpiSub: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#059669',
+    fontFamily: FONT,
+    marginTop: 2,
+  },
+  teamVisitsProgressWrap: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  teamVisitsProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  teamVisitsProgressTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#475569',
+    fontFamily: FONT,
+  },
+  teamVisitsProgressVal: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  teamVisitsTrack: {
+    height: 6,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  teamVisitsFill: {
+    height: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 3,
+  },
+
+  // ── ATTENTION ALERT CARD ──
+  attentionAlertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fffbeb',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  attentionAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  attentionAlertText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
+    fontFamily: FONT,
+    flex: 1,
+  },
+  attentionAlertBtn: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+  },
+  attentionAlertBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400e',
+    fontFamily: FONT,
+  },
+
+  // ── QUICK OPERATIONS ──
+  cleanQuickSection: {
+    marginTop: 18,
+    marginBottom: 14,
   },
 
   // ── SHIFT PUNCH IN CARD ──
@@ -1757,6 +2058,82 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
+    fontFamily: FONT,
+  },
+
+  // ── TRIP PLANNER CARD ──
+  tripPlannerCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  tripPlannerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tripPlannerHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  uberBadge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 8,
+  },
+  uberBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  tripPlannerSubText: {
+    fontSize: 11.5,
+    color: COLORS.textSub,
+    marginTop: 4,
+    lineHeight: 16,
+    fontFamily: FONT,
+  },
+  tripPlannerActionBtnsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  tripPlannerPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  tripPlannerPrimaryBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: FONT,
+  },
+  tripPlannerSecondaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0fdfa',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  tripPlannerSecondaryBtnText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: FONT,
   },
 
@@ -2506,5 +2883,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
-  },
+  }
 });

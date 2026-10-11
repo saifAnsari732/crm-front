@@ -34,12 +34,13 @@ import {
   Home,
   Radio,
   Building2,
+  Car,
 } from "lucide-react-native";
 import useLocationTracker from "../../hooks/useLocationTracker";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
-import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl } from "../../services/api";
+import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl, compressImageWeb } from "../../services/api";
 
 const { width } = Dimensions.get("window");
 
@@ -247,17 +248,28 @@ export default function EmployeeDashboardScreen() {
       let uploadRes;
 
       if (Platform.OS === 'web') {
+        let uploadBlob = null;
+        try {
+          const resp = await fetch(pendingSelfieUri);
+          const rawBlob = await resp.blob();
+          uploadBlob = await compressImageWeb(rawBlob, 800, 0.65);
+        } catch (_) {}
+
         const formData = new FormData();
-        const filename = pendingSelfieUri.split('/').pop() || 'selfie.jpg';
-        const resp = await fetch(pendingSelfieUri);
-        const blob = await resp.blob();
-        formData.append('image', blob, filename);
+        const filename = 'selfie.jpg';
+        if (uploadBlob) {
+          formData.append('image', uploadBlob, filename);
+        } else {
+          const resp = await fetch(pendingSelfieUri);
+          const rawBlob = await resp.blob();
+          formData.append('image', rawBlob, filename);
+        }
         uploadRes = await uploadAPI.uploadImageFormData(formData);
       } else {
         uploadRes = await uploadAPI.uploadImageFormData(pendingSelfieUri);
       }
 
-      const selfieUrl = uploadRes.data?.url || '';
+      const selfieUrl = uploadRes.data?.url || uploadRes.data?.imageUrl || '';
       const res = await startTracking(selfieUrl);
 
       if (res.success) {
@@ -460,9 +472,45 @@ export default function EmployeeDashboardScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* 3.5. TRIP & ROUTE PLANNER HERO CARD (Uber/Rapido style) */}
+          <TouchableOpacity
+            style={styles.tripPlannerHeroCard}
+            activeOpacity={0.88}
+            onPress={() => router.push("/(employee)/trip-planner")}
+          >
+            <LinearGradient
+              colors={["#1e40af", "#2563eb"]}
+              style={styles.tripPlannerGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.tripPlannerLeft}>
+                <View style={styles.tripPlannerIconBadge}>
+                  <Car size={20} color="#2563eb" />
+                </View>
+                <View style={styles.tripPlannerTextGroup}>
+                  <Text style={styles.tripPlannerTitle}>Trip Route & KM Claim</Text>
+                  <Text style={styles.tripPlannerSubtitle}>
+                    Plan meeting route, preview road map & claim KM
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.tripPlannerArrow}>
+                <ChevronRight size={18} color="#ffffff" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* 4. QUICK OPERATIONS */}
           <Text style={styles.sectionHeaderTitle}>QUICK OPERATIONS</Text>
           <View style={styles.quickOpsRow}>
+            <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/(employee)/trip-planner")}>
+              <LinearGradient colors={["#2563eb", "#1d4ed8"]} style={styles.quickOpGradientIcon}>
+                <Car size={22} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.quickOpLabelText}>PLAN TRIP</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.quickOpBtnItem} activeOpacity={0.88} onPress={() => router.push("/tracking")}>
               <LinearGradient colors={["#00c6a9", "#00b4d8"]} style={styles.quickOpGradientIcon}>
                 <Play size={22} color="#fff" />
@@ -648,6 +696,7 @@ export default function EmployeeDashboardScreen() {
                 {[
                   { label: "Dashboard", route: "/dashboard", icon: "Home", desc: "Main control center" },
                   { label: "Live GPS Tracking", route: "/tracking", icon: "Navigation", desc: "Realtime speed & distance" },
+                  { label: "Trip & Route Planner", route: "/(employee)/trip-planner", icon: "Car", desc: "Plan meeting route & claim KM" },
                   { label: "Daily Action Plan", route: "/tasks", icon: "ClipboardCheck", desc: "View & add daily actions" },
                   { label: "Leads", route: "/leads", icon: "Users", desc: "View assigned leads" },
                   { label: "Client Meetings", route: "/meetings", icon: "Calendar", desc: "Log feedback & visit details" },
@@ -665,6 +714,7 @@ export default function EmployeeDashboardScreen() {
                   >
                     <View style={styles.menuItemIconBox}>
                       {item.icon === "Home" && <Home size={18} color="#fff" />}
+                      {item.icon === "Car" && <Car size={18} color="#fff" />}
                       {item.icon === "ClipboardCheck" && <ClipboardCheck size={18} color="#fff" />}
                       {item.icon === "Navigation" && <Navigation size={18} color="#fff" />}
                       {item.icon === "Users" && <Users size={18} color="#fff" />}
@@ -1082,6 +1132,61 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0f172a",
     marginTop: 4,
+  },
+  tripPlannerHeroCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+  },
+  tripPlannerGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  tripPlannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+  },
+  tripPlannerIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripPlannerTextGroup: {
+    flex: 1,
+  },
+  tripPlannerTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.2,
+  },
+  tripPlannerSubtitle: {
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.85)",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  tripPlannerArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
   },
   sectionHeaderTitle: {
     fontSize: 12,

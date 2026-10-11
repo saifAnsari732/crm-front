@@ -872,7 +872,7 @@ export default function useLocationTracker() {
       let totalDistance = 0;
       let stopSucceeded = false;
       try {
-        const response = await trackingApi.stopTracking(sessionId, new Date().toISOString());
+        const response = await trackingApi.stopTracking(sessionId, new Date().toISOString(), '', 0, true);
         const localAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
         totalDistance = typeof response.data?.totalDistance === 'number' ? response.data.totalDistance : localAcc;
         stopSucceeded = true;

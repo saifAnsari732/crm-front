@@ -125,6 +125,7 @@ export default function EmployeeLayout() {
         <Tabs.Screen name="expenses" options={{ href: null }} />
         <Tabs.Screen name="leaves" options={{ href: null }} />
         <Tabs.Screen name="admin/history" options={{ href: null }} />
+        <Tabs.Screen name="trip-planner" options={{ href: null }} />
       </Tabs>
     </View>
   );
