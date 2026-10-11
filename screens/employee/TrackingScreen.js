@@ -213,10 +213,10 @@ export default function ActiveShiftMapScreen() {
         syncDistanceWithBackend();
       });
 
-      // Step 3: Set 30-second polling interval for backend reconciliation (local engine updates distance in real-time)
+      // Step 3: Set 15-second polling interval for backend reconciliation (local engine updates distance in real-time)
       syncInterval = setInterval(() => {
         syncDistanceWithBackend();
-      }, 30000);
+      }, 15000);
 
       // Step 4: Register AppState listener to sync distance when returning from background / lock screen
       appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
@@ -312,15 +312,13 @@ export default function ActiveShiftMapScreen() {
                 setMotionStatusLabel('MOVING');
 
                 if (calculatedSpeedKmh < 180 && distFromLastM > 4) {
+                  // Local KM is display-only (real-time feel). Server is the authority.
+                  // Local accumulation provides instant UI feedback between 30s server syncs.
                   const addedKm = distFromLastM / 1000;
                   totalDistanceRef.current += addedKm;
-                  const newTotalStr = totalDistanceRef.current.toFixed(2);
-                  setDistance(newTotalStr);
+                  setDistance(totalDistanceRef.current.toFixed(2));
 
-                  // Store accumulated distance in local storage immediately
-                  storage.setItem('tracking_accumulated_distance', newTotalStr).catch(() => {});
-
-                  console.log(`📍 TrackingScreen Engine: [MOVED!] +${addedKm.toFixed(3)} km added. Total: ${newTotalStr} km.`);
+                  console.log(`📍 TrackingScreen: [MOVED] +${addedKm.toFixed(3)} km (local display). Server syncs every 30s.`);
                 }
 
                 lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
@@ -415,7 +413,7 @@ export default function ActiveShiftMapScreen() {
           {
             accuracy: Location.Accuracy.Balanced,
             timeInterval: 4000,
-            distanceInterval: 2,
+            distanceInterval: 8,
           },
           (pos) => {
             handleCoordinateFix(pos);
