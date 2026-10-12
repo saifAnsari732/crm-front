@@ -17,6 +17,7 @@ import {
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, meetingAPI, getAvatarUrl, stopHeartbeat, expenseAPI } from '../../services/api';
+import { storage } from '../../services/storage';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -100,9 +101,28 @@ export default function OrgAdminDashboardScreen() {
     year: 'numeric'
   }).format(new Date());
 
+  // Hydrate cached OrgAdmin dashboard state immediately on mount (0ms perceived load)
+  useEffect(() => {
+    storage.getItem('cache_org_admin_dashboard_v1').then((raw) => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.stats) setStats(parsed.stats);
+          if (Array.isArray(parsed.employees)) setEmployees(parsed.employees);
+          if (Array.isArray(parsed.liveLocations)) setLiveLocations(parsed.liveLocations);
+          if (parsed.organization) setOrganization(parsed.organization);
+          if (Array.isArray(parsed.managersList)) setManagersList(parsed.managersList);
+          if (Array.isArray(parsed.attendanceRecords)) setAttendanceRecords(parsed.attendanceRecords);
+          if (Array.isArray(parsed.pendingLeaves)) setPendingLeaves(parsed.pendingLeaves);
+          if (Array.isArray(parsed.pendingExpenses)) setPendingExpenses(parsed.pendingExpenses);
+          setLoading(false);
+        } catch (_) {}
+      }
+    }).catch(() => {});
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
       const [statsRes, empRes, locRes, orgRes, mgrRes, attRes, leavesRes, expRes] = await Promise.all([
         adminAPI.getDashboard().catch(() => ({ data: { success: false } })),
         adminAPI.getEmployees({ limit: 200, role: 'all' }).catch(() => ({ data: { success: false } })),
@@ -114,14 +134,61 @@ export default function OrgAdminDashboardScreen() {
         adminAPI.getExpenses().catch(() => ({ data: { success: false } })),
       ]);
 
-      if (statsRes.data?.success) setStats(statsRes.data.stats || statsRes.data);
-      if (empRes.data?.success) setEmployees(empRes.data.employees || empRes.data.data || []);
-      if (locRes.data?.success) setLiveLocations(locRes.data.locations || locRes.data.data || []);
-      if (orgRes.data?.success) setOrganization(orgRes.data.organization || orgRes.data.data || null);
-      if (mgrRes.data?.success) setManagersList(mgrRes.data.managers || []);
-      if (attRes.data?.success) setAttendanceRecords(attRes.data.records || attRes.data.attendance || []);
-      if (leavesRes?.data?.success && Array.isArray(leavesRes.data.leaves)) setPendingLeaves(leavesRes.data.leaves);
-      if (expRes?.data?.success && Array.isArray(expRes.data.expenses)) setPendingExpenses(expRes.data.expenses);
+      let nextStats = null;
+      let nextEmps = null;
+      let nextLocs = null;
+      let nextOrg = null;
+      let nextMgrs = null;
+      let nextAtt = null;
+      let nextLeaves = null;
+      let nextExpenses = null;
+
+      if (statsRes.data?.success) {
+        nextStats = statsRes.data.stats || statsRes.data;
+        setStats(nextStats);
+      }
+      if (empRes.data?.success) {
+        nextEmps = empRes.data.employees || empRes.data.data || [];
+        setEmployees(nextEmps);
+      }
+      if (locRes.data?.success) {
+        nextLocs = locRes.data.locations || locRes.data.data || [];
+        setLiveLocations(nextLocs);
+      }
+      if (orgRes.data?.success) {
+        nextOrg = orgRes.data.organization || orgRes.data.data || null;
+        setOrganization(nextOrg);
+      }
+      if (mgrRes.data?.success) {
+        nextMgrs = mgrRes.data.managers || [];
+        setManagersList(nextMgrs);
+      }
+      if (attRes.data?.success) {
+        nextAtt = attRes.data.records || attRes.data.attendance || [];
+        setAttendanceRecords(nextAtt);
+      }
+      if (leavesRes?.data?.success && Array.isArray(leavesRes.data.leaves)) {
+        nextLeaves = leavesRes.data.leaves;
+        setPendingLeaves(nextLeaves);
+      }
+      if (expRes?.data?.success && Array.isArray(expRes.data.expenses)) {
+        nextExpenses = expRes.data.expenses;
+        setPendingExpenses(nextExpenses);
+      }
+
+      if (nextStats || nextEmps || nextLocs) {
+        storage.setItem('cache_org_admin_dashboard_v1', JSON.stringify({
+          stats: nextStats,
+          employees: (nextEmps || []).slice(0, 100),
+          liveLocations: (nextLocs || []).slice(0, 100),
+          organization: nextOrg,
+          managersList: nextMgrs || [],
+          attendanceRecords: (nextAtt || []).slice(0, 100),
+          pendingLeaves: (nextLeaves || []).slice(0, 30),
+          pendingExpenses: (nextExpenses || []).slice(0, 30),
+          updatedAt: Date.now()
+        })).catch(() => {});
+      }
     } catch (e) {
       console.log('OrgAdmin dashboard fetch error:', e.message);
     } finally {

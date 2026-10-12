@@ -92,6 +92,7 @@ export default function ActiveShiftMapScreen() {
   
   // 🎯 Dynamic Motion State & Coordinate Engine state
   const [isMoving, setIsMoving] = useState(false);
+  const isMovingRef = useRef(false);
   const [motionStatusLabel, setMotionStatusLabel] = useState('STATIONARY');
   
   const timerRef = useRef(null);
@@ -293,6 +294,7 @@ export default function ActiveShiftMapScreen() {
               lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
               stationaryAnchorRef.current = { lat, lng };
               departureCandidateCountRef.current = 0;
+              isMovingRef.current = false;
               setIsMoving(false);
               setMotionStatusLabel('STATIONARY');
               setSpeed('0');
@@ -318,7 +320,7 @@ export default function ActiveShiftMapScreen() {
               const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
               const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
 
-              if (!isMoving) {
+              if (!isMovingRef.current) {
                 // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
                 const isInsideAnchor = distFromAnchorM < anchorThresholdM;
                 const isStationarySpeed = effectiveSpeedKmh < 4.5;
@@ -326,6 +328,7 @@ export default function ActiveShiftMapScreen() {
                 if (isInsideAnchor || isStationarySpeed) {
                   // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
@@ -341,12 +344,14 @@ export default function ActiveShiftMapScreen() {
                   // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
                   departureCandidateCountRef.current += 1;
                   if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                    isMovingRef.current = false;
                     setIsMoving(false);
                     setMotionStatusLabel('STATIONARY');
                     setSpeed('0');
                   } else {
                     // Confirmed physical departure! Employee has left the office and is traveling on road
                     departureCandidateCountRef.current = 0;
+                    isMovingRef.current = true;
                     setIsMoving(true);
                     setMotionStatusLabel('MOVING');
                     setSpeed(Math.round(effectiveSpeedKmh).toString());
@@ -373,6 +378,7 @@ export default function ActiveShiftMapScreen() {
                 const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
                 if (hasHalted) {
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
@@ -381,6 +387,7 @@ export default function ActiveShiftMapScreen() {
                 } else {
                   // Legitimate road progress while moving
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = true;
                   setIsMoving(true);
                   setMotionStatusLabel('MOVING');
                   setSpeed(Math.round(effectiveSpeedKmh).toString());

@@ -129,6 +129,7 @@ export default function ManagerDashboardScreen() {
 
   // 🎯 Dynamic Motion State & Coordinate Engine state (Manager Side)
   const [isMoving, setIsMoving] = useState(false);
+  const isMovingRef = useRef(false);
   const [motionStatusLabel, setMotionStatusLabel] = useState('STATIONARY');
   const [managerSpeed, setManagerSpeed] = useState('0');
   const [managerAddress, setManagerAddress] = useState('');
@@ -172,6 +173,7 @@ export default function ManagerDashboardScreen() {
   // Selfie Punch In States
   const [pendingSelfieUri, setPendingSelfieUri] = useState(null);
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
+  const [selfieAspectMode, setSelfieAspectMode] = useState('full');
   const [submittingPunchIn, setSubmittingPunchIn] = useState(false);
 
   const handleClockToggle = async () => {
@@ -225,7 +227,6 @@ export default function ManagerDashboardScreen() {
         return;
       }
 
-      setIsUploadingSelfie(true);
       const hasAllPermissions = await requestPermissions();
       if (!hasAllPermissions) {
         setIsUploadingSelfie(false);
@@ -241,11 +242,22 @@ export default function ManagerDashboardScreen() {
         }
       }
 
-      const photoResult = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
-        cameraType: ImagePicker.CameraType?.front || 'front',
-      });
+      setIsUploadingSelfie(true);
+
+      let photoResult;
+      try {
+        photoResult = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+          cameraType: ImagePicker.CameraType?.front || 'front',
+        });
+      } catch (camErr) {
+        console.log('Front camera launch fallback:', camErr.message);
+        photoResult = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      }
 
       if (photoResult.canceled || !photoResult.assets?.length) {
         if (Platform.OS === 'web') alert("Selfie check-in is required to punch in.");
@@ -255,11 +267,12 @@ export default function ManagerDashboardScreen() {
       }
 
       setPendingSelfieUri(photoResult.assets[0].uri);
+      setSelfieAspectMode('full');
       setSelfieModalVisible(true);
     } catch (err) {
       console.log('Selfie capture error:', err.message);
-      if (Platform.OS === 'web') alert("Could not complete selfie check-in.");
-      else Alert.alert("Error", "Could not complete selfie check-in.");
+      if (Platform.OS === 'web') alert("Could not complete selfie check-in. Please try again.");
+      else Alert.alert("Error", "Could not complete selfie check-in. Please try again.");
     } finally {
       setIsUploadingSelfie(false);
     }
@@ -313,6 +326,8 @@ export default function ManagerDashboardScreen() {
       }
     } catch (err) {
       console.log('Punch in error:', err.message);
+      if (Platform.OS === 'web') alert("Could not submit selfie check-in. Please try again.");
+      else Alert.alert("Error", "Could not submit selfie check-in. Please try again.");
     } finally {
       setSubmittingPunchIn(false);
     }
@@ -320,7 +335,31 @@ export default function ManagerDashboardScreen() {
 
   const fetchData = useCallback(async (isInitial = false) => {
     try {
-      if (isInitial) setLoading(true);
+      // 1. Instant 0ms Hydration from Local Cache (Stale-While-Revalidate)
+      let hadCache = false;
+      if (isInitial) {
+        try {
+          const cachedRaw = await storage.getItem('cache_mgr_dashboard_v1');
+          if (cachedRaw) {
+            const cached = JSON.parse(cachedRaw);
+            if (Array.isArray(cached.teamMembers) && cached.teamMembers.length > 0) {
+              setTeamMembers(cached.teamMembers);
+              hadCache = true;
+            }
+            if (Array.isArray(cached.liveLocations)) setLiveLocations(cached.liveLocations);
+            if (cached.orgData) setOrgData(cached.orgData);
+            if (Array.isArray(cached.recentVisits)) setRecentVisits(cached.recentVisits);
+            if (Array.isArray(cached.attendanceRecords)) setAttendanceRecords(cached.attendanceRecords);
+            if (Array.isArray(cached.pendingLeaves)) setPendingLeaves(cached.pendingLeaves);
+            if (Array.isArray(cached.pendingExpenses)) setPendingExpenses(cached.pendingExpenses);
+            if (Array.isArray(cached.allTasks)) setAllTasks(cached.allTasks);
+            if (Array.isArray(cached.allLeads)) setAllLeads(cached.allLeads);
+            if (cached.managerKm) setManagerKm(cached.managerKm);
+            if (hadCache) setLoading(false);
+          }
+        } catch (_) {}
+        if (!hadCache) setLoading(true);
+      }
 
       try {
         const storedDist = await storage.getItem('tracking_accumulated_distance');
@@ -340,35 +379,56 @@ export default function ManagerDashboardScreen() {
         adminAPI.getLeads().catch(() => ({ data: { success: false } })),
       ]);
 
+      const nextCache = {};
+
       if (empRes.data?.success) {
-        setTeamMembers(empRes.data.employees || empRes.data.data || []);
+        const list = empRes.data.employees || empRes.data.data || [];
+        setTeamMembers(list);
+        nextCache.teamMembers = list;
       }
       if (locRes.data?.success) {
-        setLiveLocations(locRes.data.locations || locRes.data.data || []);
+        const locs = locRes.data.locations || locRes.data.data || [];
+        setLiveLocations(locs);
+        nextCache.liveLocations = locs;
       }
       if (orgRes.data?.success && orgRes.data.organization) {
         setOrgData(orgRes.data.organization);
+        nextCache.orgData = orgRes.data.organization;
       }
       if (visitRes.data?.success) {
-        setRecentVisits(visitRes.data.meetings || visitRes.data.data || []);
+        const visits = visitRes.data.meetings || visitRes.data.data || [];
+        setRecentVisits(visits);
+        nextCache.recentVisits = visits.slice(0, 30);
       }
       if (attRes.data?.success) {
-        setAttendanceRecords(attRes.data.records || attRes.data.attendance || []);
+        const recs = attRes.data.records || attRes.data.attendance || [];
+        setAttendanceRecords(recs);
+        nextCache.attendanceRecords = recs;
       }
       if (leavesRes.data?.success && Array.isArray(leavesRes.data.leaves)) {
         setPendingLeaves(leavesRes.data.leaves);
+        nextCache.pendingLeaves = leavesRes.data.leaves.slice(0, 30);
       }
       if (expRes.data?.success && Array.isArray(expRes.data.expenses)) {
         setPendingExpenses(expRes.data.expenses);
+        nextCache.pendingExpenses = expRes.data.expenses.slice(0, 30);
       }
       if (tasksRes.data?.success && Array.isArray(tasksRes.data.tasks)) {
         setAllTasks(tasksRes.data.tasks);
+        nextCache.allTasks = tasksRes.data.tasks.slice(0, 30);
       }
       if (leadsRes.data?.success && Array.isArray(leadsRes.data.leads)) {
         setAllLeads(leadsRes.data.leads);
+        nextCache.allLeads = leadsRes.data.leads.slice(0, 30);
       }
       if (myStatsRes.data?.success && myStatsRes.data.stats) {
-        setManagerKm(parseFloat(myStatsRes.data.stats.distanceToday || 0).toFixed(2));
+        const kmStr = parseFloat(myStatsRes.data.stats.distanceToday || 0).toFixed(2);
+        setManagerKm(kmStr);
+        nextCache.managerKm = kmStr;
+      }
+
+      if (Object.keys(nextCache).length > 0) {
+        storage.setItem('cache_mgr_dashboard_v1', JSON.stringify({ ...nextCache, updatedAt: Date.now() })).catch(() => {});
       }
     } catch (e) {
       console.log('Manager dashboard fetch error:', e.message);
@@ -551,6 +611,7 @@ export default function ManagerDashboardScreen() {
               lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
               stationaryAnchorRef.current = { lat, lng };
               departureCandidateCountRef.current = 0;
+              isMovingRef.current = false;
               setIsMoving(false);
               setMotionStatusLabel('STATIONARY');
               setManagerSpeed('0');
@@ -576,7 +637,7 @@ export default function ManagerDashboardScreen() {
               const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
               const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
 
-              if (!isMoving) {
+              if (!isMovingRef.current) {
                 // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
                 const isInsideAnchor = distFromAnchorM < anchorThresholdM;
                 const isStationarySpeed = effectiveSpeedKmh < 4.5;
@@ -584,6 +645,7 @@ export default function ManagerDashboardScreen() {
                 if (isInsideAnchor || isStationarySpeed) {
                   // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setManagerSpeed('0');
@@ -599,12 +661,14 @@ export default function ManagerDashboardScreen() {
                   // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
                   departureCandidateCountRef.current += 1;
                   if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                    isMovingRef.current = false;
                     setIsMoving(false);
                     setMotionStatusLabel('STATIONARY');
                     setManagerSpeed('0');
                   } else {
                     // Confirmed physical departure! Manager has left the office and is traveling on road
                     departureCandidateCountRef.current = 0;
+                    isMovingRef.current = true;
                     setIsMoving(true);
                     setMotionStatusLabel('MOVING');
                     setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
@@ -627,6 +691,7 @@ export default function ManagerDashboardScreen() {
                 const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
                 if (hasHalted) {
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setManagerSpeed('0');
@@ -635,6 +700,7 @@ export default function ManagerDashboardScreen() {
                 } else {
                   // Legitimate road progress while moving
                   departureCandidateCountRef.current = 0;
+                  isMovingRef.current = true;
                   setIsMoving(true);
                   setMotionStatusLabel('MOVING');
                   setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
@@ -696,7 +762,7 @@ export default function ManagerDashboardScreen() {
       const fetchLiveCoords = async () => {
         try {
           const position = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.High,
           });
           if (position) {
             await handleCoordinateFix(position);
@@ -710,8 +776,8 @@ export default function ManagerDashboardScreen() {
       if (Platform.OS !== 'web') {
         Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 4000,
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
             distanceInterval: 8,
           },
           (pos) => {
@@ -722,11 +788,13 @@ export default function ManagerDashboardScreen() {
           console.log('📡 Manager Dashboard: Native hardware watchPositionAsync active! ✅');
         }).catch((err) => {
           console.log('⚠️ Manager Dashboard: watchPositionAsync fallback to polling:', err.message);
+          locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
         });
+        fetchLiveCoords();
+      } else {
+        fetchLiveCoords();
+        locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
       }
-
-      fetchLiveCoords();
-      locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
     } else {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       kalmanRef.current.reset();
@@ -1351,17 +1419,17 @@ export default function ManagerDashboardScreen() {
           </View>
         </Surface>
 
-        {/* ── LIVE TEAM FIELD LIST SNIPPET (Matching Mockup) ── */}
+        {/* ── ALL TEAM MEMBERS DIRECTORY ── */}
         <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Live Team Field Map</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/tracking')}>
-              <Text style={styles.viewLinkText}>View All →</Text>
+            <Text style={styles.sectionTitle}>All Team Members ({directoryStaff.length})</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
+              <Text style={styles.viewLinkText}>Manage Team →</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.dutyList}>
-            {directoryStaff.slice(0, 5).map((emp, idx) => (
+            {directoryStaff.map((emp, idx) => (
               <TouchableOpacity
                 key={emp._id || String(idx)}
                 style={styles.dutyRowItem}
@@ -1441,14 +1509,45 @@ export default function ManagerDashboardScreen() {
       </Surface>
 
       {/* ── SELFIE PREVIEW & CONFIRM MODAL ── */}
-      <Modal visible={selfieModalVisible} animationType="fade" transparent>
+      <Modal visible={selfieModalVisible} animationType="fade" transparent onRequestClose={() => setSelfieModalVisible(false)}>
         <View style={styles.selfieModalBackdrop}>
           <Surface style={styles.selfieModalCard} elevation={5}>
             <Text style={styles.selfieModalTitle}>Selfie Check-in Preview</Text>
             <Text style={styles.selfieModalSub}>Confirm your selfie to start your operational duty shift.</Text>
 
+            <View style={{ flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 10, padding: 3, marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
+                  selfieAspectMode === 'full' && { backgroundColor: '#ffffff', elevation: 1 }
+                ]}
+                onPress={() => setSelfieAspectMode('full')}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: selfieAspectMode === 'full' ? COLORS.primary : '#64748b' }}>
+                  Full Photo (3:4)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
+                  selfieAspectMode === 'half' && { backgroundColor: '#ffffff', elevation: 1 }
+                ]}
+                onPress={() => setSelfieAspectMode('half')}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: selfieAspectMode === 'half' ? COLORS.primary : '#64748b' }}>
+                  Half Photo (1:1)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {pendingSelfieUri && (
-              <Image source={{ uri: pendingSelfieUri }} style={styles.selfiePreviewImg} resizeMode="cover" />
+              <Image
+                source={{ uri: pendingSelfieUri }}
+                style={[styles.selfiePreviewImg, { height: selfieAspectMode === 'full' ? 220 : 165 }]}
+                resizeMode="cover"
+              />
             )}
 
             <View style={styles.selfieMetaBox}>
@@ -1463,6 +1562,7 @@ export default function ManagerDashboardScreen() {
                   setSelfieModalVisible(false);
                   capturePunchInSelfie();
                 }}
+                disabled={submittingPunchIn}
                 activeOpacity={0.75}
               >
                 <Text style={styles.retakeBtnText}>Retake</Text>

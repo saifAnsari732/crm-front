@@ -41,6 +41,7 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
 import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl, compressImageWeb } from "../../services/api";
+import { storage } from "../../services/storage";
 
 const { width } = Dimensions.get("window");
 
@@ -89,8 +90,12 @@ export default function EmployeeDashboardScreen() {
 
   const fetchNotifications = async () => {
     try {
+      const [tasksRes, leadsRes] = await Promise.all([
+        taskApi.getMy().catch(() => ({ data: { success: false } })),
+        leadAPI.getAll().catch(() => ({ data: { success: false } })),
+      ]);
+
       const items = [];
-      const tasksRes = await taskApi.getMy();
       if (tasksRes.data && tasksRes.data.success) {
         const activeTasks = (tasksRes.data.tasks || []).filter(t => t.status !== 'completed');
         activeTasks.forEach(t => {
@@ -103,7 +108,6 @@ export default function EmployeeDashboardScreen() {
           });
         });
       }
-      const leadsRes = await leadAPI.getAll();
       if (leadsRes.data && leadsRes.data.success) {
         const activeLeads = (leadsRes.data.leads || []).filter(l => l.status !== 'completed');
         activeLeads.forEach(l => {
@@ -128,21 +132,52 @@ export default function EmployeeDashboardScreen() {
     const date = new Date();
     const options = { weekday: "long", month: "short", day: "numeric" };
     setCurrentDate(date.toLocaleDateString("en-US", options).toUpperCase());
+
+    // Instant 0ms render from local cache (Stale-While-Revalidate)
+    storage.getItem('cache_emp_dashboard_v1').then((raw) => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.stats) setStats(parsed.stats);
+          if (Array.isArray(parsed.recentMeetings)) setRecentMeetings(parsed.recentMeetings);
+          if (Array.isArray(parsed.recentExpenses)) setRecentExpenses(parsed.recentExpenses);
+        } catch (_) {}
+      }
+    }).catch(() => {});
   }, []);
 
   const loadDashboardData = async () => {
     try {
-      const statsRes = await dashboardApi.getStats();
+      const [statsRes, meetingsRes, expensesRes] = await Promise.all([
+        dashboardApi.getStats().catch(() => ({ data: { success: false } })),
+        meetingApi.getMy().catch(() => ({ data: { success: false } })),
+        expenseApi.getMy().catch(() => ({ data: { success: false } })),
+      ]);
+
+      let nextStats = null;
+      let nextMeetings = null;
+      let nextExpenses = null;
+
       if (statsRes.data && statsRes.data.success) {
-        setStats(statsRes.data.stats);
+        nextStats = statsRes.data.stats;
+        setStats(nextStats);
       }
-      const meetingsRes = await meetingApi.getMy();
       if (meetingsRes.data && meetingsRes.data.success) {
-        setRecentMeetings(meetingsRes.data.meetings || []);
+        nextMeetings = meetingsRes.data.meetings || [];
+        setRecentMeetings(nextMeetings);
       }
-      const expensesRes = await expenseApi.getMy();
       if (expensesRes.data && expensesRes.data.success) {
-        setRecentExpenses(expensesRes.data.expenses || []);
+        nextExpenses = expensesRes.data.expenses || [];
+        setRecentExpenses(nextExpenses);
+      }
+
+      if (nextStats || nextMeetings || nextExpenses) {
+        storage.setItem('cache_emp_dashboard_v1', JSON.stringify({
+          stats: nextStats || stats,
+          recentMeetings: (nextMeetings || recentMeetings).slice(0, 10),
+          recentExpenses: (nextExpenses || recentExpenses).slice(0, 10),
+          updatedAt: Date.now()
+        })).catch(() => {});
       }
     } catch (err) {}
   };
@@ -154,8 +189,7 @@ export default function EmployeeDashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadDashboardData();
-    await fetchNotifications();
+    await Promise.all([loadDashboardData(), fetchNotifications()]);
     setRefreshing(false);
   };
 
@@ -214,18 +248,38 @@ export default function EmployeeDashboardScreen() {
         return;
       }
 
-      setIsUploadingSelfie(true);
+      // Request permissions BEFORE setting uploading state so permission modals are never blocked
       const hasAllPermissions = await requestPermissions();
       if (!hasAllPermissions) {
         setIsUploadingSelfie(false);
         return;
       }
 
-      const photoResult = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
-        cameraType: ImagePicker.CameraType?.front || 'front',
-      });
+      if (Platform.OS !== 'web') {
+        const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+        if (cameraStatus !== 'granted') {
+          Alert.alert("Camera Permission Required", "Camera permission is required to capture your punch-in selfie.");
+          setIsUploadingSelfie(false);
+          return;
+        }
+      }
+
+      setIsUploadingSelfie(true);
+
+      let photoResult;
+      try {
+        photoResult = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+          cameraType: ImagePicker.CameraType?.front || 'front',
+        });
+      } catch (camErr) {
+        console.log('Front camera launch fallback:', camErr.message);
+        photoResult = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      }
 
       if (photoResult.canceled || !photoResult.assets?.length) {
         Alert.alert("Shift Not Started", "Selfie check-in is mandatory to punch in.");
@@ -646,16 +700,6 @@ export default function EmployeeDashboardScreen() {
 
         </View>
       </ScrollView>
-
-      <Modal visible={isUploadingSelfie} transparent animationType="fade" onRequestClose={() => null}>
-        <View style={styles.uploadOverlay}>
-          <View style={styles.uploadLoaderCard}>
-            <ActivityIndicator size="large" color="#0a3d3c" />
-            <Text style={styles.uploadLoaderTitle}>Uploading selfie</Text>
-            <Text style={styles.uploadLoaderText}>Please wait while your punch-in image is being uploaded.</Text>
-          </View>
-        </View>
-      </Modal>
 
       {/* Slide sidebar navigation Drawer Modal */}
       <Modal

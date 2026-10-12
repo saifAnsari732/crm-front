@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { Platform, PermissionsAndroid, DeviceEventEmitter, Alert, AppState, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -61,11 +62,33 @@ const haversineMeters = (lat1, lon1, lat2, lon2) => {
 
 let _globalWatchdogInterval = null;
 let _watchdogSubscribers = 0;
+let _globalIsTracking = false;
 
 export default function useLocationTracker() {
-  const [isTracking, setIsTracking] = useState(false);
+  const [isTracking, setIsTracking] = useState(_globalIsTracking);
   const [permissionStatus, setPermissionStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const syncGlobalTrackingState = (nextState) => {
+    const boolVal = Boolean(nextState);
+    _globalIsTracking = boolVal;
+    setIsTracking(boolVal);
+    DeviceEventEmitter.emit('TrackingStateChanged', boolVal);
+  };
+
+  // Re-sync tracking state immediately whenever screen/tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      storage.getItem('currentTrackingSessionId').then((sid) => {
+        const active = Boolean(sid);
+        if (_globalIsTracking !== active) {
+          _globalIsTracking = active;
+          DeviceEventEmitter.emit('TrackingStateChanged', active);
+        }
+        setIsTracking(active);
+      }).catch(() => {});
+    }, [])
+  );
 
   // Sync active tracking state and launch Immortal Background Watchdog
   useEffect(() => {
@@ -77,7 +100,9 @@ export default function useLocationTracker() {
     
     // Listen for global tracking state changes (syncs across multiple hook instances)
     const subscription = DeviceEventEmitter.addListener('TrackingStateChanged', (newState) => {
-      setIsTracking(newState);
+      const boolVal = Boolean(newState);
+      _globalIsTracking = boolVal;
+      setIsTracking(boolVal);
     });
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
@@ -99,6 +124,10 @@ export default function useLocationTracker() {
         try {
           const sessionId = await storage.getItem('currentTrackingSessionId');
           if (sessionId) {
+            if (!_globalIsTracking) {
+              _globalIsTracking = true;
+              DeviceEventEmitter.emit('TrackingStateChanged', true);
+            }
             const health = await detectTrackingFailure();
             if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
               console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
@@ -123,13 +152,6 @@ export default function useLocationTracker() {
 
   const checkActiveSession = async () => {
     try {
-      const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
-      if (manuallyPunchedOut === 'true') {
-        console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out. Auto-start/auto-heal disabled.');
-        setIsTracking(false);
-        return;
-      }
-
       let activeSession = await storage.getItem('currentTrackingSessionId');
 
       // Stale Multi-Day Session Purge: If local session belongs to a past date, purge it
@@ -152,6 +174,21 @@ export default function useLocationTracker() {
         }
       }
 
+      // If an active session exists locally for today, clear any stale manual punch-out lock
+      // so all screens (Dashboard + Tracking Screen) stay 100% synchronized as ON!
+      if (activeSession) {
+        await storage.removeItem('user_manually_punched_out');
+        await storage.setItem('isTrackingActive', 'true');
+        syncGlobalTrackingState(true);
+      } else {
+        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+        if (manuallyPunchedOut === 'true') {
+          console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out. Auto-start/auto-heal disabled.');
+          syncGlobalTrackingState(false);
+          return;
+        }
+      }
+
       // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
       // If local storage was cleared or phone rebooted, verify with server if today's shift is active
       if (!activeSession && Platform.OS !== 'web') {
@@ -163,12 +200,15 @@ export default function useLocationTracker() {
               const liveTodaySession = todayRes.data.sessions.find((s) => s.isActive === true);
               if (liveTodaySession && liveTodaySession.sessionId) {
                 console.log('🛡️ [AUTO_HEAL] Active shift found on server. Auto-starting local tracking:', liveTodaySession.sessionId);
+                await storage.removeItem('user_manually_punched_out');
+                await storage.setItem('isTrackingActive', 'true');
                 await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
                 await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
                 await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
                 const serverDist = (Number(liveTodaySession.totalDistance) || 0).toFixed(2);
                 await storage.setItem('tracking_accumulated_distance', serverDist);
                 activeSession = liveTodaySession.sessionId;
+                syncGlobalTrackingState(true);
               }
             }
           }
@@ -178,7 +218,7 @@ export default function useLocationTracker() {
       }
 
       if (!activeSession) {
-        setIsTracking(false);
+        syncGlobalTrackingState(false);
         // ─── 5-MINUTE CONTINUOUS TRAVEL MOTION AUTO-START ENGINE ─────────────
         // If employee forgot to punch in, monitor for 5 continuous minutes of travel.
         // Captures minute-0 start anchor so 0% distance from the 5-minute trip is lost!
@@ -310,7 +350,7 @@ export default function useLocationTracker() {
       }
 
       if (Platform.OS === 'web') {
-        setIsTracking(true);
+        syncGlobalTrackingState(true);
         return;
       }
       
@@ -324,7 +364,7 @@ export default function useLocationTracker() {
       }
 
       if (isExpoGo) {
-        setIsTracking(true);
+        syncGlobalTrackingState(true);
         return;
       }
 
@@ -367,7 +407,7 @@ export default function useLocationTracker() {
           }).catch(() => {});
       }
 
-      setIsTracking(true);
+      syncGlobalTrackingState(true);
     } catch (e) {
       console.error('📍 useLocationTracker: Session check failed:', e);
     }
@@ -552,7 +592,13 @@ export default function useLocationTracker() {
    * Start GPS Background Tracking session
    */
   const startTracking = async (selfieUrl = '', isAutoStart = false, initialStartCoords = null) => {
-    if (isTracking) return { success: true, message: 'Already tracking.' };
+    if (isTracking || _globalIsTracking) {
+      const existingSession = await storage.getItem('currentTrackingSessionId');
+      if (existingSession) {
+        syncGlobalTrackingState(true);
+        return { success: true, message: 'Already tracking.' };
+      }
+    }
 
     try {
       setLoading(true);
@@ -651,7 +697,10 @@ export default function useLocationTracker() {
 
       const sessionId = session.sessionId;
 
-      // 2. Cache session details locally
+      // 2. Cache session details locally & clear manual punch-out lock
+      await storage.removeItem('user_manually_punched_out');
+      await storage.setItem('isTrackingActive', 'true');
+
       // Anchor this shift at initial start location if motion auto-started,
       // preserving distance from the initial detection point.
       const anchorLat = (initialStartCoords && Number.isFinite(Number(initialStartCoords.lat))) ? Number(initialStartCoords.lat) : latitude;
@@ -771,8 +820,7 @@ export default function useLocationTracker() {
         }
       }
 
-      setIsTracking(true);
-      DeviceEventEmitter.emit('TrackingStateChanged', true);
+      syncGlobalTrackingState(true);
       // Start heartbeat to keep server session alive even when stationary
       startHeartbeat(sessionId);
       console.log('📍 useLocationTracker: Background tracking started successfully!');
@@ -810,6 +858,7 @@ export default function useLocationTracker() {
       
       // Lock manual punch out so auto-start/auto-heal engines never resurrect this shift
       await storage.setItem('user_manually_punched_out', 'true');
+      await storage.setItem('isTrackingActive', 'false');
       const sessionId = await storage.getItem('currentTrackingSessionId');
       
       // Always purge current session keys immediately from local storage
@@ -829,7 +878,8 @@ export default function useLocationTracker() {
             }
           } catch (_) {}
         }
-        setIsTracking(false);
+        stopHeartbeat();
+        syncGlobalTrackingState(false);
         return { success: true };
       }
 
@@ -939,8 +989,7 @@ export default function useLocationTracker() {
       // Stop heartbeat timer
       stopHeartbeat();
 
-      setIsTracking(false);
-      DeviceEventEmitter.emit('TrackingStateChanged', false);
+      syncGlobalTrackingState(false);
       console.log('📍 useLocationTracker: Background tracking stopped. Distance:', totalDistance, 'km');
 
       /* === NATIVE PUSH NOTIFICATIONS FOR APK === */
@@ -973,8 +1022,7 @@ export default function useLocationTracker() {
           await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
         } catch {}
       }
-      setIsTracking(false);
-      DeviceEventEmitter.emit('TrackingStateChanged', false);
+      syncGlobalTrackingState(false);
 
       return { success: false, error: error.response?.data?.message || error.message };
     } finally {
@@ -989,6 +1037,7 @@ export default function useLocationTracker() {
     requestPermissions,
     startTracking,
     stopTracking,
+    checkActiveSession,
     checkSessionRecovery,
   };
 }
