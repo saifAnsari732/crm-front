@@ -345,6 +345,21 @@ const processLocation = async (location) => {
       );
 
       if (response.data?.success) {
+        if (response.data?.sessionClosed === true) {
+          console.log(`🛑 [SESSION_CLOSED] BackgroundTask: Session ${sessionId} was ended on server. Halting.`);
+          const currentActive = await storage.getItem('currentTrackingSessionId');
+          if (currentActive === sessionId) {
+            stopHeartbeat();
+            await storage.removeItem('currentTrackingSessionId');
+            await storage.setItem('isTrackingActive', 'false');
+            await storage.setItem('user_manually_punched_out', 'true');
+            if (Platform.OS !== 'web' && !isExpoGo) {
+              Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+            }
+          }
+          return;
+        }
+
         const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
         const authoritativeDist = Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist;

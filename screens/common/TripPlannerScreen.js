@@ -12,6 +12,7 @@ import {
   Dimensions,
   RefreshControl,
   KeyboardAvoidingView,
+  AppState,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -55,6 +56,10 @@ import { useAuth } from '../../context/AuthContext';
 import useLocationTracker from '../../hooks/useLocationTracker';
 import TripMapView from '../../components/TripMapView';
 import { storage } from '../../services/storage';
+import {
+  startTripBackgroundTracking,
+  stopTripBackgroundTracking,
+} from '../../services/tripPlannerBackground';
 
 const { width, height } = Dimensions.get('window');
 
@@ -105,6 +110,9 @@ export default function TripPlannerScreen() {
   const [successModal, setSuccessModal] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showEarlyClaimModal, setShowEarlyClaimModal] = useState(false);
+  const [showArrivalModal, setShowArrivalModal] = useState(false);
+  const [isArrivedWithin500m, setIsArrivedWithin500m] = useState(false);
+  const hasNotifiedArrivalRef = useRef(false);
 
   // Dynamic Odometer & Movement State (persisted & updated on every meter traveled)
   const [traveledKm, setTraveledKm] = useState(0);
@@ -127,23 +135,24 @@ export default function TripPlannerScreen() {
 
   const searchTimeoutRef = useRef(null);
 
-  // ── DYNAMIC DISTANCE TELEMETRY (STRICT ACTUAL PHYSICAL MOVEMENT) ──
+  // ── DYNAMIC DISTANCE TELEMETRY (REAL-TIME ARRIVAL & ROAD PROGRESS) ──
   const distanceToDestMeters = (currentGps && destination && Number.isFinite(currentGps.lat) && Number.isFinite(destination.lat))
     ? haversineMeters(currentGps.lat, currentGps.lng, destination.lat, destination.lng)
     : null;
 
-  const isWithin500m = distanceToDestMeters !== null && distanceToDestMeters <= 500;
-
-  // Ground Truth: Did employee actually complete the journey to destination?
-  // Requires: Arrived within 500m AND actually physically moved >= 80% of planned distance
-  const hasCompletedFullJourney = Boolean(
-    isWithin500m &&
-    routeData?.distanceKm &&
-    (traveledKm >= routeData.distanceKm * 0.80)
+  // 500M Arrival Rule: When employee reaches within 500m radius of destination (or background task confirms 500m arrival)
+  const isWithin500m = Boolean(
+    isArrivedWithin500m ||
+    (distanceToDestMeters !== null && distanceToDestMeters <= 500)
   );
 
+  // Ground Truth: Did employee reach destination?
+  // Full claim is ONLY AND STRICTLY granted when employee is within 500m radius of destination (near destination)!
+  // If NOT within 500m radius, employee gets ONLY the distance physically moved (traveledKm), NEVER full claim!
+  const hasCompletedFullJourney = Boolean(routeData?.distanceKm && isWithin500m);
+
   // Authoritative Effective Traveled KM:
-  // Strictly credits the physical distance moved! If they completed the full journey, full route distance is credited.
+  // If destination reached (<= 500m), full planned route distance is credited! Otherwise actual moved KM.
   const effectiveTraveledKm = hasCompletedFullJourney
     ? routeData.distanceKm
     : Math.min(
@@ -151,18 +160,20 @@ export default function TripPlannerScreen() {
         Math.round(traveledKm * 100) / 100
       );
 
-  // Remaining Road KM: accurately decreases in real-time as user moves
-  const remainingRoadKm = routeData?.distanceKm
-    ? Math.max(0, Math.round((routeData.distanceKm - effectiveTraveledKm) * 100) / 100)
-    : 0;
+  // Remaining Road KM: shows real remaining GPS distance to destination, not broken subtraction
+  const remainingRoadKm = hasCompletedFullJourney
+    ? 0
+    : distanceToDestMeters !== null
+    ? Math.round((distanceToDestMeters / 1000) * 10) / 10
+    : (routeData?.distanceKm ? Math.max(0, Math.round((routeData.distanceKm - traveledKm) * 10) / 10) : 0);
 
   const ratePerKm = Number(user?.TA || user?.travelRate || 2.50);
   const claimAmount = Math.round(effectiveTraveledKm * ratePerKm * 100) / 100;
 
-  // Formatted human-readable moved distance (shows meters for small movement < 1 KM)
+  // Formatted human-readable moved distance (shows actual physical meters moved)
   const formattedMovedDistance = traveledMeters >= 1000
-    ? `${effectiveTraveledKm} KM`
-    : `${traveledMeters}m (${effectiveTraveledKm} KM)`;
+    ? `${traveledKm} KM`
+    : `${traveledMeters}m (${traveledKm} KM)`;
 
   // 1. Initialise & Restore Trip Across App Close / Kill / Restart
   useEffect(() => {
@@ -223,6 +234,11 @@ export default function TripPlannerScreen() {
                 actualTrailRef.current = JSON.parse(savedTrailStr) || [];
               } catch (_) {}
             }
+            const savedIsWithin500m = await storage.getItem('active_trip_planner_is_within_500m');
+            if (savedIsWithin500m === 'true' && isMounted) {
+              setIsArrivedWithin500m(true);
+              setShowArrivalModal(true);
+            }
           }
 
           if (savedRouteStr && isMounted) {
@@ -260,7 +276,7 @@ export default function TripPlannerScreen() {
         }
 
         const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.High,
         });
 
         const lat = loc.coords.latitude;
@@ -418,8 +434,6 @@ export default function TripPlannerScreen() {
   }, []);
 
   // 1B. Continuous GPS Auto-Sensing when Trip is In Progress (Updates live location & traveled distance)
-  const hasNotifiedArrivalRef = useRef(false);
-
   useEffect(() => {
     let isMounted = true;
     let pollInterval = null;
@@ -578,25 +592,64 @@ export default function TripPlannerScreen() {
     };
   }, [tripStatus, destination]);
 
-  // 1C. Auto-Arrival Trigger: Alerts user as soon as GPS auto-senses <= 500m
+  // 1C. Auto-Arrival Trigger: Automatically pops up the 500m Claim PopUp Box as soon as employee enters 500m radius
   useEffect(() => {
-    if (tripStatus === 'IN_PROGRESS' && isWithin500m && !hasNotifiedArrivalRef.current) {
-      hasNotifiedArrivalRef.current = true;
-      if (hasCompletedFullJourney) {
-        Alert.alert(
-          '🎯 Destination Reached!',
-          `Aap destination pahunch chuke hain aur puri trip travel kar li hai! Full trip (${routeData?.distanceKm} KM) claim active ho gaya hai.`
-        );
-      } else {
-        Alert.alert(
-          '📍 Near Destination',
-          `Aap destination ke 500 meter pass hain. Aapne abhi tak ${traveledKm} KM move kiya hai. Aap ye moved distance claim kar sakte hain.`
-        );
+    if (tripStatus === 'IN_PROGRESS' && isWithin500m) {
+      setIsArrivedWithin500m(true);
+      storage.setItem('active_trip_planner_is_within_500m', 'true').catch(() => {});
+      if (!hasNotifiedArrivalRef.current) {
+        hasNotifiedArrivalRef.current = true;
+        setShowArrivalModal(true);
       }
     } else if (!isWithin500m) {
       hasNotifiedArrivalRef.current = false;
     }
-  }, [tripStatus, isWithin500m, hasCompletedFullJourney, traveledKm, routeData]);
+  }, [tripStatus, isWithin500m]);
+
+  // 1D. AppState Listener: Resumes state & syncs traveled distance when app returns from background / display unlocked
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState) => {
+      if (nextAppState === 'active' && tripStatus === 'IN_PROGRESS') {
+        try {
+          // 1. Sync traveled meters accumulated by background task while display was off
+          const savedTraveledM = await storage.getItem('active_trip_planner_traveled_m');
+          if (savedTraveledM) {
+            const parsedM = parseFloat(savedTraveledM) || 0;
+            if (parsedM > accumulatedTraveledMetersRef.current) {
+              accumulatedTraveledMetersRef.current = parsedM;
+              setTraveledMeters(Math.round(parsedM));
+              setTraveledKm(Math.round((parsedM / 1000) * 100) / 100);
+            }
+          }
+
+          // 2. Sync last location from background task
+          const lastLocStr = await storage.getItem('active_trip_planner_last_loc');
+          if (lastLocStr) {
+            try {
+              const parsedLoc = JSON.parse(lastLocStr);
+              if (parsedLoc?.lat && parsedLoc?.lng) {
+                setCurrentGps({ lat: parsedLoc.lat, lng: parsedLoc.lng });
+              }
+            } catch (_) {}
+          }
+
+          // 3. Check 500m arrival flag set by background task
+          const savedIsWithin500m = await storage.getItem('active_trip_planner_is_within_500m');
+          if (savedIsWithin500m === 'true') {
+            setIsArrivedWithin500m(true);
+            setShowArrivalModal(true);
+          }
+        } catch (err) {
+          console.warn('TripPlanner AppState sync notice:', err.message);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [tripStatus]);
 
   // 2. Full State Persistence: Save only when an active trip is in-progress or planned route exists
   useEffect(() => {
@@ -800,21 +853,43 @@ export default function TripPlannerScreen() {
     }
   };
 
-  // 7. Reset to Current GPS Position
+  // 7. Reset to Current GPS Position (Fetches fresh high-accuracy fix and resolves full real address)
   const handleUseCurrentGps = async () => {
-    if (!currentGps) {
-      Alert.alert('GPS unavailable', 'Fetching your current coordinates...');
-      return;
-    }
-    const addr = await reverseGeocodeLocation(currentGps.lat, currentGps.lng);
-    const newOrigin = { lat: currentGps.lat, lng: currentGps.lng, address: addr };
-    setOrigin(newOrigin);
-    setOriginText(addr);
-    setPredictions([]);
-    setSearchingField(null);
+    try {
+      setIsRefreshingGps(true);
+      let lat = currentGps?.lat;
+      let lng = currentGps?.lng;
 
-    if (destination) {
-      requestRoute(newOrigin, destination);
+      try {
+        const freshLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        if (freshLoc?.coords) {
+          lat = freshLoc.coords.latitude;
+          lng = freshLoc.coords.longitude;
+          setCurrentGps({ lat, lng });
+        }
+      } catch (_) {}
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        Alert.alert('GPS Unavailable', 'Could not detect current GPS coordinates. Please check location permissions.');
+        return;
+      }
+
+      const addr = await reverseGeocodeLocation(lat, lng);
+      const newOrigin = { lat, lng, address: addr };
+      setOrigin(newOrigin);
+      setOriginText(addr);
+      setPredictions([]);
+      setSearchingField(null);
+
+      if (destination) {
+        requestRoute(newOrigin, destination);
+      }
+    } catch (err) {
+      console.warn('handleUseCurrentGps error:', err);
+    } finally {
+      setIsRefreshingGps(false);
     }
   };
 
@@ -915,6 +990,8 @@ export default function TripPlannerScreen() {
     setGpsAccuracy(null);
 
     setTripStatus('IN_PROGRESS');
+    setIsArrivedWithin500m(false);
+    hasNotifiedArrivalRef.current = false;
     await storage.setItem('active_trip_planner_status', 'IN_PROGRESS');
     await storage.setItem('active_trip_planner_started_at', new Date().toISOString());
     await storage.setItem('active_trip_planner_origin', JSON.stringify(origin));
@@ -925,6 +1002,22 @@ export default function TripPlannerScreen() {
     await storage.setItem('active_trip_planner_traveled_m', '0');
     await storage.setItem('active_trip_planner_trail', JSON.stringify(actualTrailRef.current));
     await storage.setItem('active_trip_planner_is_active', 'true');
+    await storage.setItem('active_trip_planner_is_within_500m', 'false');
+    await storage.setItem('active_trip_planner_notified_500m', 'false');
+    if (anchorGps) {
+      await storage.setItem('active_trip_planner_last_loc', JSON.stringify({
+        lat: anchorGps.lat,
+        lng: anchorGps.lng,
+        timestamp: Date.now(),
+      }));
+    }
+
+    // Launch Android Sticky Foreground Service for display-off background GPS tracking
+    try {
+      await startTripBackgroundTracking(destination);
+    } catch (bgErr) {
+      console.warn('Failed to start trip background tracking service:', bgErr);
+    }
 
     Alert.alert(
       '🚗 Trip Started!',
@@ -949,8 +1042,15 @@ export default function TripPlannerScreen() {
         locationWatcherRef.current = null;
       }
 
+      // Stop background tracking service
+      try {
+        await stopTripBackgroundTracking();
+      } catch (_) {}
+
       // 100% full React state reset
       setTripStatus('PLANNING');
+      setIsArrivedWithin500m(false);
+      hasNotifiedArrivalRef.current = false;
       setOrigin(null);
       setOriginText('');
       setDestination(null);
@@ -983,6 +1083,9 @@ export default function TripPlannerScreen() {
       await storage.removeItem('active_trip_planner_client');
       await storage.removeItem('active_trip_planner_traveled_m');
       await storage.removeItem('active_trip_planner_trail');
+      await storage.removeItem('active_trip_planner_is_within_500m');
+      await storage.removeItem('active_trip_planner_notified_500m');
+      await storage.removeItem('active_trip_planner_last_loc');
 
       // Navigate to Home screen
       const roleUpper = user?.role ? String(user.role).toUpperCase() : '';
@@ -1141,6 +1244,7 @@ export default function TripPlannerScreen() {
     try {
       setIsSubmitting(true);
       setShowEarlyClaimModal(false);
+      setShowArrivalModal(false);
 
       const payload = {
         origin,
@@ -1165,8 +1269,15 @@ export default function TripPlannerScreen() {
             destination: destination.address,
           });
 
+          // Stop background tracking service
+          try {
+            await stopTripBackgroundTracking();
+          } catch (_) {}
+
           // Reset planner fields & clear storage draft
           setTripStatus('PLANNING');
+          setIsArrivedWithin500m(false);
+          hasNotifiedArrivalRef.current = false;
           setDestination(null);
           setDestText('');
           setRouteData(null);
@@ -1191,6 +1302,9 @@ export default function TripPlannerScreen() {
           await storage.removeItem('active_trip_planner_traveled_m');
           await storage.removeItem('active_trip_planner_trail');
           await storage.removeItem('active_trip_planner_is_active');
+          await storage.removeItem('active_trip_planner_is_within_500m');
+          await storage.removeItem('active_trip_planner_notified_500m');
+          await storage.removeItem('active_trip_planner_last_loc');
           return;
         }
       } catch (apiErr) {
@@ -1229,8 +1343,15 @@ export default function TripPlannerScreen() {
         destination: destination.address,
       });
 
+      // Stop background tracking service
+      try {
+        await stopTripBackgroundTracking();
+      } catch (_) {}
+
       // Reset planner fields & clear active draft
       setTripStatus('PLANNING');
+      setIsArrivedWithin500m(false);
+      hasNotifiedArrivalRef.current = false;
       setDestination(null);
       setDestText('');
       setRouteData(null);
@@ -1255,6 +1376,9 @@ export default function TripPlannerScreen() {
       await storage.removeItem('active_trip_planner_traveled_m');
       await storage.removeItem('active_trip_planner_trail');
       await storage.removeItem('active_trip_planner_is_active');
+      await storage.removeItem('active_trip_planner_is_within_500m');
+      await storage.removeItem('active_trip_planner_notified_500m');
+      await storage.removeItem('active_trip_planner_last_loc');
     } catch (err) {
       console.warn('Trip confirmation fallback notice:', err.message);
       Alert.alert('Save Error', 'Could not save trip claim.');
@@ -1290,8 +1414,7 @@ export default function TripPlannerScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Trip Route Planner</Text>
-          <Text style={styles.headerSubtitle}>Road Distance & Travel Allowance</Text>
+          <Text style={styles.headerTitle}>Trip Planner</Text>
         </View>
 
         <TouchableOpacity
@@ -1315,193 +1438,181 @@ export default function TripPlannerScreen() {
       {activeTab === 'planner' ? (
         <View style={styles.plannerWrapper}>
           {/* 1. TOP FLOATING ROUTE INPUT CARD (Uber/Rapido style) */}
-          <Surface style={styles.routeCard} elevation={4}>
-            {/* MUTUAL EXCLUSION WARNING BANNER */}
-            {isTracking && (
-              <View style={styles.trackingActiveBanner}>
-                <AlertCircle size={15} color="#d97706" style={{ marginRight: 6 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.trackingActiveBannerTitle}>
-                    Live GPS Tracking Active (Punched In)
+          <Surface style={[styles.routeCard, tripStatus === 'IN_PROGRESS' && styles.routeCardCompact]} elevation={4}>
+            {tripStatus === 'IN_PROGRESS' ? (
+              <View style={styles.inProgressCompactCard}>
+                <View style={styles.inProgressCompactRoute}>
+                  <View style={styles.inProgressDotOrigin} />
+                  <Text style={styles.inProgressTextOrigin} numberOfLines={1}>
+                    {origin?.address || originText || 'Start'}
                   </Text>
-                  <Text style={styles.trackingActiveBannerSub}>
-                    Punch Out first to claim via Trip Route Planner.
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* ACTIVE TRIP IN-PROGRESS BANNER */}
-            {tripStatus === 'IN_PROGRESS' && (
-              <View style={styles.inProgressActiveBanner}>
-                <View style={styles.livePulseDot} />
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={styles.inProgressActiveTitle}>
-                    Trip In Progress to Destination
-                  </Text>
-                  <Text style={styles.inProgressActiveSub} numberOfLines={1}>
-                    {destination?.address || 'Destination'}
+                  <ArrowRight size={13} color="#64748b" style={{ marginHorizontal: 6 }} />
+                  <View style={styles.inProgressDotDest} />
+                  <Text style={styles.inProgressTextDest} numberOfLines={1}>
+                    {destination?.address || destText || 'Destination'}
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.headerCancelTripBtn}
+                  style={styles.compactCancelBtn}
                   onPress={handleCancelTrip}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.headerCancelTripText}>Cancel</Text>
+                  <Text style={styles.compactCancelText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
-            )}
-
-            <View style={styles.routeInputsStack}>
-              {/* PICKUP / ORIGIN INPUT (Point A) */}
-              <View style={[styles.inputBox, searchingField === 'origin' && styles.inputBoxActive]}>
-                <View style={styles.originIconBadge}>
-                  <View style={styles.originDotInner} />
-                </View>
-                <TextInput
-                  style={[styles.locationInput, tripStatus === 'IN_PROGRESS' && { color: '#64748b' }]}
-                  placeholder="Where from? (Pickup point)"
-                  placeholderTextColor="#94a3b8"
-                  value={originText}
-                  editable={tripStatus !== 'IN_PROGRESS'}
-                  onChangeText={(txt) => handleTextChange(txt, 'origin')}
-                  onFocus={() => {
-                    if (tripStatus === 'IN_PROGRESS') {
-                      Alert.alert('Trip In Progress', 'Trip chal raha hai. Destination badalne ke liye pahle trip Cancel karein.');
-                    } else {
-                      handleFocusField('origin');
-                    }
-                  }}
-                />
-                {tripStatus === 'IN_PROGRESS' ? null : originText ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setOriginText('');
-                      setOrigin(null);
-                      setPredictions([]);
-                    }}
-                    style={styles.fieldClearBtn}
-                  >
-                    <X size={14} color="#64748b" />
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity onPress={handleUseCurrentGps} style={styles.gpsChipBtn}>
-                    <Navigation size={11} color="#059669" />
-                    <Text style={styles.gpsChipText}>GPS</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Floating Swap Divider */}
-              <View style={styles.swapDividerRow}>
-                <View style={styles.swapDashLine} />
-                <TouchableOpacity
-                  style={[styles.swapBtnFloat, tripStatus === 'IN_PROGRESS' && { opacity: 0.4 }]}
-                  onPress={tripStatus === 'IN_PROGRESS' ? undefined : handleSwap}
-                  activeOpacity={0.7}
-                  disabled={tripStatus === 'IN_PROGRESS'}
-                >
-                  <ArrowUpDown size={13} color="#2563eb" />
-                </TouchableOpacity>
-                <View style={styles.swapDashLine} />
-              </View>
-
-              {/* DESTINATION INPUT (Point B) */}
-              <View style={[styles.inputBox, searchingField === 'dest' && styles.inputBoxActive]}>
-                <View style={styles.destIconBadge}>
-                  <View style={styles.destSquareInner} />
-                </View>
-                <TextInput
-                  style={[styles.locationInput, tripStatus === 'IN_PROGRESS' && { color: '#64748b' }]}
-                  placeholder="Where to? (Destination / Meeting point)"
-                  placeholderTextColor="#94a3b8"
-                  value={destText}
-                  editable={tripStatus !== 'IN_PROGRESS'}
-                  onChangeText={(txt) => handleTextChange(txt, 'dest')}
-                  onFocus={() => {
-                    if (tripStatus === 'IN_PROGRESS') {
-                      Alert.alert('Trip In Progress', 'Trip chal raha hai. Naya destination chunne ke liye pahle trip Cancel karein.');
-                    } else {
-                      handleFocusField('dest');
-                    }
-                  }}
-                />
-                {tripStatus === 'IN_PROGRESS' ? null : destText ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDestText('');
-                      setDestination(null);
-                      setRouteData(null);
-                      setPredictions([]);
-                      storage.removeItem('active_trip_planner_destination').catch(() => {});
-                      storage.removeItem('active_trip_planner_route').catch(() => {});
-                      storage.removeItem('active_trip_planner_is_active').catch(() => {});
-                    }}
-                    style={styles.fieldClearBtn}
-                  >
-                    <X size={14} color="#64748b" />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Quick GPS helper bar */}
-            <View style={styles.subStatusBar}>
-              <TouchableOpacity
-                style={styles.reAnchorLink}
-                onPress={handleUseCurrentGps}
-                activeOpacity={0.7}
-              >
-                <Navigation size={12} color="#059669" />
-                <Text style={styles.reAnchorText}>Use My Current GPS Position</Text>
-              </TouchableOpacity>
-              {isRouting && (
-                <View style={styles.routingBadge}>
-                  <ActivityIndicator size="small" color="#2563eb" />
-                  <Text style={styles.routingBadgeText}>Calculating driving route...</Text>
-                </View>
-              )}
-            </View>
-
-            {/* AUTOCOMPLETE PREDICTIONS DROPDOWN */}
-            {searchingField && (predictions.length > 0 || isSearching) && (
-              <View style={styles.predictionsDropdown}>
-                {isSearching ? (
-                  <View style={styles.predictionLoadingRow}>
-                    <ActivityIndicator size="small" color="#2563eb" />
-                    <Text style={styles.predictionLoadingText}>Searching addresses...</Text>
+            ) : (
+              <>
+                {/* MUTUAL EXCLUSION WARNING BANNER */}
+                {isTracking && (
+                  <View style={styles.trackingActiveBanner}>
+                    <AlertCircle size={15} color="#d97706" style={{ marginRight: 6 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trackingActiveBannerTitle}>
+                        Live GPS Tracking Active (Punched In)
+                      </Text>
+                      <Text style={styles.trackingActiveBannerSub}>
+                        Punch Out first to use Trip Route Planner.
+                      </Text>
+                    </View>
                   </View>
-                ) : (
-                  <ScrollView
-                    style={styles.predictionsList}
-                    keyboardShouldPersistTaps="handled"
-                    nestedScrollEnabled
-                  >
-                    {predictions.map((item, idx) => (
-                      <TouchableOpacity
-                        key={item.placeId || idx}
-                        style={styles.predictionItem}
-                        onPress={() => handleSelectPrediction(item)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.predictionIconBadge}>
-                          <MapPin size={15} color="#2563eb" />
-                        </View>
-                        <View style={styles.predictionTextCol}>
-                          <Text style={styles.predictionTitle} numberOfLines={1}>
-                            {item.title}
-                          </Text>
-                          <Text style={styles.predictionSubtitle} numberOfLines={1}>
-                            {item.subtitle || item.description}
-                          </Text>
-                        </View>
-                        <ArrowRight size={14} color="#94a3b8" />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
                 )}
-              </View>
+
+                <View style={styles.routeInputsStack}>
+                  {/* PICKUP / ORIGIN INPUT (Point A) */}
+                  <View style={[styles.inputBox, searchingField === 'origin' && styles.inputBoxActive]}>
+                    <View style={styles.originIconBadge}>
+                      <View style={styles.originDotInner} />
+                    </View>
+                    <TextInput
+                      style={styles.locationInput}
+                      placeholder="Where from? (Pickup point)"
+                      placeholderTextColor="#94a3b8"
+                      value={originText}
+                      onChangeText={(txt) => handleTextChange(txt, 'origin')}
+                      onFocus={() => handleFocusField('origin')}
+                    />
+                    {originText ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setOriginText('');
+                          setOrigin(null);
+                          setPredictions([]);
+                        }}
+                        style={styles.fieldClearBtn}
+                      >
+                        <X size={14} color="#64748b" />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={handleUseCurrentGps} style={styles.gpsChipBtn}>
+                        <Navigation size={11} color="#059669" />
+                        <Text style={styles.gpsChipText}>GPS</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Floating Swap Divider */}
+                  <View style={styles.swapDividerRow}>
+                    <View style={styles.swapDashLine} />
+                    <TouchableOpacity
+                      style={styles.swapBtnFloat}
+                      onPress={handleSwap}
+                      activeOpacity={0.7}
+                    >
+                      <ArrowUpDown size={13} color="#2563eb" />
+                    </TouchableOpacity>
+                    <View style={styles.swapDashLine} />
+                  </View>
+
+                  {/* DESTINATION INPUT (Point B) */}
+                  <View style={[styles.inputBox, searchingField === 'dest' && styles.inputBoxActive]}>
+                    <View style={styles.destIconBadge}>
+                      <View style={styles.destSquareInner} />
+                    </View>
+                    <TextInput
+                      style={styles.locationInput}
+                      placeholder="Where to? (Destination / Meeting point)"
+                      placeholderTextColor="#94a3b8"
+                      value={destText}
+                      onChangeText={(txt) => handleTextChange(txt, 'dest')}
+                      onFocus={() => handleFocusField('dest')}
+                    />
+                    {destText ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setDestText('');
+                          setDestination(null);
+                          setRouteData(null);
+                          setPredictions([]);
+                          storage.removeItem('active_trip_planner_destination').catch(() => {});
+                          storage.removeItem('active_trip_planner_route').catch(() => {});
+                          storage.removeItem('active_trip_planner_is_active').catch(() => {});
+                        }}
+                        style={styles.fieldClearBtn}
+                      >
+                        <X size={14} color="#64748b" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Quick GPS helper bar */}
+                <View style={styles.subStatusBar}>
+                  <TouchableOpacity
+                    style={styles.reAnchorLink}
+                    onPress={handleUseCurrentGps}
+                    activeOpacity={0.7}
+                  >
+                    <Navigation size={12} color="#059669" />
+                    <Text style={styles.reAnchorText}>Use My Current GPS Position</Text>
+                  </TouchableOpacity>
+                  {isRouting && (
+                    <View style={styles.routingBadge}>
+                      <ActivityIndicator size="small" color="#2563eb" />
+                      <Text style={styles.routingBadgeText}>Calculating driving route...</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* AUTOCOMPLETE PREDICTIONS DROPDOWN */}
+                {searchingField && (predictions.length > 0 || isSearching) && (
+                  <View style={styles.predictionsDropdown}>
+                    {isSearching ? (
+                      <View style={styles.predictionLoadingRow}>
+                        <ActivityIndicator size="small" color="#2563eb" />
+                        <Text style={styles.predictionLoadingText}>Searching addresses...</Text>
+                      </View>
+                    ) : (
+                      <ScrollView
+                        style={styles.predictionsList}
+                        keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled
+                      >
+                        {predictions.map((item, idx) => (
+                          <TouchableOpacity
+                            key={item.placeId || idx}
+                            style={styles.predictionItem}
+                            onPress={() => handleSelectPrediction(item)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.predictionIconBadge}>
+                              <MapPin size={15} color="#2563eb" />
+                            </View>
+                            <View style={styles.predictionTextCol}>
+                              <Text style={styles.predictionTitle} numberOfLines={1}>
+                                {item.title}
+                              </Text>
+                              <Text style={styles.predictionSubtitle} numberOfLines={1}>
+                                {item.subtitle || item.description}
+                              </Text>
+                            </View>
+                            <ArrowRight size={14} color="#94a3b8" />
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+                )}
+              </>
             )}
           </Surface>
 
@@ -1511,8 +1622,10 @@ export default function TripPlannerScreen() {
               origin={origin}
               destination={destination}
               polyline={routeData?.polyline || []}
-              traveledTrail={actualTrailRef.current}
+              traveledTrail={[...actualTrailRef.current]}
               currentLocation={currentGps ? { latitude: currentGps.lat, longitude: currentGps.lng } : null}
+              durationText={routeData?.durationText || (routeData?.durationMin ? `${routeData.durationMin} min` : null)}
+              distanceKm={routeData?.distanceKm}
             />
           </View>
 
@@ -1557,68 +1670,72 @@ export default function TripPlannerScreen() {
                 </View>
               </View>
 
-              {/* Purpose Selector: ONLY Client Meeting & Inspection */}
-              <View style={styles.purposeSegment}>
-                <TouchableOpacity
-                  style={[
-                    styles.purposeTab,
-                    selectedPurpose === 'Client Meeting' && styles.purposeTabActive,
-                  ]}
-                  onPress={() => setSelectedPurpose('Client Meeting')}
-                  activeOpacity={0.7}
-                >
-                  <Users
-                    size={14}
-                    color={selectedPurpose === 'Client Meeting' ? '#2563eb' : '#64748b'}
-                  />
-                  <Text
-                    style={[
-                      styles.purposeTabText,
-                      selectedPurpose === 'Client Meeting' && styles.purposeTabTextActive,
-                    ]}
-                  >
-                    Client Meeting
-                  </Text>
-                </TouchableOpacity>
+              {/* Purpose Selector & Client Input: ONLY during PLANNING */}
+              {tripStatus === 'PLANNING' && (
+                <>
+                  <View style={styles.purposeSegment}>
+                    <TouchableOpacity
+                      style={[
+                        styles.purposeTab,
+                        selectedPurpose === 'Client Meeting' && styles.purposeTabActive,
+                      ]}
+                      onPress={() => setSelectedPurpose('Client Meeting')}
+                      activeOpacity={0.7}
+                    >
+                      <Users
+                        size={14}
+                        color={selectedPurpose === 'Client Meeting' ? '#2563eb' : '#64748b'}
+                      />
+                      <Text
+                        style={[
+                          styles.purposeTabText,
+                          selectedPurpose === 'Client Meeting' && styles.purposeTabTextActive,
+                        ]}
+                      >
+                        Client Meeting
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.purposeTab,
-                    selectedPurpose === 'Inspection' && styles.purposeTabActive,
-                  ]}
-                  onPress={() => setSelectedPurpose('Inspection')}
-                  activeOpacity={0.7}
-                >
-                  <ClipboardCheck
-                    size={14}
-                    color={selectedPurpose === 'Inspection' ? '#2563eb' : '#64748b'}
-                  />
-                  <Text
-                    style={[
-                      styles.purposeTabText,
-                      selectedPurpose === 'Inspection' && styles.purposeTabTextActive,
-                    ]}
-                  >
-                    Inspection
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.purposeTab,
+                        selectedPurpose === 'Inspection' && styles.purposeTabActive,
+                      ]}
+                      onPress={() => setSelectedPurpose('Inspection')}
+                      activeOpacity={0.7}
+                    >
+                      <ClipboardCheck
+                        size={14}
+                        color={selectedPurpose === 'Inspection' ? '#2563eb' : '#64748b'}
+                      />
+                      <Text
+                        style={[
+                          styles.purposeTabText,
+                          selectedPurpose === 'Inspection' && styles.purposeTabTextActive,
+                        ]}
+                      >
+                        Inspection
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-              {/* Client / Location Name Input */}
-              <View style={styles.clientInputRow}>
-                <Building2 size={15} color="#94a3b8" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={styles.clientInput}
-                  placeholder={
-                    selectedPurpose === 'Inspection'
-                      ? 'Site / Location / Farm Name (Optional)'
-                      : 'Client / Party Name (Optional)'
-                  }
-                  placeholderTextColor="#94a3b8"
-                  value={clientName}
-                  onChangeText={setClientName}
-                />
-              </View>
+                  {/* Client / Location Name Input */}
+                  <View style={styles.clientInputRow}>
+                    <Building2 size={15} color="#94a3b8" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.clientInput}
+                      placeholder={
+                        selectedPurpose === 'Inspection'
+                          ? 'Site / Location / Farm Name (Optional)'
+                          : 'Client / Party Name (Optional)'
+                      }
+                      placeholderTextColor="#94a3b8"
+                      value={clientName}
+                      onChangeText={setClientName}
+                    />
+                  </View>
+                </>
+              )}
 
               {/* ── ACTION SECTION (2-PHASE LIFECYCLE + 500M GEOFENCE ENFORCEMENT) ── */}
               {tripStatus === 'PLANNING' ? (
@@ -1655,12 +1772,6 @@ export default function TripPlannerScreen() {
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.geofenceHintRow}>
-                    <TrendingUp size={12} color="#64748b" />
-                    <Text style={styles.geofenceHintText}>
-                      Real-time GPS tracking • Jitna chaloge utna claim kar sakoge
-                    </Text>
-                  </View>
                 </View>
               ) : (
                 /* PHASE 2: IN_PROGRESS (ON THE WAY) */
@@ -1685,13 +1796,13 @@ export default function TripPlannerScreen() {
                           {motionStatus === 'MOVING' ? '🚗 Moving To Destination' : '🛑 Stationary / At Spot'}
                         </Text>
                         <Text style={styles.inProgressDistSubtitle}>
-                          {remainingRoadKm} KM remaining • {formattedMovedDistance} moved {gpsAccuracy ? `(±${gpsAccuracy}m GPS)` : ''}
+                          {remainingRoadKm} KM remaining • {formattedMovedDistance} moved
                         </Text>
                       </View>
                     </View>
                   )}
 
-                  {/* ACTIVE CLAIM BUTTON (CREDITS EXACT PHYSICALLY MOVED KM) */}
+                  {/* ACTIVE COMPLETE / FINISH BUTTON (NO "CLAIM" WORD) */}
                   <TouchableOpacity
                     style={styles.confirmButton}
                     onPress={handleInitiateClaim}
@@ -1717,41 +1828,13 @@ export default function TripPlannerScreen() {
                           <CheckCircle2 size={17} color="#ffffff" style={{ marginRight: 6 }} />
                           <Text style={styles.confirmButtonText}>
                             {hasCompletedFullJourney
-                              ? `Claim Full Trip • ${routeData.distanceKm} KM (₹${routeData.reimbursementAmount})`
-                              : `Claim Moved • ${formattedMovedDistance} (₹${claimAmount})`}
+                              ? `Complete Trip • ${routeData.distanceKm} KM (₹${routeData.reimbursementAmount})`
+                              : `Finish Trip • ${effectiveTraveledKm} KM (₹${claimAmount})`}
                           </Text>
                         </View>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
-
-                  {/* GPS Tracking Indicator & Cancel Trip */}
-                  <View style={styles.inProgressAuxRow}>
-                    <View style={[
-                      styles.liveAutoSenseBadge,
-                      motionStatus === 'MOVING' ? styles.liveAutoSenseBadgeMoving : styles.liveAutoSenseBadgeStationary
-                    ]}>
-                      <View style={[
-                        styles.livePulseDot,
-                        motionStatus === 'MOVING' ? styles.livePulseDotMoving : styles.livePulseDotStationary
-                      ]} />
-                      <Text style={[
-                        styles.liveAutoSenseText,
-                        motionStatus === 'MOVING' ? styles.liveAutoSenseTextMoving : styles.liveAutoSenseTextStationary
-                      ]}>
-                        {motionStatus === 'MOVING' ? '🚗 Moving' : '🛑 Stationary'} • {formattedMovedDistance} • {gpsAccuracy ? `±${gpsAccuracy}m` : 'GPS'} • #{gpsFixCount}
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.auxCancelBtn}
-                      onPress={handleCancelTrip}
-                      activeOpacity={0.7}
-                    >
-                      <X size={12} color="#ef4444" />
-                      <Text style={styles.auxCancelBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
               )}
             </Surface>
@@ -1984,6 +2067,97 @@ export default function TripPlannerScreen() {
         </View>
       )}
 
+      {/* ── 500M DESTINATION ARRIVAL POPUP BOX (CLAIM ALL PLANNED KM) ── */}
+      {showArrivalModal && routeData && (
+        <View style={styles.modalOverlay}>
+          <Surface style={styles.arrivalModalCard} elevation={6}>
+            {/* Top Celebration Badge */}
+            <View style={styles.arrivalIconBadge}>
+              <CheckCircle2 size={40} color="#16a34a" />
+            </View>
+
+            <Text style={styles.arrivalModalTitle}>Destination Reached!</Text>
+            <Text style={styles.arrivalModalSubtitle}>
+              Aap destination ke 500m radius me aa chuke hain!
+            </Text>
+
+            {/* Destination Address Pill */}
+            <View style={styles.arrivalDestRow}>
+              <MapPin size={15} color="#ef4444" style={{ marginTop: 2, marginRight: 6 }} />
+              <Text style={styles.arrivalDestText} numberOfLines={2}>
+                {destination?.address || 'Destination'}
+              </Text>
+            </View>
+
+            {/* 2-Column Full Planned Credit Metric Box */}
+            <View style={styles.arrivalMetricsCard}>
+              <View style={styles.arrivalMetricCol}>
+                <Text style={styles.arrivalMetricLabel}>ALL PLANNED KM</Text>
+                <Text style={styles.arrivalMetricValKm}>{routeData.distanceKm} KM</Text>
+                <Text style={styles.arrivalMetricTag}>100% Full Credit</Text>
+              </View>
+              <View style={styles.arrivalMetricDivider} />
+              <View style={styles.arrivalMetricCol}>
+                <Text style={styles.arrivalMetricLabel}>ALLOWANCE</Text>
+                <Text style={styles.arrivalMetricValAmount}>₹{routeData.reimbursementAmount}</Text>
+                <Text style={styles.arrivalMetricTag}>TA Payout</Text>
+              </View>
+            </View>
+
+            {/* Guarantee Note */}
+            <View style={styles.arrivalNoteBox}>
+              <CheckCircle2 size={13} color="#059669" style={{ marginRight: 6, marginTop: 1 }} />
+              <Text style={styles.arrivalNoteText}>
+                Jitna KM destination choose karte time show hua tha ({routeData.distanceKm} KM), poora aapke daily ledger me credit hoga.
+              </Text>
+            </View>
+
+            {/* Actions */}
+            <View style={styles.arrivalBtnStack}>
+              {/* Primary Claim All KM Button */}
+              <TouchableOpacity
+                style={styles.arrivalConfirmBtn}
+                onPress={() => {
+                  setShowArrivalModal(false);
+                  handleConfirmTrip(routeData.distanceKm, routeData.reimbursementAmount);
+                }}
+                disabled={isSubmitting}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#16a34a', '#15803d']}
+                  style={styles.arrivalConfirmGrad}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Text style={styles.arrivalConfirmBtnText}>
+                        Complete Trip ({routeData.distanceKm} KM)
+                      </Text>
+                      <Text style={styles.arrivalConfirmSubText}>
+                        +₹{routeData.reimbursementAmount} Add to Ledger
+                      </Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Secondary Keep Trip Active Button */}
+              <TouchableOpacity
+                style={styles.arrivalDismissBtn}
+                onPress={() => setShowArrivalModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.arrivalDismissBtnText}>Abhi Nahi, Baad Me</Text>
+              </TouchableOpacity>
+            </View>
+          </Surface>
+        </View>
+      )}
+
       {/* ── CLAIM CONFIRMATION MODAL ── */}
       {showEarlyClaimModal && (
         <View style={styles.modalOverlay}>
@@ -1999,14 +2173,12 @@ export default function TripPlannerScreen() {
             </View>
             <Text style={styles.earlyClaimTitle}>
               {hasCompletedFullJourney
-                ? 'Claim Completed Trip?'
-                : effectiveTraveledKm <= 0.05
-                ? 'Claim Trip (0 KM Moved)?'
-                : 'Claim Distance Moved?'}
+                ? 'Complete Trip?'
+                : 'Finish Trip?'}
             </Text>
             <Text style={styles.earlyClaimSubtitle}>
               {hasCompletedFullJourney ? (
-                `Aap destination pahunch chuke hain! Full planned distance ${routeData?.distanceKm} KM claim karne ke liye confirm karein.`
+                `Aap destination pahunch chuke hain! Full planned distance ${routeData?.distanceKm} KM complete karne ke liye confirm karein.`
               ) : effectiveTraveledKm <= 0.05 ? (
                 `Total planned trip ${routeData?.distanceKm} KM ki thi, lekin abhi tak 0 KM physical movement detect hua hai.`
               ) : (
@@ -2030,18 +2202,22 @@ export default function TripPlannerScreen() {
                   ₹{claimAmount}
                 </Text>
               </View>
-              <View style={styles.earlyClaimRow}>
-                <Text style={styles.earlyClaimLabel}>Remaining (Unclaimed):</Text>
-                <Text style={[styles.earlyClaimVal, { color: '#dc2626' }]}>
-                  {remainingRoadKm} KM
-                </Text>
-              </View>
+              {remainingRoadKm > 0 && !hasCompletedFullJourney && (
+                <View style={styles.earlyClaimRow}>
+                  <Text style={styles.earlyClaimLabel}>Remaining (To Destination):</Text>
+                  <Text style={[styles.earlyClaimVal, { color: '#dc2626' }]}>
+                    {remainingRoadKm} KM
+                  </Text>
+                </View>
+              )}
             </View>
 
             <Text style={styles.earlyClaimNote}>
-              {effectiveTraveledKm <= 0.05
-                ? 'Aapke account me strictly actual physically moved distance (0 KM) add hogi aur trip yahi complete ho jayegi.'
-                : `Aapke account me strictly sirf actual physically moved distance (${formattedMovedDistance}) add hogi aur trip yahi complete ho jayegi.`}
+              {hasCompletedFullJourney
+                ? `Aap destination ke 500m radius me hain! Poora planned ${routeData?.distanceKm} KM (₹${routeData?.reimbursementAmount}) aapke account me add kiya jayega.`
+                : effectiveTraveledKm <= 0.05
+                ? `Aap destination se ${remainingRoadKm} KM door hain. Koi physical movement detect nahi hua hai (0 KM credit). Full claim sirf destination ke 500m radius me milta hai.`
+                : `Aap destination se ${remainingRoadKm} KM door hain. Aapko strictly actual physically moved distance (${formattedMovedDistance}) credit hoga. Full claim poori trip ka sirf destination ke 500m radius me milta hai.`}
             </Text>
 
             <View style={styles.earlyClaimBtnRow}>
@@ -2062,16 +2238,20 @@ export default function TripPlannerScreen() {
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={['#2563eb', '#1d4ed8']}
+                  colors={hasCompletedFullJourney ? ['#059669', '#047857'] : ['#2563eb', '#1d4ed8']}
                   style={styles.earlyClaimConfirmGrad}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                 >
                   <Text style={styles.earlyClaimConfirmBtnText}>
-                    {effectiveTraveledKm > 0 ? `Confirm & Add ${formattedMovedDistance}` : 'Confirm & Complete'}
+                    {hasCompletedFullJourney
+                      ? `Confirm & Complete (${routeData?.distanceKm} KM)`
+                      : effectiveTraveledKm > 0
+                      ? `Confirm & Finish (${formattedMovedDistance})`
+                      : 'Confirm & Finish (0 KM)'}
                   </Text>
-                  <Text style={[styles.earlyClaimBtnSubText, { color: '#dbeafe' }]}>
-                    Credit to account
+                  <Text style={[styles.earlyClaimBtnSubText, { color: hasCompletedFullJourney ? '#d1fae5' : '#dbeafe' }]}>
+                    Add to ledger
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -2196,6 +2376,61 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
+  },
+  routeCardCompact: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+  },
+  inProgressCompactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inProgressCompactRoute: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  inProgressDotOrigin: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10b981',
+    marginRight: 6,
+  },
+  inProgressTextOrigin: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+    maxWidth: '38%',
+  },
+  inProgressDotDest: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: '#ef4444',
+    marginRight: 6,
+  },
+  inProgressTextDest: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+    maxWidth: '38%',
+  },
+  compactCancelBtn: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  compactCancelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
   },
   trackingActiveBanner: {
     flexDirection: 'row',
@@ -2397,9 +2632,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   mapContainer: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   bottomSheetCard: {
     position: 'absolute',
@@ -2513,6 +2747,7 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     marginTop: 9,
+    height: 48,
     borderRadius: 14,
     overflow: 'hidden',
   },
@@ -2520,10 +2755,11 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   confirmGradient: {
+    flex: 1,
+    height: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 11,
     paddingHorizontal: 14,
   },
   btnRow: {
@@ -3147,20 +3383,22 @@ const styles = StyleSheet.create({
   planningActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 9,
+    marginBottom: 4,
     gap: 10,
     width: '100%',
   },
   planningCancelBtn: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
     borderRadius: 14,
     backgroundColor: '#fef2f2',
     borderWidth: 1,
     borderColor: '#fecaca',
-    gap: 4,
+    gap: 5,
   },
   planningCancelBtnText: {
     fontSize: 13,
@@ -3169,6 +3407,8 @@ const styles = StyleSheet.create({
   },
   planningStartBtn: {
     flex: 1,
+    marginTop: 0,
+    height: 48,
   },
   earlyClaimCard: {
     width: '100%',
@@ -3266,6 +3506,7 @@ const styles = StyleSheet.create({
   },
   earlyClaimConfirmBtn: {
     flex: 1,
+    height: 40,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -3290,5 +3531,215 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
     marginTop: 2,
+  },
+  markArrivedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 4,
+    marginLeft: 6,
+  },
+  markArrivedPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  modalArrivedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+    gap: 8,
+    width: '100%',
+  },
+  modalArrivedToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+  modalArrivedToggleSub: {
+    fontSize: 10,
+    color: '#16a34a',
+    marginTop: 2,
+  },
+  // ─── 500M ARRIVAL POPUP BOX STYLES ───
+  arrivalModalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    width: '92%',
+    maxWidth: 420,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.15)',
+  },
+  arrivalIconBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    borderWidth: 3,
+    borderColor: '#bbf7d0',
+  },
+  arrivalModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  arrivalModalSubtitle: {
+    fontSize: 13,
+    color: '#15803d',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  arrivalDestRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '100%',
+    marginBottom: 16,
+  },
+  arrivalDestText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 17,
+  },
+  arrivalMetricsCard: {
+    flexDirection: 'row',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    width: '100%',
+    marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  arrivalMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  arrivalMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#15803d',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  arrivalMetricValKm: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#15803d',
+  },
+  arrivalMetricValAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#047857',
+  },
+  arrivalMetricTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#16a34a',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 3,
+    overflow: 'hidden',
+  },
+  arrivalMetricDivider: {
+    width: 1,
+    height: 42,
+    backgroundColor: '#bbf7d0',
+    marginHorizontal: 12,
+  },
+  arrivalNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 10,
+    padding: 10,
+    width: '100%',
+    marginBottom: 18,
+    borderLeftWidth: 3,
+    borderLeftColor: '#16a34a',
+  },
+  arrivalNoteText: {
+    fontSize: 11,
+    color: '#166534',
+    lineHeight: 16,
+    fontWeight: '500',
+    flex: 1,
+  },
+  arrivalBtnStack: {
+    width: '100%',
+    gap: 8,
+  },
+  arrivalConfirmBtn: {
+    width: '100%',
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  arrivalConfirmGrad: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrivalConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+  },
+  arrivalConfirmSubText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#bbf7d0',
+    marginTop: 2,
+  },
+  arrivalDismissBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  arrivalDismissBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
   },
 });

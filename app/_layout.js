@@ -11,6 +11,8 @@ import AnimatedSplash from '../components/AnimatedSplash';
 import '../services/locationTask';
 // CRITICAL: Import offline sync so the background-fetch task is registered upon app boot
 import '../services/offlineSync';
+// CRITICAL: Import trip planner background task so it is registered upon app boot
+import '../services/tripPlannerBackground';
 import { registerOfflineSyncTask, startNetworkListener, flushOfflineQueue } from '../services/offlineSync';
 
 SplashScreen.preventAutoHideAsync();

@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import * as Location from 'expo-location';
 import { tripAPI } from './api';
 
 const GOOGLE_MAPS_KEY =
@@ -21,15 +22,60 @@ export function haversineMeters(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * 1. Reverse Geocode Coordinates to Clean Human-Readable Address
- * e.g. (26.7975, 80.9021) -> "Alambagh, Lucknow"
+ * 1. Reverse Geocode Coordinates to Clean, Real Human-Readable Address
+ * e.g. (26.7975, 80.9021) -> "Sector 12, Hardoi Road, Dubagga, Lucknow, Uttar Pradesh 226003"
  */
 export async function reverseGeocodeLocation(lat, lng) {
   const nLat = Number(lat);
   const nLng = Number(lng);
   if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return 'Current Location';
 
-  // Strategy A: OpenStreetMap Nominatim Reverse (works on Web & Native with full CORS)
+  // Strategy A: Native Android / iOS Device Reverse Geocoder (Google Play Services / CoreLocation)
+  // 100% real, accurate, non-truncated local address (Street, Area, Locality, City, State, PIN)
+  if (Platform.OS !== 'web') {
+    try {
+      const results = await Location.reverseGeocodeAsync({
+        latitude: nLat,
+        longitude: nLng,
+      });
+      if (results && results.length > 0) {
+        const item = results[0];
+        const parts = [];
+        if (item.name && item.name !== item.street && !item.name.match(/^\d+$/)) {
+          parts.push(item.name);
+        }
+        if (item.street) parts.push(item.street);
+        if (item.district && !parts.includes(item.district)) parts.push(item.district);
+        if (item.subregion && !parts.includes(item.subregion) && item.subregion !== item.city) {
+          parts.push(item.subregion);
+        }
+        if (item.city && !parts.includes(item.city)) parts.push(item.city);
+        if (item.region && !parts.includes(item.region)) parts.push(item.region);
+        if (item.postalCode) parts.push(item.postalCode);
+
+        const realAddress = parts.filter(Boolean).join(', ');
+        if (realAddress.length > 5) {
+          return realAddress;
+        }
+      }
+    } catch (_) {
+      // Fall through to API strategies
+    }
+  }
+
+  // Strategy B: Google Maps Geocoding API (Full detailed formatted_address)
+  if (GOOGLE_MAPS_KEY) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${nLat},${nLng}&key=${GOOGLE_MAPS_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.status === 'OK' && data.results && data.results[0]?.formatted_address) {
+        return data.results[0].formatted_address;
+      }
+    } catch (_) {}
+  }
+
+  // Strategy C: OpenStreetMap Nominatim Reverse (Detailed Address Hierarchy)
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${nLat}&lon=${nLng}&zoom=18&addressdetails=1`;
     const res = await fetch(url, {
@@ -39,52 +85,60 @@ export async function reverseGeocodeLocation(lat, lng) {
       const data = await res.json();
       if (data && data.address) {
         const a = data.address;
-        const locality =
-          a.suburb ||
-          a.neighbourhood ||
-          a.residential ||
-          a.village ||
-          a.town ||
-          a.city_district ||
-          a.road ||
-          '';
-        const city = a.city || a.county || a.state_district || '';
-        const clean = [locality, city].filter(Boolean).join(', ');
-        if (clean.length > 2) return clean;
+        const placeName = a.amenity || a.shop || a.building || a.house_name || '';
+        const houseNum = a.house_number || '';
+        const street = a.road || a.pedestrian || a.highway || '';
+        const area = a.neighbourhood || a.suburb || a.residential || a.subdistrict || '';
+        const city = a.city || a.town || a.village || a.county || '';
+        const state = a.state || '';
+        const pincode = a.postcode || '';
+
+        const parts = [
+          [placeName, houseNum].filter(Boolean).join(' '),
+          street,
+          area,
+          city,
+          state,
+          pincode,
+        ].filter(Boolean);
+
+        const uniqueParts = [];
+        for (const p of parts) {
+          if (!uniqueParts.some((u) => u.toLowerCase() === p.toLowerCase())) {
+            uniqueParts.push(p);
+          }
+        }
+        if (uniqueParts.length >= 2) {
+          return uniqueParts.join(', ');
+        }
       }
       if (data && data.display_name) {
         const parts = data.display_name.split(',').map((p) => p.trim());
-        return parts.slice(0, 3).join(', ');
+        const filtered = parts.filter((p) => p.toLowerCase() !== 'india');
+        return filtered.join(', ');
       }
     }
   } catch (err) {
     console.warn('⚠️ [Geocoding] Nominatim reverse geocode failed:', err.message);
   }
 
-  // Strategy B: BigDataCloud Free Reverse Geocode (100% CORS compliant)
+  // Strategy D: BigDataCloud Free Reverse Geocode
   try {
     const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${nLat}&longitude=${nLng}&localityLanguage=en`;
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
-      const locality = data.locality || data.principalSubdivisionCity || '';
-      const city = data.city || data.principalSubdivision || '';
-      const clean = [locality, city].filter(Boolean).join(', ');
-      if (clean.length > 2) return clean;
+      const parts = [
+        data.localityInfo?.administrative?.[0]?.name,
+        data.locality,
+        data.city || data.principalSubdivisionCity,
+        data.principalSubdivision,
+        data.postcode,
+      ].filter(Boolean);
+      const unique = [...new Set(parts)];
+      if (unique.length > 1) return unique.join(', ');
     }
   } catch (_) {}
-
-  // Strategy C: Google Geocoding API (if on Native)
-  if (GOOGLE_MAPS_KEY && Platform.OS !== 'web') {
-    try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${nLat},${nLng}&key=${GOOGLE_MAPS_KEY}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.status === 'OK' && data.results && data.results[0]) {
-        return data.results[0].formatted_address;
-      }
-    } catch (_) {}
-  }
 
   return 'Current Location';
 }

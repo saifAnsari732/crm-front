@@ -176,7 +176,8 @@ async function flushOfflineQueueUnlocked() {
     for (const item of queue) {
       const itemSessionId = item.data?.sessionId;
       if (itemSessionId && blockedSessions.has(itemSessionId)) {
-        failedItems.push(item);
+        // Discard remaining queued telemetry for already-closed/blocked sessions
+        delete retryCounts[item.id];
         continue;
       }
 
@@ -201,6 +202,14 @@ async function flushOfflineQueueUnlocked() {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 8000,
         });
+
+        if (response.data?.sessionClosed === true) {
+          console.log(`📦 OfflineSync: Session ${itemSessionId} was ended on server. Discarding remaining queued points.`);
+          if (itemSessionId) blockedSessions.add(itemSessionId);
+          delete retryCounts[item.id];
+          continue;
+        }
+
         successCount++;
         const serverDistance = Number(response.data?.totalDistanceToday ?? response.data?.totalDistance);
         if (Number.isFinite(serverDistance) && serverDistance >= 0) {
@@ -224,6 +233,7 @@ async function flushOfflineQueueUnlocked() {
       } catch (err) {
         if (err?.response?.data?.sessionClosed === true || err?.response?.status === 409) {
           // Closed or invalid session: drop stale item cleanly without transferring into a new shift
+          if (itemSessionId) blockedSessions.add(itemSessionId);
           delete retryCounts[item.id];
           console.log(`📦 OfflineSync: Dropped stale point for closed session ${itemSessionId}.`);
           continue;
