@@ -213,14 +213,7 @@ async function flushOfflineQueueUnlocked() {
         successCount++;
         const serverDistance = Number(response.data?.totalDistanceToday ?? response.data?.totalDistance);
         if (Number.isFinite(serverDistance) && serverDistance >= 0) {
-          const cachedDistance = Number.parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-          let finalKm = serverDistance;
-          if (Math.abs(cachedDistance - serverDistance) > 3.0) {
-            finalKm = serverDistance;
-          } else {
-            finalKm = Math.max(cachedDistance, serverDistance);
-          }
-          await storage.setItem('tracking_accumulated_distance', finalKm.toFixed(2));
+          await storage.setItem('tracking_accumulated_distance', serverDistance.toFixed(2));
         }
         delete retryCounts[item.id];
         if (item.kind === 'stop') {

@@ -22,19 +22,29 @@ import * as Location from 'expo-location';
 import { storage } from './storage';
 import axios from 'axios';
 import { BASE_URL, trackingAPI } from './api';
-import { enqueueCoordinate, flushOfflineQueue, haversineKm } from './offlineSync';
+import { enqueueCoordinate, flushOfflineQueue, getQueueSize, haversineKm } from './offlineSync';
 import { scheduleNoMovementNotification } from './trackingNotification';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
 export const BACKGROUND_TRACKING_TASK = 'BACKGROUND_TRACKING';
 
+// Single-flight mutex so foreground watcher & background task never race on AsyncStorage
+let _locationLock = Promise.resolve();
+let _lastProcessedTimestamp = 0;
+function withLocationLock(fn) {
+  const prev = _locationLock;
+  let release;
+  _locationLock = new Promise((resolve) => { release = resolve; });
+  return prev.then(fn).finally(release);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ALGORITHM CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const MAX_ACCURACY_METERS    = 500;   // Accept GPS up to 500m accuracy (pocket mode)
+const MAX_ACCURACY_METERS    = 100;   // Reject coarse cell-tower jumps > 100m during normal tracking
 const MIN_MOVE_METERS        = 8;     // Minimum real movement to count a segment
-const MAX_SPEED_KMH          = 220;   // Teleport guard (airplane / GPS flip)
+const MAX_SPEED_KMH          = 180;   // Teleport guard (airplane / GPS flip)
 const MIN_WALKING_SPEED_MPS  = 0.4;  // ~1.4 km/h — below this treat as stationary
 const STATIONARY_DRIFT_LIMIT = 120;  // If stationary AND jump < 120 m → GPS drift, ignore
 
@@ -89,8 +99,8 @@ let _movementCandidateBuffer = [];
 function evaluateMovementTransition(distM, secs, speedKmh, accuracyM) {
   const effectiveSpeedKmh = Math.max(speedKmh, (distM / 1000 / secs) * 3600);
 
-  // Real movement signal: speed > 3.0 km/h, distance > 35m, reasonable accuracy <= 200m
-  if (effectiveSpeedKmh > 3.0 && distM > 35 && accuracyM <= 200) {
+  // Real movement signal: speed > 3.5 km/h, distance > 35m, reasonable accuracy <= 100m
+  if (effectiveSpeedKmh > 3.5 && distM > 35 && accuracyM <= 100) {
     _movementCandidateBuffer.push({ distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() });
 
     // Multi-observation confirmation: require at least 2 consecutive consistent fixes
@@ -137,46 +147,49 @@ function validateSegment(prev, curr) {
   // Guard: must have previous anchor
   if (!prev || !curr) return { valid: false, distKm: 0 };
 
+  const reportedAccuracy = Number(curr.accuracy) || 25;
+  const prevTs = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
+  const currTs = curr.timestamp ? new Date(curr.timestamp).getTime() : Date.now();
+  const rawSecs = Math.max((currTs - prevTs) / 1000, 0.5);
+
+  // Reject coarse cell-tower / Wi-Fi leaps (> 100m accuracy) during normal consecutive tracking
+  if (reportedAccuracy > MAX_ACCURACY_METERS && rawSecs <= 1800) {
+    return { valid: false, distKm: 0 };
+  }
+
   const distM = distanceMeters(prev.lat, prev.lng, curr.lat, curr.lng);
   const distKm = distM / 1000;
 
   // ── Gate 1: Minimum movement ─────────────────────────────────────────
-  // Accept micro-movements (>= 1 meter) so slow walking/heavy traffic is captured
-  if (distM < 1.0) return { valid: false, distKm: 0 };
+  if (distM < MIN_MOVE_METERS) return { valid: false, distKm: 0 };
 
-  const prevTs = prev.timestamp ? new Date(prev.timestamp).getTime() : 0;
-  const currTs = curr.timestamp ? new Date(curr.timestamp).getTime() : Date.now();
-  const rawSecs = Math.max((currTs - prevTs) / 1000, 0.1);
-
-  // ── Gate 2: 5-Hour / Long Stationary Transition Guard ────────────────
+  // ── Gate 2: Long Stationary Transition Guard (> 30 min) ──────────────
   const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
-  
-  if (rawSecs > 60) {
-    if (distM >= 5 || reportedSpeedMps >= 0.3) {
-      console.log(`📍 Movement detected after ${(rawSecs / 60).toFixed(1)}min stationary: ${distM.toFixed(0)}m! Accepting transition.`);
+  if (rawSecs > 1800) {
+    const gapSpeedKmh = (distKm / (rawSecs / 3600));
+    if (distKm >= 0.15 && gapSpeedKmh >= 1.5 && gapSpeedKmh <= 140.0 && reportedAccuracy <= 300) {
       return { valid: true, distKm };
     }
+    return { valid: false, distKm: 0, reanchorOnly: true };
   }
 
-  // Normal consecutive fixes (< 60s)
-  const secs = Math.min(rawSecs, 60);
-  const calcSpeedKmh = (distKm / secs) * 3600;
-
+  const calcSpeedKmh = (distKm / rawSecs) * 3600;
   if (calcSpeedKmh > MAX_SPEED_KMH) {
     console.log(`📍 GPS Teleport detected: ${calcSpeedKmh.toFixed(0)} km/h — skipping`);
-    return { valid: false, distKm: 0 };
+    return { valid: false, distKm: 0, isOutlier: true };
   }
 
-  // ── Gate 3: Stationary drift filter ──────────────────────────────────
-  const calcSpeedMps = (distM / secs);
+  // ── Gate 3: Stationary drift filter (aligned with backend AGTRIE-X v10) ──
+  const calcSpeedMps = (distM / rawSecs);
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
-  const reportedAccuracy = Number(curr.accuracy) || 25;
+  const effectiveSpeedKmh = effectiveSpeedMps * 3.6;
   const stationaryThresholdM = Math.max(30.0, Math.min(50.0, reportedAccuracy * 1.0));
 
   // Ignore noise jitter when phone is stationary:
-  // Reject micro-steps < 8m OR points within stationary bubble with speed < 5 km/h
-  if (distM < 8.0 || (distM < stationaryThresholdM && (effectiveSpeedMps * 3.6 < 5.0 || distM < 25.0))) {
-    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${(effectiveSpeedMps * 3.6).toFixed(1)} km/h (threshold: ${stationaryThresholdM.toFixed(0)}m, acc: ${reportedAccuracy}m)`);
+  // 1. Inside stationary bubble (< 30-50m) with speed < 6.0 km/h
+  // 2. OR step < 25m with speed < 3.5 km/h
+  if ((distM < stationaryThresholdM && effectiveSpeedKmh < 6.0) || (distM < 25.0 && effectiveSpeedKmh < 3.5)) {
+    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${effectiveSpeedKmh.toFixed(1)} km/h (threshold: ${stationaryThresholdM.toFixed(0)}m, acc: ${reportedAccuracy}m)`);
     return { valid: false, distKm: 0 };
   }
 
@@ -224,13 +237,17 @@ export { startHeartbeat, stopHeartbeat };
 // ─────────────────────────────────────────────────────────────────────────────
 // Core location processor — called for each GPS fix from background task
 // ─────────────────────────────────────────────────────────────────────────────
-const processLocation = async (location) => {
-  const { latitude, longitude, speed, accuracy, heading } = location.coords;
-  const timestamp = location.timestamp;
+const processLocationUnlocked = async (location) => {
+  const { latitude, longitude, speed, accuracy, heading } = location?.coords || {};
+  const timestamp = location?.timestamp;
 
   // ── Basic Finite Coordinate Guard ──────────────────────────────────────────
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestamp)) {
     console.log('📍 BackgroundTask: Non-numeric GPS payload, skipping.');
+    return;
+  }
+  // ── Timestamp Deduplication Guard (prevents foreground + background duplicate ticks) ──
+  if (_lastProcessedTimestamp && timestamp <= _lastProcessedTimestamp + 1000) {
     return;
   }
   // ── Mock Location / GPS Spoofing Guard ──────────────────────────────────────
@@ -248,9 +265,12 @@ const processLocation = async (location) => {
     const sessionId = await storage.getItem('currentTrackingSessionId');
     if (!sessionId) return; // No active session
 
+    const reportedAcc = Number.isFinite(accuracy) && accuracy > 0 ? accuracy : 25;
+
     // Ensure session tracking ID and last GPS received timestamp are synchronized locally
     await storage.setItem('tracking_accumulated_session_id', sessionId);
     await storage.setItem('last_gps_received_at', String(Date.now()));
+    _lastProcessedTimestamp = timestamp;
 
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
     updateMotionState(Number.isFinite(speed) ? speed : 0);
@@ -262,7 +282,7 @@ const processLocation = async (location) => {
       lat:      latitude,
       lng:      longitude,
       speed:    Number.isFinite(speed)   ? speed   : 0,
-      accuracy: Number.isFinite(accuracy)? accuracy: 0,
+      accuracy: reportedAcc,
       heading:  Number.isFinite(heading) ? heading : 0,
       mocked:   location.mocked || false,
       timestamp: new Date(timestamp).toISOString(),
@@ -271,22 +291,37 @@ const processLocation = async (location) => {
 
     let lastLocation = null;
     let calculatedDistKm = 0;
+    let isRejectedOutlier = false;
     const lastLocationStr = await storage.getItem('last_recorded_location');
     if (lastLocationStr) {
       try {
         lastLocation = JSON.parse(lastLocationStr);
-        let { valid, distKm } = validateSegment(lastLocation, {
+        const prevTsMs = lastLocation?.timestamp ? new Date(lastLocation.timestamp).getTime() : 0;
+        if (prevTsMs && timestamp <= prevTsMs + 1000) {
+          return;
+        }
+        const rawGapSecs = prevTsMs ? (timestamp - prevTsMs) / 1000 : 0;
+        if (reportedAcc > MAX_ACCURACY_METERS && rawGapSecs <= 1800) {
+          // Coarse Wi-Fi / cell-tower jump during active tracking — skip completely
+          return;
+        }
+
+        let { valid, distKm, reanchorOnly, isOutlier } = validateSegment(lastLocation, {
           lat: latitude, lng: longitude,
-          speed, accuracy, timestamp: new Date(timestamp).toISOString(),
+          speed, accuracy: reportedAcc, timestamp: new Date(timestamp).toISOString(),
         });
 
-        if (!valid) {
+        if (isOutlier) {
+          isRejectedOutlier = true;
+        } else if (reanchorOnly) {
+          await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+        } else if (!valid) {
           const distM = distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude);
-          const secs = Math.max((timestamp - new Date(lastLocation.timestamp).getTime()) / 1000, 0.1);
+          const secs = Math.max((timestamp - new Date(lastLocation.timestamp).getTime()) / 1000, 0.5);
           const calcSpeedKmh = (distM / 1000 / secs) * 3600;
           
           if (calcSpeedKmh < MAX_SPEED_KMH) {
-            const transition = evaluateMovementTransition(distM, secs, calcSpeedKmh, accuracy || 50);
+            const transition = evaluateMovementTransition(distM, secs, calcSpeedKmh, reportedAcc);
             if (transition.confirmed) {
               valid = true;
               distKm = transition.backfillDistKm || (distM / 1000);
@@ -302,16 +337,14 @@ const processLocation = async (location) => {
             await storage.setItem('tracking_accumulated_distance', updatedLocal);
           }
           await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
-        } else {
-          // Stationary drift: Do NOT let anchor crawl! Softly pull anchor towards current point
+        } else if (!isRejectedOutlier && !reanchorOnly) {
+          // Stationary drift: keep anchor coordinates locked at lastLocation, only update timestamp
           if (lastLocation) {
-            const smoothedAnchor = {
+            const stationaryAnchor = {
               ...lastLocation,
-              lat: 0.98 * lastLocation.lat + 0.02 * latitude,
-              lng: 0.98 * lastLocation.lng + 0.02 * longitude,
               timestamp: new Date(timestamp).toISOString(),
             };
-            await storage.setItem('last_recorded_location', JSON.stringify(smoothedAnchor));
+            await storage.setItem('last_recorded_location', JSON.stringify(stationaryAnchor));
           } else {
             await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
           }
@@ -319,21 +352,25 @@ const processLocation = async (location) => {
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
       }
-    } else {
+    } else if (reportedAcc <= 150) {
       // First initial location fix: establish initial anchor
       await storage.setItem('last_recorded_location', JSON.stringify({
         lat: latitude,
         lng: longitude,
         speed: Number.isFinite(speed) ? speed : 0,
-        accuracy: Number.isFinite(accuracy) ? accuracy : 0,
+        accuracy: reportedAcc,
         timestamp: new Date(timestamp).toISOString(),
       }));
+    }
+
+    if (isRejectedOutlier) {
+      return;
     }
 
     console.log(
       `📍 BackgroundTask: Telemetry update ` +
       `[${latitude.toFixed(5)}, ${longitude.toFixed(5)}] ` +
-      `Acc:${(accuracy || 0).toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
+      `Acc:${reportedAcc.toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
 
     // ── Smart Stationary vs Moving Upload Filter ─────────────────────────────
@@ -352,7 +389,7 @@ const processLocation = async (location) => {
     // ── Try uploading to server ───────────────────────────────────────────────
     const token = await storage.getItem('userToken');
     if (!token) {
-      const enqueued = await enqueueCoordinate(sessionId, newCoord, lastLocation);
+      await enqueueCoordinate(sessionId, newCoord, lastLocation);
       return;
     }
 
@@ -389,16 +426,12 @@ const processLocation = async (location) => {
         const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist >= 0 ? authoritativeDist : 0;
 
         // Server Authoritative Sync:
-        // If server returns an authoritative valid distance, sync local storage to match server.
-        // Force-resync if local storage has a stale high value that server corrected.
+        // When offline queue is empty, server DistanceLedger is the single source of truth.
+        // Never use Math.max(validServerDist, localDist) to ratchet up local drift!
+        const pendingOfflineCount = await getQueueSize();
         let finalNum = validServerDist;
-        if (validServerDist === 0 && localDist > 0 && localDist < 5.0) {
+        if (pendingOfflineCount > 0 && localDist > validServerDist) {
           finalNum = localDist;
-        } else if (Math.abs(localDist - validServerDist) > 3.0) {
-          console.log(`🔄 [KM_SYNC] Resynced local KM (${localDist}) to server authoritative KM (${validServerDist})`);
-          finalNum = validServerDist;
-        } else {
-          finalNum = Math.max(validServerDist, localDist);
         }
         const finalDist = finalNum.toFixed(2);
 
@@ -447,6 +480,8 @@ const processLocation = async (location) => {
     console.error('📍 BackgroundTask: Unhandled error in background tick:', e);
   }
 };
+
+const processLocation = (location) => withLocationLock(() => processLocationUnlocked(location));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TaskManager definition — processes GPS fixes from OS in timestamp order

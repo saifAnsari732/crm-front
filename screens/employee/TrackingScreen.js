@@ -470,7 +470,7 @@ export default function ActiveShiftMapScreen() {
       const fetchLiveCoords = async () => {
         try {
           const position = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.High,
           });
           if (position) {
             await handleCoordinateFix(position);
@@ -480,12 +480,12 @@ export default function ActiveShiftMapScreen() {
         }
       };
 
-      // Continuous OS Hardware GPS Callbacks (0 ms lag on turns and acceleration)
+      // Continuous OS Hardware GPS Callbacks (High Accuracy)
       if (Platform.OS !== 'web') {
         Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 4000,
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
             distanceInterval: 8,
           },
           (pos) => {
@@ -496,11 +496,13 @@ export default function ActiveShiftMapScreen() {
           console.log('📡 Tracking Screen: Native hardware watchPositionAsync active! ✅');
         }).catch((err) => {
           console.log('⚠️ Tracking Screen: watchPositionAsync fallback to polling:', err.message);
+          locationIntervalRef.current = setInterval(fetchLiveCoords, 8000);
         });
+        fetchLiveCoords();
+      } else {
+        fetchLiveCoords();
+        locationIntervalRef.current = setInterval(fetchLiveCoords, 8000);
       }
-
-      fetchLiveCoords();
-      locationIntervalRef.current = setInterval(fetchLiveCoords, 8000);
     } else {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       setLatitude('26.797531');

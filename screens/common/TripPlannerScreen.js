@@ -454,6 +454,9 @@ export default function TripPlannerScreen() {
       }
 
       storage.setItem('active_trip_planner_traveled_m', totalM.toString()).catch(() => {});
+      storage.setItem('active_trip_planner_last_loc', JSON.stringify({ lat, lng, speed: effectiveSpeedKmh / 3.6, accuracy: reportedAccuracy, timestamp: now })).catch(() => {});
+      storage.setItem('active_trip_planner_bg_anchor', JSON.stringify({ lat, lng })).catch(() => {});
+      storage.setItem('active_trip_planner_bg_moving', 'true').catch(() => {});
       storage.setItem('active_trip_planner_trail', JSON.stringify(actualTrailRef.current)).catch(() => {});
       return;
     }
@@ -472,6 +475,9 @@ export default function TripPlannerScreen() {
         stationaryAnchorRef.current = { lat, lng };
         lastConfirmedCoordRef.current = { lat, lng, timestamp: now };
         lastFixRef.current = { lat, lng, timestamp: now, accuracy: reportedAccuracy, speed: 0 };
+        storage.setItem('active_trip_planner_last_loc', JSON.stringify({ lat, lng, speed: 0, accuracy: reportedAccuracy, timestamp: now })).catch(() => {});
+        storage.setItem('active_trip_planner_bg_anchor', JSON.stringify({ lat, lng })).catch(() => {});
+        storage.setItem('active_trip_planner_bg_moving', 'false').catch(() => {});
         console.log('🛑 [TripPlanner Odometer] Motion Stopped. New Stationary Anchor Dropped.');
         return;
       }
@@ -479,8 +485,8 @@ export default function TripPlannerScreen() {
       haltCandidateCountRef.current = 0;
     }
 
-    // Legitimate road progress while moving (minimum 4.0m step between fixes to eliminate micro-jitter)
-    if (distFromLastM >= 4.0 && calcSpeedKmh < 160) {
+    // Legitimate road progress while moving (minimum 6.0m step between fixes to eliminate micro-jitter)
+    if (distFromLastM >= 6.0 && calcSpeedKmh < 160) {
       departureCandidateCountRef.current = 0;
       accumulatedTraveledMetersRef.current += distFromLastM;
       const totalM = Math.round(accumulatedTraveledMetersRef.current);
@@ -505,6 +511,9 @@ export default function TripPlannerScreen() {
       }
 
       storage.setItem('active_trip_planner_traveled_m', totalM.toString()).catch(() => {});
+      storage.setItem('active_trip_planner_last_loc', JSON.stringify({ lat, lng, speed: effectiveSpeedKmh / 3.6, accuracy: reportedAccuracy, timestamp: now })).catch(() => {});
+      storage.setItem('active_trip_planner_bg_anchor', JSON.stringify({ lat, lng })).catch(() => {});
+      storage.setItem('active_trip_planner_bg_moving', 'true').catch(() => {});
       storage.setItem('active_trip_planner_trail', JSON.stringify(actualTrailRef.current)).catch(() => {});
     }
   }, []);
@@ -578,9 +587,22 @@ export default function TripPlannerScreen() {
                 timeout: 10000,
               }
             );
+
+            pollInterval = setInterval(() => {
+              if (!isMounted) return;
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  if (pos?.coords) {
+                    handleNewLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.speed, pos.timestamp);
+                  }
+                },
+                () => {},
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+              );
+            }, 6000);
           }
 
-          // Native Android/iOS Expo Go: Location.Accuracy.High with Google Play Fused Location Provider
+          // Native Android/iOS: Location.Accuracy.High with Google Play Fused Location Provider
           if (Platform.OS !== 'web') {
             if (locationWatcherRef.current) {
               try { locationWatcherRef.current.remove(); } catch (_) {}
@@ -588,8 +610,8 @@ export default function TripPlannerScreen() {
             locationWatcherRef.current = await Location.watchPositionAsync(
               {
                 accuracy: Location.Accuracy.High,
-                timeInterval: 2000,
-                distanceInterval: 3,
+                timeInterval: 3000,
+                distanceInterval: 6,
                 mayShowUserSettingsDialog: true,
               },
               (loc) => {
@@ -600,44 +622,6 @@ export default function TripPlannerScreen() {
               }
             );
           }
-
-          // 3. Active heartbeat poller (guarantees continuous tracking even if watcher throttles)
-          pollInterval = setInterval(async () => {
-            if (!isMounted) return;
-            try {
-              if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    if (pos?.coords) {
-                      handleNewLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.speed, pos.timestamp);
-                    }
-                  },
-                  () => {},
-                  { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                );
-              } else {
-                // Native Android / iOS Expo Go: Fused location provider polling
-                const freshLoc = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.High,
-                });
-                if (freshLoc?.coords) {
-                  const coords = freshLoc.coords;
-                  handleNewLocation(coords.latitude, coords.longitude, coords.accuracy, coords.speed, freshLoc.timestamp);
-                }
-              }
-            } catch (pollErr) {
-              // Graceful fallback to balanced accuracy if high times out
-              if (Platform.OS !== 'web') {
-                Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-                  .then((balLoc) => {
-                    if (balLoc?.coords) {
-                      handleNewLocation(balLoc.coords.latitude, balLoc.coords.longitude, balLoc.coords.accuracy, balLoc.coords.speed, balLoc.timestamp);
-                    }
-                  })
-                  .catch(() => {});
-              }
-            }
-          }, 6000);
         } catch (err) {
           console.warn('Trip continuous auto-sense setup error:', err.message);
         }

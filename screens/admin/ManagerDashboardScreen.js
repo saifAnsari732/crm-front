@@ -1352,7 +1352,7 @@ export default function ManagerDashboardScreen() {
         </Surface>
 
         {/* ── LIVE TEAM FIELD LIST SNIPPET (Matching Mockup) ── */}
-        <Surface style={[styles.sectionCard, cardShadow]} elevation={1}>
+        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Live Team Field Map</Text>
             <TouchableOpacity onPress={() => router.push('/(admin)/tracking')}>
@@ -1400,43 +1400,6 @@ export default function ManagerDashboardScreen() {
                   </View>
                 )}
               </TouchableOpacity>
-            ))}
-          </View>
-        </Surface>
-
-        {/* ── TOP 5 TEAM MEMBERS LEADERBOARD ── */}
-        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Top 5 Team Members</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
-              <Text style={styles.viewLinkText}>View All →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.leaderboardList}>
-            {leaderboardMembers.map((item) => (
-              <View key={item.rank} style={styles.leaderboardRowItem}>
-                <View style={styles.leaderboardLeft}>
-                  <View style={[styles.rankCircleBadge, { backgroundColor: item.color }]}>
-                    <Text style={styles.rankCircleText}>{item.rank}</Text>
-                  </View>
-                  {item.avatar ? (
-                    <Image source={{ uri: item.avatar }} style={styles.leaderboardAvatarImg} />
-                  ) : (
-                    <View style={[styles.leaderboardAvatarFallback, { backgroundColor: item.color }]}>
-                      <Text style={styles.leaderboardAvatarFallbackText}>{item.initials || getUserInitials(item.name)}</Text>
-                    </View>
-                  )}
-                  <View style={{ marginLeft: 8, flex: 1 }}>
-                    <Text style={styles.leaderboardName} numberOfLines={1}>{item.name}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.leaderboardSub}>{item.sub}</Text>
-                <Text style={[styles.leaderboardScore, item.score === 'Offline' && { color: COLORS.textMuted }]}>
-                  {item.score}
-                </Text>
-              </View>
             ))}
           </View>
         </Surface>

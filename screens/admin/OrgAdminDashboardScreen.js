@@ -87,6 +87,11 @@ export default function OrgAdminDashboardScreen() {
   });
   const [creatingEmp, setCreatingEmp] = useState(false);
 
+  // All Employees Directory State
+  const [empSearchQuery, setEmpSearchQuery] = useState('');
+  const [empStatusFilter, setEmpStatusFilter] = useState('ALL');
+  const [showAllEmps, setShowAllEmps] = useState(false);
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const todayDateFormatted = new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -294,6 +299,28 @@ export default function OrgAdminDashboardScreen() {
     };
   });
 
+  // All Employees Filtered & Counts
+  const activeStaffCount = directoryStaff.filter((e) => e.status === 'ACTIVE').length;
+  const idleStaffCount = directoryStaff.filter((e) => e.status === 'IDLE').length;
+  const offlineStaffCount = directoryStaff.filter((e) => e.status === 'OFFLINE').length;
+
+  const filteredDirectoryStaff = directoryStaff.filter((emp) => {
+    if (empStatusFilter !== 'ALL' && emp.status !== empStatusFilter) {
+      return false;
+    }
+    if (empSearchQuery.trim()) {
+      const q = empSearchQuery.toLowerCase().trim();
+      const matchName = (emp.name || '').toLowerCase().includes(q);
+      const matchDept = (emp.department || '').toLowerCase().includes(q);
+      const matchRole = (emp.role || '').toLowerCase().includes(q);
+      const matchPhone = (emp.phone || '').toLowerCase().includes(q);
+      return matchName || matchDept || matchRole || matchPhone;
+    }
+    return true;
+  });
+
+  const displayedDirectoryStaff = showAllEmps ? filteredDirectoryStaff : filteredDirectoryStaff.slice(0, 10);
+
   // Dynamic Leaderboard using Real Database Team sorted by todayKm
   const leaderboardMembers = directoryStaff
     .slice()
@@ -471,7 +498,61 @@ export default function OrgAdminDashboardScreen() {
           </View>
         </Surface>
 
-        {/* ── 3. TODAY'S ATTENDANCE ACTION 4-CARD GRID (COMPACT WITH ICON BADGES) ── */}
+        {/* ── 3. QUICK ACTIONS (6 Grid Cards: 2x3 Layout) ── */}
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.cardHeaderTitle}>Quick Actions</Text>
+          <View style={styles.quick6Grid}>
+            {/* 1. Visit Records */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
+                <Briefcase size={20} color={COLORS.success} />
+              </View>
+              <Text style={styles.quick6Label}>Visit Records</Text>
+            </TouchableOpacity>
+
+            {/* 2. My Team */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.lavenderLight }]}>
+                <Users size={20} color="#4F46E5" />
+              </View>
+              <Text style={styles.quick6Label}>My Team</Text>
+            </TouchableOpacity>
+
+            {/* 3. Live Tracking */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.skyLight }]}>
+                <Compass size={20} color="#0284C7" />
+              </View>
+              <Text style={styles.quick6Label}>Live Tracking</Text>
+            </TouchableOpacity>
+
+            {/* 4. Generate Report */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.purpleLight }]}>
+                <FileText size={20} color={COLORS.purple} />
+              </View>
+              <Text style={styles.quick6Label}>Generate Report</Text>
+            </TouchableOpacity>
+
+            {/* 5. Approvals */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.pinkLight }]}>
+                <CheckCircle2 size={20} color="#E11D48" />
+              </View>
+              <Text style={styles.quick6Label}>Approvals</Text>
+            </TouchableOpacity>
+
+            {/* 6. Add Employee */}
+            <TouchableOpacity style={styles.quick6Card} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
+                <UserPlus size={20} color={COLORS.primary} />
+              </View>
+              <Text style={styles.quick6Label}>Add Employee</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── 4. TODAY'S ATTENDANCE ACTION 4-CARD GRID (COMPACT WITH ICON BADGES) ── */}
         <View style={styles.action4Container}>
           {/* Card 1: Leave Approvals */}
           <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
@@ -540,60 +621,6 @@ export default function OrgAdminDashboardScreen() {
               </Text>
             </TouchableOpacity>
           </Surface>
-        </View>
-
-        {/* ── 4. QUICK ACTIONS (6 Grid Cards: 2x3 Layout) ── */}
-        <View style={styles.quickActionsSection}>
-          <Text style={styles.cardHeaderTitle}>Quick Actions</Text>
-          <View style={styles.quick6Grid}>
-            {/* 1. Visit Records */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
-                <Briefcase size={20} color={COLORS.success} />
-              </View>
-              <Text style={styles.quick6Label}>Visit Records</Text>
-            </TouchableOpacity>
-
-            {/* 2. My Team */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.lavenderLight }]}>
-                <Users size={20} color="#4F46E5" />
-              </View>
-              <Text style={styles.quick6Label}>My Team</Text>
-            </TouchableOpacity>
-
-            {/* 3. Live Tracking */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.skyLight }]}>
-                <Compass size={20} color="#0284C7" />
-              </View>
-              <Text style={styles.quick6Label}>Live Tracking</Text>
-            </TouchableOpacity>
-
-            {/* 4. Generate Report */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.purpleLight }]}>
-                <FileText size={20} color={COLORS.purple} />
-              </View>
-              <Text style={styles.quick6Label}>Generate Report</Text>
-            </TouchableOpacity>
-
-            {/* 5. Approvals */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.pinkLight }]}>
-                <CheckCircle2 size={20} color="#E11D48" />
-              </View>
-              <Text style={styles.quick6Label}>Approvals</Text>
-            </TouchableOpacity>
-
-            {/* 6. Add Employee */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
-                <UserPlus size={20} color={COLORS.primary} />
-              </View>
-              <Text style={styles.quick6Label}>Add Employee</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (ORG ADMIN VIEW) ── */}
@@ -758,41 +785,245 @@ export default function OrgAdminDashboardScreen() {
           </View>
         </Surface>
 
-        {/* ── 8. TOP 5 TEAM MEMBERS LEADERBOARD ── */}
-        <Surface style={[styles.weeklyTrendCard, cardShadow, { marginBottom: 20 }]} elevation={1}>
+        {/* ── 8. ALL EMPLOYEES DIRECTORY ROSTER ── */}
+        <Surface style={[styles.weeklyTrendCard, cardShadow, { marginBottom: 24 }]} elevation={1}>
+          {/* Section Header */}
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.cardHeaderTitle}>Top 5 Team Members</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
-              <Text style={styles.viewLinkText}>View All →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.leaderboardList}>
-            {leaderboardMembers.map((item) => (
-              <View key={item.rank} style={styles.leaderboardRowItem}>
-                <View style={styles.leaderboardLeft}>
-                  <View style={[styles.rankCircleBadge, { backgroundColor: item.color }]}>
-                    <Text style={styles.rankCircleText}>{item.rank}</Text>
-                  </View>
-                  {item.avatar ? (
-                    <Image source={{ uri: item.avatar }} style={styles.leaderboardAvatarImg} />
-                  ) : (
-                    <View style={[styles.leaderboardAvatarFallback, { backgroundColor: item.color }]}>
-                      <Text style={styles.leaderboardAvatarFallbackText}>{item.initials || getUserInitials(item.name)}</Text>
-                    </View>
-                  )}
-                  <View style={{ marginLeft: 8, flex: 1 }}>
-                    <Text style={styles.leaderboardName} numberOfLines={1}>{item.name}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.leaderboardSub}>{item.sub}</Text>
-                <Text style={[styles.leaderboardScore, item.score === 'Offline' && { color: COLORS.textMuted }]}>
-                  {item.score}
-                </Text>
+            <View style={styles.allEmpHeaderTitleGroup}>
+              <View style={styles.allEmpHeaderIconWrap}>
+                <Users size={16} color={COLORS.primary} />
               </View>
-            ))}
+              <Text style={styles.cardHeaderTitle}>All Employees</Text>
+              <View style={styles.allEmpCountBadge}>
+                <Text style={styles.allEmpCountText}>{directoryStaff.length}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setAddEmpModalVisible(true)}
+                style={styles.allEmpAddQuickBtn}
+                activeOpacity={0.8}
+              >
+                <Plus size={13} color="#FFFFFF" />
+                <Text style={styles.allEmpAddQuickBtnText}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(admin)/team')} activeOpacity={0.7}>
+                <Text style={styles.viewLinkText}>Manage →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Search Box */}
+          <View style={styles.allEmpSearchBox}>
+            <Search size={15} color={COLORS.textMuted} />
+            <TextInput
+              style={styles.allEmpSearchInput}
+              placeholder="Search by name, dept, phone..."
+              placeholderTextColor={COLORS.textMuted}
+              value={empSearchQuery}
+              onChangeText={setEmpSearchQuery}
+              clearButtonMode="while-editing"
+            />
+            {empSearchQuery ? (
+              <TouchableOpacity onPress={() => setEmpSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={15} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Filter Chips Row */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.allEmpFilterRow}>
+            <TouchableOpacity
+              style={[styles.allEmpFilterChip, empStatusFilter === 'ALL' && styles.allEmpFilterChipActive]}
+              onPress={() => setEmpStatusFilter('ALL')}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'ALL' && styles.allEmpFilterChipTextActive]}>
+                All ({directoryStaff.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.allEmpFilterChip, empStatusFilter === 'ACTIVE' && styles.allEmpFilterChipActive]}
+              onPress={() => setEmpStatusFilter('ACTIVE')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.success }]} />
+              <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'ACTIVE' && styles.allEmpFilterChipTextActive]}>
+                Active ({activeStaffCount})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.allEmpFilterChip, empStatusFilter === 'IDLE' && styles.allEmpFilterChipActive]}
+              onPress={() => setEmpStatusFilter('IDLE')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.warning }]} />
+              <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'IDLE' && styles.allEmpFilterChipTextActive]}>
+                Idle ({idleStaffCount})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.allEmpFilterChip, empStatusFilter === 'OFFLINE' && styles.allEmpFilterChipActive]}
+              onPress={() => setEmpStatusFilter('OFFLINE')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.textMuted }]} />
+              <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'OFFLINE' && styles.allEmpFilterChipTextActive]}>
+                Offline ({offlineStaffCount})
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Employee List */}
+          {filteredDirectoryStaff.length === 0 ? (
+            <View style={styles.allEmpEmptyBox}>
+              <Users size={32} color={COLORS.textMuted} />
+              <Text style={styles.allEmpEmptyTitle}>No employees found</Text>
+              <Text style={styles.allEmpEmptySub}>
+                {empSearchQuery ? `No match for "${empSearchQuery}"` : 'No employees in this category'}
+              </Text>
+              {(empSearchQuery || empStatusFilter !== 'ALL') && (
+                <TouchableOpacity
+                  onPress={() => { setEmpSearchQuery(''); setEmpStatusFilter('ALL'); }}
+                  style={styles.allEmpResetBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.allEmpResetBtnText}>Reset Filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={styles.allEmpList}>
+              {displayedDirectoryStaff.map((emp, idx) => {
+                const paletteColors = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#16a34a'];
+                const avatarBg = paletteColors[idx % paletteColors.length];
+
+                return (
+                  <TouchableOpacity
+                    key={emp._id || String(idx)}
+                    style={[styles.allEmpRowItem, idx === displayedDirectoryStaff.length - 1 && { borderBottomWidth: 0 }]}
+                    onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
+                    activeOpacity={0.75}
+                  >
+                    {/* Left: Avatar with online dot */}
+                    <View style={styles.allEmpAvatarWrap}>
+                      {emp.avatar ? (
+                        <Image source={{ uri: emp.avatar }} style={styles.allEmpAvatarImg} />
+                      ) : (
+                        <View style={[styles.allEmpAvatarFallback, { backgroundColor: avatarBg }]}>
+                          <Text style={styles.allEmpAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                        </View>
+                      )}
+                      <View
+                        style={[
+                          styles.allEmpStatusDot,
+                          {
+                            backgroundColor:
+                              emp.status === 'ACTIVE'
+                                ? COLORS.success
+                                : emp.status === 'IDLE'
+                                ? COLORS.warning
+                                : '#94A3B8',
+                          },
+                        ]}
+                      />
+                    </View>
+
+                    {/* Middle: Details */}
+                    <View style={styles.allEmpInfoCol}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.allEmpNameText} numberOfLines={1}>
+                          {emp.name}
+                        </Text>
+                        {emp.role && (
+                          <View style={styles.allEmpRoleBadge}>
+                            <Text style={styles.allEmpRoleBadgeText} numberOfLines={1}>
+                              {emp.role === 'ORG_ADMIN' ? 'Admin' : emp.role === 'MANAGER' ? 'Mgr' : 'Field'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.allEmpSubText} numberOfLines={1}>
+                        {emp.department || 'Field Services'}
+                      </Text>
+                      {emp.phone ? (
+                        <Text style={styles.allEmpPhoneText} numberOfLines={1}>
+                          {emp.phone}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* Right: KM & Status & Quick Actions */}
+                    <View style={styles.allEmpRightCol}>
+                      <View style={styles.allEmpKmPill}>
+                        <Car size={11} color={COLORS.primary} />
+                        <Text style={styles.allEmpKmText}>{emp.todayKm} km</Text>
+                      </View>
+
+                      {emp.status === 'ACTIVE' ? (
+                        <View style={styles.dutyActivePill}>
+                          <View style={styles.dutyActiveDot} />
+                          <Text style={styles.dutyActivePillText}>Active</Text>
+                        </View>
+                      ) : emp.status === 'IDLE' ? (
+                        <View style={styles.dutyIdlePill}>
+                          <Text style={styles.dutyIdlePillText}>Idle</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.dutyOfflinePill}>
+                          <Text style={styles.dutyOfflinePillText}>Offline</Text>
+                        </View>
+                      )}
+
+                      {/* Quick Action Icons */}
+                      <View style={styles.allEmpActionRow}>
+                        {emp.phone ? (
+                          <TouchableOpacity
+                            style={styles.allEmpCallTouch}
+                            onPress={(e) => {
+                              e?.stopPropagation?.();
+                              Linking.openURL(`tel:${emp.phone}`);
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Phone size={12} color={COLORS.primary} />
+                          </TouchableOpacity>
+                        ) : null}
+                        <TouchableOpacity
+                          style={styles.allEmpMapTouch}
+                          onPress={(e) => {
+                            e?.stopPropagation?.();
+                            router.push(`/(admin)/tracking?employeeId=${emp._id}`);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <MapPin size={12} color="#0284c7" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Show More / Show Less Button if > 10 */}
+          {filteredDirectoryStaff.length > 10 && (
+            <TouchableOpacity
+              style={styles.allEmpToggleBtn}
+              onPress={() => setShowAllEmps(!showAllEmps)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.allEmpToggleBtnText}>
+                {showAllEmps
+                  ? `Show Less (10 of ${filteredDirectoryStaff.length})`
+                  : `Show All (${filteredDirectoryStaff.length} Employees) ↓`}
+              </Text>
+            </TouchableOpacity>
+          )}
         </Surface>
       </ScrollView>
 
@@ -1955,6 +2186,270 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
+    fontFamily: FONT,
+  },
+
+  // ── ALL EMPLOYEES DIRECTORY ROSTER STYLES ──
+  allEmpHeaderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  allEmpHeaderIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allEmpCountBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 2,
+  },
+  allEmpCountText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    fontFamily: FONT,
+  },
+  allEmpAddQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 3,
+  },
+  allEmpAddQuickBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: FONT,
+  },
+  allEmpSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    height: 38,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
+  },
+  allEmpSearchInput: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.text,
+    fontFamily: FONT,
+    height: 38,
+  },
+  allEmpFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingBottom: 2,
+  },
+  allEmpFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 5,
+  },
+  allEmpFilterChipActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  allEmpFilterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  allEmpFilterChipTextActive: {
+    color: COLORS.primaryDark,
+    fontWeight: '800',
+  },
+  filterStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  allEmpList: {
+    marginTop: 8,
+  },
+  allEmpRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface,
+  },
+  allEmpAvatarWrap: {
+    position: 'relative',
+  },
+  allEmpAvatarImg: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.border,
+  },
+  allEmpAvatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allEmpAvatarFallbackText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  allEmpStatusDot: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  allEmpInfoCol: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'center',
+  },
+  allEmpNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+  },
+  allEmpRoleBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  allEmpRoleBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textSub,
+    fontFamily: FONT,
+  },
+  allEmpSubText: {
+    fontSize: 11,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+  allEmpPhoneText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+  allEmpRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
+    marginLeft: 8,
+  },
+  allEmpKmPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 4,
+  },
+  allEmpKmText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  allEmpActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  allEmpCallTouch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allEmpMapTouch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#e0f2fe',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allEmpToggleBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  allEmpToggleBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT,
+  },
+  allEmpEmptyBox: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    gap: 6,
+  },
+  allEmpEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT,
+    marginTop: 4,
+  },
+  allEmpEmptySub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+  allEmpResetBtn: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 8,
+  },
+  allEmpResetBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
     fontFamily: FONT,
   }
 });

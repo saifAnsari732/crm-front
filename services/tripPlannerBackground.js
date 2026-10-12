@@ -87,10 +87,15 @@ TaskManager.defineTask(BACKGROUND_TRIP_PLANNER_TASK, async ({ data: { locations 
 
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
       if (loc.mocked || loc.coords?.isMocked) continue; // anti-spoof
+      if ((accuracy || 15) > 100) continue; // discard coarse cell-tower jumps
 
       const currLoc = { lat: latitude, lng: longitude, speed: speed || 0, accuracy: accuracy || 10, timestamp };
 
       if (prevLoc) {
+        // Prevent double-counting fixes already processed by foreground TripPlannerScreen
+        if (prevLoc.timestamp && timestamp <= prevLoc.timestamp + 1500) {
+          continue;
+        }
         const distM = haversineMeters(prevLoc.lat, prevLoc.lng, latitude, longitude);
         const timeDiffSec = Math.max(1, (timestamp - (prevLoc.timestamp || timestamp)) / 1000);
         const calcSpeedKmh = (distM / 1000 / timeDiffSec) * 3600;
@@ -130,8 +135,8 @@ TaskManager.defineTask(BACKGROUND_TRIP_PLANNER_TASK, async ({ data: { locations 
           bgAnchor = { lat: latitude, lng: longitude };
           prevLoc = currLoc;
           console.log(`🛑 [TRIP_BG] Halted. New stationary anchor dropped at ${currentM}m.`);
-        } else if (distM >= 4.0) {
-          // Continuous legitimate physical displacement (4m+ step)
+        } else if (distM >= 6.0) {
+          // Continuous legitimate physical displacement (6m+ step)
           currentM += Math.round(distM);
           prevLoc = currLoc;
           bgAnchor = { lat: latitude, lng: longitude };
