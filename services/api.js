@@ -164,8 +164,26 @@ export const authAPI = {
   getMe: () => API.get('/auth/me'),
   updateProfile: (data) => API.put('/auth/profile', data),
   changePassword: (data) => API.put('/auth/change-password', data),
-  verifyResetEmail: (email) => API.post('/auth/verify-reset-email', { email }),
-  resetPasswordDirect: (email, newPassword) => API.post('/auth/reset-password-direct', { email, newPassword }),
+  verifyResetEmail: async (email) => {
+    try {
+      return await API.post('/auth/verify-reset-email', { email, identifier: email });
+    } catch (err) {
+      if (err?.response?.status === 404 && Platform.OS === 'web') {
+        return await axios.post('http://localhost:5000/api/auth/verify-reset-email', { email, identifier: email });
+      }
+      throw err;
+    }
+  },
+  resetPasswordDirect: async (email, newPassword) => {
+    try {
+      return await API.post('/auth/reset-password-direct', { email, identifier: email, newPassword });
+    } catch (err) {
+      if (err?.response?.status === 404 && Platform.OS === 'web') {
+        return await axios.post('http://localhost:5000/api/auth/reset-password-direct', { email, identifier: email, newPassword });
+      }
+      throw err;
+    }
+  },
 };
 
 

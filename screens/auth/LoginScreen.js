@@ -109,6 +109,8 @@ export default function LoginScreen() {
     } catch (err) {
       if (err.response?.data?.message) {
         setResetError(err.response.data.message);
+      } else if (err.response?.status === 404) {
+        setResetError('No registered account found with this email address or phone number (or backend server update pending).');
       } else if (err.message && err.message.toLowerCase().includes('network')) {
         setResetError('Network Error: Unable to reach server. Please check your internet connection.');
       } else {

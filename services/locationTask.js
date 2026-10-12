@@ -95,27 +95,45 @@ function updateMotionState(speedMps) {
 // loss when transitioning from stationary home to active travel.
 // ─────────────────────────────────────────────────────────────────────────────
 let _movementCandidateBuffer = [];
+let _isConfirmedMoving = false;
 
-function evaluateMovementTransition(distM, secs, speedKmh, accuracyM) {
-  const effectiveSpeedKmh = Math.max(speedKmh, (distM / 1000 / secs) * 3600);
+function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeedMps, calcSpeedKmh, accuracyM) {
+  const reportedSpeedKmh = (Number(reportedSpeedMps) || 0) * 3.6;
+  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh);
 
-  // Real movement signal: speed > 3.5 km/h, distance > 35m, reasonable accuracy <= 100m
-  if (effectiveSpeedKmh > 3.5 && distM > 35 && accuracyM <= 100) {
-    _movementCandidateBuffer.push({ distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() });
+  // Real movement signal out of stationary state: distance >= 40m from anchor, speed >= 4.5 km/h, accuracy <= 75m
+  if (effectiveSpeedKmh >= 4.5 && distM >= 40 && accuracyM <= 75) {
+    const prevCandidate = _movementCandidateBuffer.length > 0
+      ? _movementCandidateBuffer[_movementCandidateBuffer.length - 1]
+      : null;
 
-    // Multi-observation confirmation: require at least 2 consecutive consistent fixes
-    if (_movementCandidateBuffer.length >= 2) {
-      console.log(`📍 CUSUM Change-Point: Confirmed movement with ${_movementCandidateBuffer.length} fixes! Transitioning to MOVING.`);
-      // Each buffered fix is measured from the SAME anchor (last_recorded_location),
-      // so displacements overlap — the latest one is the true distance. Summing
-      // them would over-count and inflate the locally cached KM.
-      const latestBufferedM = _movementCandidateBuffer[_movementCandidateBuffer.length - 1].distM;
-      _movementCandidateBuffer = [];
-      return { confirmed: true, backfillDistKm: latestBufferedM / 1000 };
+    if (prevCandidate) {
+      const stepFromPrevCandidateM = distanceMeters(prevCandidate.lat, prevCandidate.lng, currLat, currLng);
+      const radialProgressM = distM - prevCandidate.distM;
+
+      // Progressive movement verification:
+      // Fix #2 must move at least 12m further away from the stationary anchor than Fix #1
+      // AND at least 12m away from Fix #1 itself (prevents static indoor Wi-Fi/Cell offset from counting twice!)
+      if (radialProgressM >= 12 && stepFromPrevCandidateM >= 12) {
+        console.log(`📍 CUSUM Change-Point: Confirmed progressive movement (${prevCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m). Transitioning to MOVING.`);
+        _movementCandidateBuffer = [];
+        _isConfirmedMoving = true;
+        return { confirmed: true, backfillDistKm: distM / 1000 };
+      } else {
+        // Static offset or bounce back towards anchor — replace candidate with latest or reset if older than 60s
+        if (Date.now() - prevCandidate.time > 60000) {
+          _movementCandidateBuffer = [];
+        } else {
+          _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() }];
+        }
+        return { confirmed: false, pending: true };
+      }
     }
+
+    _movementCandidateBuffer.push({ lat: currLat, lng: currLng, distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() });
     return { confirmed: false, pending: true };
   } else {
-    // Noise/jitter resets the transition buffer
+    // Noise/jitter inside stationary zone resets the transition buffer
     if (_movementCandidateBuffer.length > 0) {
       _movementCandidateBuffer = [];
     }
@@ -161,15 +179,21 @@ function validateSegment(prev, curr) {
   const distKm = distM / 1000;
 
   // ── Gate 1: Minimum movement ─────────────────────────────────────────
-  if (distM < MIN_MOVE_METERS) return { valid: false, distKm: 0 };
+  if (distM < MIN_MOVE_METERS) {
+    _isConfirmedMoving = false;
+    return { valid: false, distKm: 0 };
+  }
 
   // ── Gate 2: Long Stationary Transition Guard (> 30 min) ──────────────
   const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
+  const reportedSpeedKmh = reportedSpeedMps * 3.6;
   if (rawSecs > 1800) {
     const gapSpeedKmh = (distKm / (rawSecs / 3600));
-    if (distKm >= 0.15 && gapSpeedKmh >= 1.5 && gapSpeedKmh <= 140.0 && reportedAccuracy <= 300) {
+    if (distKm >= 0.20 && gapSpeedKmh >= 2.0 && gapSpeedKmh <= 140.0 && reportedAccuracy <= 250) {
+      _isConfirmedMoving = true;
       return { valid: true, distKm };
     }
+    _isConfirmedMoving = false;
     return { valid: false, distKm: 0, reanchorOnly: true };
   }
 
@@ -179,17 +203,28 @@ function validateSegment(prev, curr) {
     return { valid: false, distKm: 0, isOutlier: true };
   }
 
-  // ── Gate 3: Stationary drift filter (aligned with backend AGTRIE-X v10) ──
+  // ── Gate 3: Stationary Departure Gate ────────────────────────────────
+  // If currently STATIONARY (!_isConfirmedMoving), NEVER accept a single unconfirmed spike!
+  // Force it through evaluateMovementTransition() which requires 2 consecutive progressive points.
+  if (!_isConfirmedMoving) {
+    return { valid: false, distKm: 0 };
+  }
+
+  // ── Gate 4: Active Moving Continuation Filter ────────────────────────
   const calcSpeedMps = (distM / rawSecs);
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
   const effectiveSpeedKmh = effectiveSpeedMps * 3.6;
-  const stationaryThresholdM = Math.max(30.0, Math.min(50.0, reportedAccuracy * 1.0));
+  const stationaryThresholdM = Math.max(35.0, Math.min(55.0, reportedAccuracy * 1.1));
 
-  // Ignore noise jitter when phone is stationary:
-  // 1. Inside stationary bubble (< 30-50m) with speed < 6.0 km/h
-  // 2. OR step < 25m with speed < 3.5 km/h
-  if ((distM < stationaryThresholdM && effectiveSpeedKmh < 6.0) || (distM < 25.0 && effectiveSpeedKmh < 3.5)) {
-    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${effectiveSpeedKmh.toFixed(1)} km/h (threshold: ${stationaryThresholdM.toFixed(0)}m, acc: ${reportedAccuracy}m)`);
+  // If hardware Doppler speed drops to 0 (< 2.0 km/h) and step is inside indoor drift range (< 35m),
+  // or speed is below walking threshold, transition back to STATIONARY!
+  if (
+    (reportedSpeedKmh < 2.0 && distM < 35.0) ||
+    (distM < stationaryThresholdM && effectiveSpeedKmh < 6.0) ||
+    (distM < 25.0 && effectiveSpeedKmh < 4.0)
+  ) {
+    _isConfirmedMoving = false;
+    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${effectiveSpeedKmh.toFixed(1)} km/h (doppler: ${reportedSpeedKmh.toFixed(1)} km/h, acc: ${reportedAccuracy}m)`);
     return { valid: false, distKm: 0 };
   }
 
@@ -292,6 +327,7 @@ const processLocationUnlocked = async (location) => {
     let lastLocation = null;
     let calculatedDistKm = 0;
     let isRejectedOutlier = false;
+    let isInitialSeed = false;
     const lastLocationStr = await storage.getItem('last_recorded_location');
     if (lastLocationStr) {
       try {
@@ -321,7 +357,15 @@ const processLocationUnlocked = async (location) => {
           const calcSpeedKmh = (distM / 1000 / secs) * 3600;
           
           if (calcSpeedKmh < MAX_SPEED_KMH) {
-            const transition = evaluateMovementTransition(distM, secs, calcSpeedKmh, reportedAcc);
+            const transition = evaluateMovementTransition(
+              latitude,
+              longitude,
+              distM,
+              secs,
+              speed,
+              calcSpeedKmh,
+              reportedAcc
+            );
             if (transition.confirmed) {
               valid = true;
               distKm = transition.backfillDistKm || (distM / 1000);
@@ -337,23 +381,15 @@ const processLocationUnlocked = async (location) => {
             await storage.setItem('tracking_accumulated_distance', updatedLocal);
           }
           await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
-        } else if (!isRejectedOutlier && !reanchorOnly) {
-          // Stationary drift: keep anchor coordinates locked at lastLocation, only update timestamp
-          if (lastLocation) {
-            const stationaryAnchor = {
-              ...lastLocation,
-              timestamp: new Date(timestamp).toISOString(),
-            };
-            await storage.setItem('last_recorded_location', JSON.stringify(stationaryAnchor));
-          } else {
-            await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
-          }
         }
+        // NOTE: When stationary (!valid), we intentionally DO NOT overwrite lastLocation.timestamp
+        // or upload the noisy coordinate to /tracking/update. The anchor remains locked.
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
       }
     } else if (reportedAcc <= 150) {
       // First initial location fix: establish initial anchor
+      isInitialSeed = true;
       await storage.setItem('last_recorded_location', JSON.stringify({
         lat: latitude,
         lng: longitude,
@@ -367,24 +403,20 @@ const processLocationUnlocked = async (location) => {
       return;
     }
 
+    // ── STRICT ZERO-DRIFT UPLOAD GATE ────────────────────────────────────────
+    // Never upload rejected stationary drift coordinates (calculatedDistKm === 0) to /tracking/update!
+    // Sending noisy indoor coordinates every 5 minutes was causing +0.04 km creep on the server.
+    // Instead, sendHeartbeatNow(false) keeps the session alive cleanly with 0.00 km added.
+    if (!isInitialSeed && calculatedDistKm <= 0) {
+      sendHeartbeatNow(false).catch(() => {});
+      return;
+    }
+
     console.log(
-      `📍 BackgroundTask: Telemetry update ` +
+      `📍 BackgroundTask: Confirmed movement upload (+${calculatedDistKm.toFixed(3)} km) ` +
       `[${latitude.toFixed(5)}, ${longitude.toFixed(5)}] ` +
       `Acc:${reportedAcc.toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
-
-    // ── Smart Stationary vs Moving Upload Filter ─────────────────────────────
-    // If stationary with 0 km added, suppress uploading duplicate noise coordinates every 4s.
-    // Heartbeat ping handles session keepalive. If MOVING, upload 100% instantly!
-    const isStationaryNoise = _currentMotionState === 'STATIONARY' && calculatedDistKm === 0;
-    if (isStationaryNoise) {
-      const lastStationaryUpload = parseInt(await storage.getItem('last_stationary_upload_ts'), 10) || 0;
-      if (Date.now() - lastStationaryUpload < 5 * 60 * 1000) {
-        // Skip duplicate stationary noise upload to save battery and DB space
-        return;
-      }
-      await storage.setItem('last_stationary_upload_ts', String(Date.now()));
-    }
 
     // ── Try uploading to server ───────────────────────────────────────────────
     const token = await storage.getItem('userToken');

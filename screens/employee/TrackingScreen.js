@@ -315,10 +315,10 @@ export default function ActiveShiftMapScreen() {
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
               const effectiveSpeedKmh = Math.max(rawSpeedKmh, calculatedSpeedKmh);
 
-              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (30m - 50m bubble):
+              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (40m - 60m bubble):
               // Covers indoor multipath reflection scatter ellipse so stationary phones never register movement
               const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
-              const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
+              const anchorThresholdM = Math.max(40.0, Math.min(60.0, gpsAcc * 1.2));
 
               if (!isMovingRef.current) {
                 // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
@@ -340,10 +340,11 @@ export default function ActiveShiftMapScreen() {
                   };
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                 } else {
-                  // Candidate departure detected outside anchor bubble (> 30-50m) with travel speed >= 4.5 km/h
-                  // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
+                  // Candidate departure detected outside anchor bubble (> 40-60m) with travel speed >= 4.5 km/h
+                  // Always require 2 consecutive progressive confirmations (regardless of jump distance < 85m)
+                  // to prevent a single indoor satellite/Wi-Fi bounce (+0.04 km) from triggering false departure!
                   departureCandidateCountRef.current += 1;
-                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 85) {
                     isMovingRef.current = false;
                     setIsMoving(false);
                     setMotionStatusLabel('STATIONARY');

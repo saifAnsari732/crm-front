@@ -25,6 +25,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Cache Gradle packages & wrapper
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
@@ -43,15 +53,29 @@ jobs:
       - name: Build Android APK & AAB
         working-directory: android
         run: |
-          ./gradlew assembleRelease bundleRelease \
-            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
-            -Pandroid.injected.signing.store.password=35e46672f6141074bc080e0d79616afd \
-            -Pandroid.injected.signing.key.alias=c3e6c980534f93dc06f106f42a7e99db \
-            -Pandroid.injected.signing.key.password=738acf5f9d8a76ae5ff16de2b84c459e \
-            --no-daemon
+          for attempt in 1 2 3; do
+            echo "🚀 Gradle build attempt $attempt of 3..."
+            ./gradlew assembleRelease bundleRelease \
+              -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
+              -Pandroid.injected.signing.store.password=35e46672f6141074bc080e0d79616afd \
+              -Pandroid.injected.signing.key.alias=c3e6c980534f93dc06f106f42a7e99db \
+              -Pandroid.injected.signing.key.password=738acf5f9d8a76ae5ff16de2b84c459e \
+              -Dorg.gradle.internal.http.connectionTimeout=120000 \
+              -Dorg.gradle.internal.http.socketTimeout=120000 \
+              -Dorg.gradle.internal.repository.max.tentatives=5 \
+              -Dorg.gradle.internal.repository.initial.backoff=3000 \
+              --no-daemon && break || {
+                if [ "$attempt" -eq 3 ]; then
+                  echo "❌ Build failed after 3 attempts."
+                  exit 1
+                fi
+                echo "⚠️ Transient network/Maven timeout detected. Retrying in 10 seconds..."
+                sleep 10
+              }
+          done
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.parallel=false"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.parallel=false -Dorg.gradle.internal.http.connectionTimeout=120000 -Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.repository.max.tentatives=5"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -64,4 +88,3 @@ jobs:
         with:
           name: kisanTeam-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
-
