@@ -54,7 +54,7 @@ function updateMotionState(speedMps) {
   const speedKmh = speedMps * 3.6;
   const prevState = _currentMotionState;
   
-  if (speedKmh < 1) {
+  if (speedKmh < 3.0) {
     if (_currentMotionState !== 'STATIONARY') {
       _stationarySince = Date.now();
     }
@@ -89,8 +89,8 @@ let _movementCandidateBuffer = [];
 function evaluateMovementTransition(distM, secs, speedKmh, accuracyM) {
   const effectiveSpeedKmh = Math.max(speedKmh, (distM / 1000 / secs) * 3600);
 
-  // Real movement signal: speed > 2.0 km/h, distance > 12m, reasonable accuracy <= 200m
-  if (effectiveSpeedKmh > 2.0 && distM > 12 && accuracyM <= 200) {
+  // Real movement signal: speed > 3.0 km/h, distance > 35m, reasonable accuracy <= 200m
+  if (effectiveSpeedKmh > 3.0 && distM > 35 && accuracyM <= 200) {
     _movementCandidateBuffer.push({ distM, secs, effectiveSpeedKmh, accuracyM, time: Date.now() });
 
     // Multi-observation confirmation: require at least 2 consecutive consistent fixes
@@ -170,11 +170,13 @@ function validateSegment(prev, curr) {
   // ── Gate 3: Stationary drift filter ──────────────────────────────────
   const calcSpeedMps = (distM / secs);
   const effectiveSpeedMps = Math.max(reportedSpeedMps, calcSpeedMps);
-  const reportedAccuracy = Number(curr.accuracy) || 20;
+  const reportedAccuracy = Number(curr.accuracy) || 25;
+  const stationaryThresholdM = Math.max(30.0, Math.min(50.0, reportedAccuracy * 1.0));
 
-  // Ignore noise jitter when phone is stationary (< 0.55 m/s or < 2 km/h AND (< 15m OR < 75% accuracy radius))
-  if (effectiveSpeedMps < 0.55 && (distM < 15.0 || distM < Math.max(12.0, reportedAccuracy * 0.75))) {
-    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${(effectiveSpeedMps * 3.6).toFixed(1)} km/h (acc: ${reportedAccuracy}m)`);
+  // Ignore noise jitter when phone is stationary:
+  // Reject micro-steps < 8m OR points within stationary bubble with speed < 5 km/h
+  if (distM < 8.0 || (distM < stationaryThresholdM && (effectiveSpeedMps * 3.6 < 5.0 || distM < 25.0))) {
+    console.log(`📍 Stationary drift ignored: ${distM.toFixed(1)}m at ${(effectiveSpeedMps * 3.6).toFixed(1)} km/h (threshold: ${stationaryThresholdM.toFixed(0)}m, acc: ${reportedAccuracy}m)`);
     return { valid: false, distKm: 0 };
   }
 
@@ -253,6 +255,20 @@ const processLocation = async (location) => {
     // ── Gate 2: Movement + speed validation ──────────────────────────────────
     updateMotionState(Number.isFinite(speed) ? speed : 0);
     
+    // ─── Build coordinate payload for server processing ───────────────────
+    const eventId = `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
+    const newCoord = {
+      eventId,
+      lat:      latitude,
+      lng:      longitude,
+      speed:    Number.isFinite(speed)   ? speed   : 0,
+      accuracy: Number.isFinite(accuracy)? accuracy: 0,
+      heading:  Number.isFinite(heading) ? heading : 0,
+      mocked:   location.mocked || false,
+      timestamp: new Date(timestamp).toISOString(),
+      motionState: _currentMotionState,
+    };
+
     let lastLocation = null;
     let calculatedDistKm = 0;
     const lastLocationStr = await storage.getItem('last_recorded_location');
@@ -285,34 +301,40 @@ const processLocation = async (location) => {
             const updatedLocal = (currentLocal + calculatedDistKm).toFixed(2);
             await storage.setItem('tracking_accumulated_distance', updatedLocal);
           }
+          await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+        } else {
+          // Stationary drift: Do NOT let anchor crawl! Softly pull anchor towards current point
+          if (lastLocation) {
+            const smoothedAnchor = {
+              ...lastLocation,
+              lat: 0.98 * lastLocation.lat + 0.02 * latitude,
+              lng: 0.98 * lastLocation.lng + 0.02 * longitude,
+              timestamp: new Date(timestamp).toISOString(),
+            };
+            await storage.setItem('last_recorded_location', JSON.stringify(smoothedAnchor));
+          } else {
+            await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
+          }
         }
       } catch (parseErr) {
         console.error('📍 BackgroundTask: Error parsing last location:', parseErr);
       }
+    } else {
+      // First initial location fix: establish initial anchor
+      await storage.setItem('last_recorded_location', JSON.stringify({
+        lat: latitude,
+        lng: longitude,
+        speed: Number.isFinite(speed) ? speed : 0,
+        accuracy: Number.isFinite(accuracy) ? accuracy : 0,
+        timestamp: new Date(timestamp).toISOString(),
+      }));
     }
-
-    // ─── Build coordinate payload for server processing ───────────────────
-    const eventId = `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
-    const newCoord = {
-      eventId,
-      lat:      latitude,
-      lng:      longitude,
-      speed:    Number.isFinite(speed)   ? speed   : 0,
-      accuracy: Number.isFinite(accuracy)? accuracy: 0,
-      heading:  Number.isFinite(heading) ? heading : 0,
-      mocked:   location.mocked || false,
-      timestamp: new Date(timestamp).toISOString(),
-      motionState: _currentMotionState,
-    };
 
     console.log(
       `📍 BackgroundTask: Telemetry update ` +
       `[${latitude.toFixed(5)}, ${longitude.toFixed(5)}] ` +
       `Acc:${(accuracy || 0).toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
     );
-
-    // Always update last_recorded_location anchor so location moves forward
-    await storage.setItem('last_recorded_location', JSON.stringify({ ...newCoord }));
 
     // ── Smart Stationary vs Moving Upload Filter ─────────────────────────────
     // If stationary with 0 km added, suppress uploading duplicate noise coordinates every 4s.

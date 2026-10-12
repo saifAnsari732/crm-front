@@ -124,6 +124,36 @@ export default function TripPlannerScreen() {
   const stationaryAnchorRef = useRef(null); // { lat, lng }
   const lastConfirmedCoordRef = useRef(null); // { lat, lng, timestamp }
   const isMovingRef = useRef(false);
+  const originIsLiveGpsRef = useRef(true); // true while origin == employee's real GPS position
+
+  // Fetch a fresh high-accuracy GPS fix and resolve it into an origin object (also updates UI)
+  const fetchFreshLiveOrigin = async () => {
+    try {
+      let lat; let lng;
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 })
+        );
+        lat = pos.coords.latitude; lng = pos.coords.longitude;
+      } else {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        lat = loc.coords.latitude; lng = loc.coords.longitude;
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      setCurrentGps({ lat, lng });
+      const addr = await reverseGeocodeLocation(lat, lng);
+      const liveOrigin = { lat, lng, address: addr };
+      originIsLiveGpsRef.current = true;
+      setOrigin(liveOrigin);
+      setOriginText(addr);
+      return liveOrigin;
+    } catch (e) {
+      console.warn('fetchFreshLiveOrigin failed:', e?.message);
+      return null;
+    }
+  };
+  const departureCandidateCountRef = useRef(0);
+  const haltCandidateCountRef = useRef(0);
   const accumulatedTraveledMetersRef = useRef(0);
   const actualTrailRef = useRef([]); // [{ lat, lng, speed, accuracy, timestamp }]
 
@@ -136,14 +166,21 @@ export default function TripPlannerScreen() {
   const searchTimeoutRef = useRef(null);
 
   // ── DYNAMIC DISTANCE TELEMETRY (REAL-TIME ARRIVAL & ROAD PROGRESS) ──
-  const distanceToDestMeters = (currentGps && destination && Number.isFinite(currentGps.lat) && Number.isFinite(destination.lat))
-    ? haversineMeters(currentGps.lat, currentGps.lng, destination.lat, destination.lng)
+  // Robust coordinate coercion: safely parses strings, numbers, and alternate key formats
+  const destLat = destination ? Number(destination.lat ?? destination.latitude) : NaN;
+  const destLng = destination ? Number(destination.lng ?? destination.longitude) : NaN;
+  const currLat = currentGps ? Number(currentGps.lat ?? currentGps.latitude) : NaN;
+  const currLng = currentGps ? Number(currentGps.lng ?? currentGps.longitude) : NaN;
+
+  const distanceToDestMeters = (Number.isFinite(currLat) && Number.isFinite(currLng) && Number.isFinite(destLat) && Number.isFinite(destLng))
+    ? haversineMeters(currLat, currLng, destLat, destLng)
     : null;
 
-  // 500M Arrival Rule: When employee reaches within 500m radius of destination (or background task confirms 500m arrival)
+  // 500M Arrival Rule: When employee reaches within 500m radius of destination (with GPS accuracy tolerance)
+  const arrivalToleranceM = Math.min(60, Math.max(20, gpsAccuracy || 25));
   const isWithin500m = Boolean(
     isArrivedWithin500m ||
-    (distanceToDestMeters !== null && distanceToDestMeters <= 500)
+    (distanceToDestMeters !== null && distanceToDestMeters <= (500 + arrivalToleranceM))
   );
 
   // Ground Truth: Did employee reach destination?
@@ -160,12 +197,32 @@ export default function TripPlannerScreen() {
         Math.round(traveledKm * 100) / 100
       );
 
-  // Remaining Road KM: shows real remaining GPS distance to destination, not broken subtraction
-  const remainingRoadKm = hasCompletedFullJourney
-    ? 0
-    : distanceToDestMeters !== null
-    ? Math.round((distanceToDestMeters / 1000) * 10) / 10
-    : (routeData?.distanceKm ? Math.max(0, Math.round((routeData.distanceKm - traveledKm) * 10) / 10) : 0);
+  // Remaining Road KM:
+  //  • At start (0 m moved) = full planned road distance (e.g. 12.74 KM or 9.3 KM), NOT the aerial distance (8.9 KM)
+  //  • While travelling = dynamically reflects actual proximity to destination (never stuck at planned - moved if user took shortcut)
+  //  • Reached (within 500m) = strictly 0 KM!
+  const aerialKm = distanceToDestMeters !== null ? distanceToDestMeters / 1000 : 0;
+  const roadRemainingByGps = distanceToDestMeters !== null ? Math.round((distanceToDestMeters * 1.15) / 100) / 10 : null;
+
+  let remainingRoadKm = 0;
+  if (hasCompletedFullJourney || isWithin500m) {
+    remainingRoadKm = 0;
+  } else if (!traveledKm || traveledKm < 0.05) {
+    // Before moving: show full planned road distance
+    remainingRoadKm = routeData?.distanceKm || (roadRemainingByGps ?? 0);
+  } else if (routeData?.distanceKm) {
+    // While traveling: if user took a direct shortcut or is approaching destination, direct GPS proximity takes precedence
+    const subtractionRemaining = Math.max(0, Math.round((routeData.distanceKm - traveledKm) * 100) / 100);
+    if (roadRemainingByGps !== null) {
+      remainingRoadKm = Math.min(subtractionRemaining, roadRemainingByGps);
+      remainingRoadKm = Math.max(aerialKm, remainingRoadKm);
+      remainingRoadKm = Math.round(remainingRoadKm * 100) / 100;
+    } else {
+      remainingRoadKm = subtractionRemaining;
+    }
+  } else {
+    remainingRoadKm = Math.round(aerialKm * 100) / 100;
+  }
 
   const ratePerKm = Number(user?.TA || user?.travelRate || 2.50);
   const claimAmount = Math.round(effectiveTraveledKm * ratePerKm * 100) / 100;
@@ -341,26 +398,35 @@ export default function TripPlannerScreen() {
       return;
     }
 
-    // Layer 4: Adaptive Stationary Anchor Gate (Geofence Bubble 16m - 25m)
+    // Layer 4: Adaptive Stationary Anchor Gate (Geofence Bubble 30m - 50m)
     // Eliminates 100% of indoor jitter, desk sitting, red light drift, and false stationary movement
-    const anchorRadiusM = Math.max(16, Math.min(25, reportedAccuracy * 0.75));
-    const isStationarySpeed = reportedSpeedKmh < 1.8 && calcSpeedKmh < 2.0;
-    const isWithinAnchor = distFromAnchorM < anchorRadiusM;
+    const anchorRadiusM = Math.max(30.0, Math.min(50.0, reportedAccuracy * 1.0));
+    const isInsideAnchor = distFromAnchorM < anchorRadiusM;
 
     // ── SCENARIO A: Currently STATIONARY (Sitting, standing, or parked) ──
     if (!isMovingRef.current) {
-      if (isStationarySpeed || isWithinAnchor) {
+      if (isInsideAnchor) {
         // Stay in STATIONARY — Softly absorb jitter into anchor center (strictly 0.00 meters added)
+        departureCandidateCountRef.current = 0;
+        haltCandidateCountRef.current = 0;
         stationaryAnchorRef.current = {
-          lat: 0.95 * anchor.lat + 0.05 * lat,
-          lng: 0.95 * anchor.lng + 0.05 * lng,
+          lat: 0.98 * anchor.lat + 0.02 * lat,
+          lng: 0.98 * anchor.lng + 0.02 * lng,
         };
         lastFixRef.current = { lat, lng, timestamp: now, accuracy: reportedAccuracy, speed: 0 };
         return;
       }
 
-      // ── Physical Departure Detected! ──
-      // Employee physically broke out of anchor bubble with genuine travel velocity!
+      // ── Physical Departure Candidate Detected outside 30m-50m bubble! ──
+      // If employee is moving with travel speed (>= 2.0 km/h) or has 2 consecutive fixes outside bubble:
+      departureCandidateCountRef.current += 1;
+      if (effectiveSpeedKmh < 2.0 && departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+        return;
+      }
+
+      // Confirmed physical departure!
+      departureCandidateCountRef.current = 0;
+      haltCandidateCountRef.current = 0;
       isMovingRef.current = true;
       setMotionStatus('MOVING');
 
@@ -393,19 +459,29 @@ export default function TripPlannerScreen() {
     }
 
     // ── SCENARIO B: Currently MOVING (Traveling on road/path) ──
-    // Check if user came to a stop (traffic signal, tea stall, customer visit)
-    if (reportedSpeedKmh < 1.5 && calcSpeedKmh < 1.8 && distFromLastM < 6.0) {
-      isMovingRef.current = false;
-      setMotionStatus('STATIONARY');
-      stationaryAnchorRef.current = { lat, lng };
-      lastConfirmedCoordRef.current = { lat, lng, timestamp: now };
-      lastFixRef.current = { lat, lng, timestamp: now, accuracy: reportedAccuracy, speed: 0 };
-      console.log('🛑 [TripPlanner Odometer] Motion Stopped. New Stationary Anchor Dropped. Distance accumulation frozen.');
-      return;
+    // Check if user came to a genuine complete stop (traffic signal, tea stall, customer visit)
+    // Only halt if speed is virtually zero and no displacement for 3 consecutive fixes (~6-8s)
+    const isCompletelyStopped = effectiveSpeedKmh < 1.2 && distFromLastM < 3.0;
+    if (isCompletelyStopped) {
+      haltCandidateCountRef.current = (haltCandidateCountRef.current || 0) + 1;
+      if (haltCandidateCountRef.current >= 3) {
+        haltCandidateCountRef.current = 0;
+        departureCandidateCountRef.current = 0;
+        isMovingRef.current = false;
+        setMotionStatus('STATIONARY');
+        stationaryAnchorRef.current = { lat, lng };
+        lastConfirmedCoordRef.current = { lat, lng, timestamp: now };
+        lastFixRef.current = { lat, lng, timestamp: now, accuracy: reportedAccuracy, speed: 0 };
+        console.log('🛑 [TripPlanner Odometer] Motion Stopped. New Stationary Anchor Dropped.');
+        return;
+      }
+    } else {
+      haltCandidateCountRef.current = 0;
     }
 
-    // Legitimate road progress while moving (minimum 5.0m step between fixes to eliminate micro-jitter)
-    if (distFromLastM >= 5.0 && calcSpeedKmh < 160) {
+    // Legitimate road progress while moving (minimum 4.0m step between fixes to eliminate micro-jitter)
+    if (distFromLastM >= 4.0 && calcSpeedKmh < 160) {
+      departureCandidateCountRef.current = 0;
       accumulatedTraveledMetersRef.current += distFromLastM;
       const totalM = Math.round(accumulatedTraveledMetersRef.current);
       const totalKm = Math.round((totalM / 1000) * 100) / 100;
@@ -639,6 +715,33 @@ export default function TripPlannerScreen() {
             setIsArrivedWithin500m(true);
             setShowArrivalModal(true);
           }
+
+          // 4. Force immediate fresh high-accuracy GPS fix upon wake up
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+            .then((freshLoc) => {
+              if (freshLoc?.coords) {
+                const { latitude, longitude, accuracy, speed } = freshLoc.coords;
+                setCurrentGps({ lat: latitude, lng: longitude });
+                if (Number.isFinite(accuracy)) setGpsAccuracy(Math.round(accuracy));
+                recordLocationFix(latitude, longitude, accuracy, speed, freshLoc.timestamp);
+
+                const dLat = Number(destination?.lat ?? destination?.latitude);
+                const dLng = Number(destination?.lng ?? destination?.longitude);
+                if (Number.isFinite(dLat) && Number.isFinite(dLng)) {
+                  const m = haversineMeters(latitude, longitude, dLat, dLng);
+                  const tolerance = Math.min(60, Math.max(20, accuracy || 25));
+                  if (m <= 500 + tolerance) {
+                    setIsArrivedWithin500m(true);
+                    storage.setItem('active_trip_planner_is_within_500m', 'true').catch(() => {});
+                    if (!hasNotifiedArrivalRef.current) {
+                      hasNotifiedArrivalRef.current = true;
+                      setShowArrivalModal(true);
+                    }
+                  }
+                }
+              }
+            })
+            .catch(() => {});
         } catch (err) {
           console.warn('TripPlanner AppState sync notice:', err.message);
         }
@@ -649,7 +752,7 @@ export default function TripPlannerScreen() {
     return () => {
       subscription.remove();
     };
-  }, [tripStatus]);
+  }, [tripStatus, destination, recordLocationFix]);
 
   // 2. Full State Persistence: Save only when an active trip is in-progress or planned route exists
   useEffect(() => {
@@ -782,6 +885,7 @@ export default function TripPlannerScreen() {
       }
 
       if (searchingField === 'origin') {
+        originIsLiveGpsRef.current = false; // user chose a custom origin
         setOrigin(selectedCoord);
         setOriginText(selectedCoord.address);
         setPredictions([]);
@@ -794,8 +898,15 @@ export default function TripPlannerScreen() {
         setDestText(selectedCoord.address);
         setPredictions([]);
         setSearchingField(null);
-        if (origin) {
-          requestRoute(origin, selectedCoord);
+
+        // 📍 Origin = employee's REAL current GPS: fetch a fresh fix right now, then route from it
+        let routeOrigin = origin;
+        if (originIsLiveGpsRef.current || !origin) {
+          const live = await fetchFreshLiveOrigin();
+          if (live) routeOrigin = live;
+        }
+        if (routeOrigin) {
+          requestRoute(routeOrigin, selectedCoord);
         }
       }
     } catch (err) {
@@ -839,6 +950,7 @@ export default function TripPlannerScreen() {
     const tempOrigin = origin;
     const tempOriginText = originText;
 
+    originIsLiveGpsRef.current = false;
     setOrigin(destination);
     setOriginText(destText);
 
@@ -878,6 +990,7 @@ export default function TripPlannerScreen() {
 
       const addr = await reverseGeocodeLocation(lat, lng);
       const newOrigin = { lat, lng, address: addr };
+      originIsLiveGpsRef.current = true;
       setOrigin(newOrigin);
       setOriginText(addr);
       setPredictions([]);
@@ -895,10 +1008,12 @@ export default function TripPlannerScreen() {
 
   // 8. Start Trip (Transitions to IN_PROGRESS so employee/manager travels to destination)
   const handleStartTrip = async () => {
-    if (isTracking) {
+    // 🚫 MUTUAL EXCLUSION GATE: Cannot Start Trip Plan if Shift Punch In is ACTIVE!
+    const activeTrackingSession = await storage.getItem('currentTrackingSessionId');
+    if (isTracking || Boolean(activeTrackingSession)) {
       Alert.alert(
-        'One Feature At A Time',
-        'You are currently Punched In! Live GPS tracking is already active. Please Punch Out first if you wish to start this planned trip.'
+        'Shift Active (Punched In)',
+        'Aap currently Punched In hain! Dono me se koi ek hi feature active ho sakta hai (Trip Plan ya Selfie Punch In).\n\nPehle Shift Punch Out karein, uske baad hi Trip Plan start karein.'
       );
       return;
     }
@@ -961,6 +1076,38 @@ export default function TripPlannerScreen() {
       }
     } catch (_) {}
 
+    // 🎯 ORIGIN REBASE: If the user's real GPS is not at the planned origin (> 300m away),
+    // the planned route does not describe the journey from where they actually stand.
+    // Re-anchor origin to live GPS and recompute the road route so
+    // "KM remaining" at start == the real road distance to destination.
+    let tripOrigin = origin;
+    let tripRoute = routeData;
+    if (anchorGps && Number.isFinite(origin?.lat) && Number.isFinite(origin?.lng)) {
+      const originGapM = haversineMeters(origin.lat, origin.lng, anchorGps.lat, anchorGps.lng);
+      if (originGapM > 300) {
+        try {
+          const addr = await reverseGeocodeLocation(anchorGps.lat, anchorGps.lng);
+          const rebasedOrigin = { lat: anchorGps.lat, lng: anchorGps.lng, address: addr };
+          const rebasedRoute = await calculateDrivingRouteDirect(rebasedOrigin, destination);
+          if (rebasedRoute && Number.isFinite(rebasedRoute.distanceKm)) {
+            const rate = Number(user?.TA || user?.travelRate || 2.50);
+            tripOrigin = rebasedOrigin;
+            tripRoute = {
+              ...rebasedRoute,
+              ratePerKm: rate,
+              reimbursementAmount: Math.round(rebasedRoute.distanceKm * rate * 100) / 100,
+            };
+            setOrigin(tripOrigin);
+            setOriginText(addr);
+            setRouteData(tripRoute);
+            console.log(`🎯 [TripPlanner] Origin rebased (${originGapM.toFixed(0)}m away). Route: ${routeData.distanceKm} -> ${tripRoute.distanceKm} KM`);
+          }
+        } catch (rebaseErr) {
+          console.warn('TripPlanner origin rebase failed, using planned route:', rebaseErr?.message);
+        }
+      }
+    }
+
     lastFixRef.current = anchorGps ? {
       lat: anchorGps.lat,
       lng: anchorGps.lng,
@@ -994,9 +1141,9 @@ export default function TripPlannerScreen() {
     hasNotifiedArrivalRef.current = false;
     await storage.setItem('active_trip_planner_status', 'IN_PROGRESS');
     await storage.setItem('active_trip_planner_started_at', new Date().toISOString());
-    await storage.setItem('active_trip_planner_origin', JSON.stringify(origin));
+    await storage.setItem('active_trip_planner_origin', JSON.stringify(tripOrigin));
     await storage.setItem('active_trip_planner_destination', JSON.stringify(destination));
-    await storage.setItem('active_trip_planner_route', JSON.stringify(routeData));
+    await storage.setItem('active_trip_planner_route', JSON.stringify(tripRoute));
     await storage.setItem('active_trip_planner_purpose', selectedPurpose);
     await storage.setItem('active_trip_planner_client', clientName);
     await storage.setItem('active_trip_planner_traveled_m', '0');
@@ -1021,7 +1168,7 @@ export default function TripPlannerScreen() {
 
     Alert.alert(
       '🚗 Trip Started!',
-      `Destination: ${destination.address}\nPlanned Distance: ${routeData.distanceKm} KM\n\nAb chalo apne destination ki taraf! Aap jitna bhi distance physically move karenge, strictly utna hi KM aapke account me add hoga.`
+      `Destination: ${destination.address}\nPlanned Distance: ${tripRoute.distanceKm} KM\n\nAb chalo apne destination ki taraf! Aap jitna bhi distance physically move karenge, strictly utna hi KM aapke account me add hoga.`
     );
   };
 
@@ -1142,21 +1289,20 @@ export default function TripPlannerScreen() {
   // 11. DEV Helper: Simulate Arrival within 50m of Destination (For Instant Testing)
   const handleSimulateArrival = () => {
     if (!destination) return;
-    const simLat = destination.lat + 0.0002;
-    const simLng = destination.lng + 0.0002;
+    const destLat = Number(destination.lat ?? destination.latitude);
+    const destLng = Number(destination.lng ?? destination.longitude);
+    const simLat = destLat + 0.0002;
+    const simLng = destLng + 0.0002;
     setCurrentGps({
       lat: simLat,
       lng: simLng,
     });
-    if (routeData?.distanceKm) {
-      const fullM = routeData.distanceKm * 1000;
-      accumulatedTraveledMetersRef.current = fullM;
-      setTraveledKm(routeData.distanceKm);
-      storage.setItem('active_trip_planner_traveled_m', fullM.toString()).catch(() => {});
-    }
+    setIsArrivedWithin500m(true);
+    storage.setItem('active_trip_planner_is_within_500m', 'true').catch(() => {});
+    setShowArrivalModal(true);
     Alert.alert(
       '🎯 Simulated Arrival (DEV Test)',
-      'GPS location destination ke pass set ho gayi hai aur traveled distance full update ho gaya hai.'
+      'GPS location destination ke 30m pass set ho gayi hai aur 500m Arrival PopUp open ho gaya hai!'
     );
   };
 
@@ -1199,7 +1345,7 @@ export default function TripPlannerScreen() {
     );
   };
 
-  // 12. Initiate Claim: ALWAYS shows the interactive Confirmation Modal!
+  // 12. Initiate Claim: Opens 500M Arrival Modal if arrived, or Early Claim Modal if not!
   const handleInitiateClaim = () => {
     if (isTracking) {
       Alert.alert(
@@ -1214,8 +1360,11 @@ export default function TripPlannerScreen() {
       return;
     }
 
-    // Always show interactive Claim Confirmation Modal on Claim button click!
-    setShowEarlyClaimModal(true);
+    if (hasCompletedFullJourney || isWithin500m) {
+      setShowArrivalModal(true);
+    } else {
+      setShowEarlyClaimModal(true);
+    }
   };
 
   // 13. Confirm Trip & Add KM to Account (Supports partial distance & full distance credit)
@@ -1754,7 +1903,6 @@ export default function TripPlannerScreen() {
                     <TouchableOpacity
                       style={[styles.confirmButton, styles.planningStartBtn, isTracking && styles.confirmButtonDisabled]}
                       onPress={handleStartTrip}
-                      disabled={isTracking}
                       activeOpacity={0.85}
                     >
                       <LinearGradient
@@ -1766,7 +1914,7 @@ export default function TripPlannerScreen() {
                         <View style={styles.btnRow}>
                           <Play size={16} color="#ffffff" fill="#ffffff" style={{ marginRight: 6 }} />
                           <Text style={styles.confirmButtonText}>
-                            Start Trip ({routeData.distanceKm} KM)
+                            {isTracking ? 'Shift Active (Punch Out First)' : `Start Trip (${routeData.distanceKm} KM)`}
                           </Text>
                         </View>
                       </LinearGradient>
@@ -2359,6 +2507,8 @@ const styles = StyleSheet.create({
   plannerWrapper: {
     flex: 1,
     position: 'relative',
+    width: '100%',
+    height: '100%',
   },
   routeCard: {
     position: 'absolute',
@@ -2633,6 +2783,8 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
     zIndex: 1,
   },
   bottomSheetCard: {

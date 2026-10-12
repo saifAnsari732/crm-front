@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { 
   StyleSheet, View, TouchableOpacity, ScrollView, 
-  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image, Modal 
+  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image, Modal, LogBox 
 } from 'react-native';
+
+LogBox.ignoreLogs(['Request failed with status code 401']);
 import { Text, TextInput, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
@@ -37,8 +39,14 @@ export default function LoginScreen() {
   const [resetSuccess, setResetSuccess] = useState('');
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      setErrorMsg('Please enter both your email and password.');
+    const id = (email || '').trim();
+    if (!id || !password) {
+      setErrorMsg('Please enter your email or mobile number and password.');
+      return;
+    }
+    // If not an email, it must be a valid phone number (min 10 digits)
+    if (!id.includes('@') && id.replace(/\D/g, '').length < 10) {
+      setErrorMsg('Please enter a valid email or a 10-digit mobile number.');
       return;
     }
 
@@ -46,17 +54,27 @@ export default function LoginScreen() {
       setLoading(true);
       setErrorMsg('');
       
-      const response = await authApi.login({ email: email.trim(), password });
+      // Backend accepts email OR phone in `identifier` (email kept for backward compatibility)
+      const response = await authApi.login({ identifier: id, email: id, password });
       
       if (response.data?.success) {
         const { user, token } = response.data;
         await login(user, token);
       } else {
-        setErrorMsg(response.data?.message || 'Invalid email or password.');
+        setErrorMsg(response.data?.message || 'Invalid email/mobile or password.');
       }
     } catch (err) {
-      console.error('Login Error Object:', err.message, err);
-      setErrorMsg(err.response?.data?.message || 'Network error. Please check your connection.');
+      console.log('Login attempt result:', err.response?.status, err.response?.data?.message || err.message);
+      const serverMsg = err.response?.data?.message;
+      if (err.response?.status === 401) {
+        setErrorMsg(serverMsg || 'Invalid email/mobile or password. Please check your credentials.');
+      } else if (err.response?.status === 403) {
+        setErrorMsg(serverMsg || 'Account is blocked. Please contact your administrator.');
+      } else if (serverMsg) {
+        setErrorMsg(serverMsg);
+      } else {
+        setErrorMsg('Network error. Please check your internet connection.');
+      }
     } finally {
       setLoading(false);
     }
@@ -182,7 +200,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Mail size={20} color="#64748b" style={styles.fieldIcon} />
               <TextInput
-                placeholder="name@company.com"
+                placeholder="name@company.com or 98765 43210"
                 placeholderTextColor="#94a3b8"
                 value={email}
                 onChangeText={setEmail}
@@ -190,7 +208,7 @@ export default function LoginScreen() {
                 style={styles.inputField}
                 activeUnderlineColor="transparent"
                 underlineColor="transparent"
-                keyboardType="email-address"
+                keyboardType="default"
                 autoCapitalize="none"
                 textColor="#334155"
                 theme={{ colors: { background: 'transparent' } }}

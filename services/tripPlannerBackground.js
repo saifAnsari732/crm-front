@@ -68,6 +68,15 @@ TaskManager.defineTask(BACKGROUND_TRIP_PLANNER_TASK, async ({ data: { locations 
 
     let currentM = parseInt(await storage.getItem('active_trip_planner_traveled_m'), 10) || 0;
 
+    // Persisted stationary-anchor state (survives display-off / process restarts)
+    let bgAnchor = null;
+    try {
+      const a = await storage.getItem('active_trip_planner_bg_anchor');
+      bgAnchor = a ? JSON.parse(a) : null;
+    } catch (_) { bgAnchor = null; }
+    let bgMoving = (await storage.getItem('active_trip_planner_bg_moving')) === 'true';
+    let bgDepartCount = 0;
+
     // Process incoming GPS fixes in chronological order
     const ordered = [...locations].sort((a, b) => a.timestamp - b.timestamp);
 
@@ -85,25 +94,64 @@ TaskManager.defineTask(BACKGROUND_TRIP_PLANNER_TASK, async ({ data: { locations 
         const distM = haversineMeters(prevLoc.lat, prevLoc.lng, latitude, longitude);
         const timeDiffSec = Math.max(1, (timestamp - (prevLoc.timestamp || timestamp)) / 1000);
         const calcSpeedKmh = (distM / 1000 / timeDiffSec) * 3600;
+        const effSpeedKmh = Math.max(calcSpeedKmh, (speed || 0) * 3.6);
 
-        // Validation gate:
-        // Accept if moved >= 4m and realistic speed (< 180 km/h)
-        if (distM >= 4.0 && calcSpeedKmh < 180) {
+        if (calcSpeedKmh >= 180) continue; // teleport spike
+
+        // Stationary-anchor gate (30m–50m bubble) — same rule as foreground odometer:
+        // indoor/office GPS jitter never adds distance while screen is off.
+        if (!bgAnchor) bgAnchor = { lat: prevLoc.lat, lng: prevLoc.lng };
+        const bubbleM = Math.max(30, Math.min(50, accuracy || 25));
+        const distFromAnchor = haversineMeters(bgAnchor.lat, bgAnchor.lng, latitude, longitude);
+
+        if (!bgMoving) {
+          if (distFromAnchor < bubbleM) {
+            // Still inside stationary bubble: softly converge anchor, add nothing
+            bgDepartCount = 0;
+            bgAnchor = { lat: 0.98 * bgAnchor.lat + 0.02 * latitude, lng: 0.98 * bgAnchor.lng + 0.02 * longitude };
+            prevLoc = { ...currLoc, lat: prevLoc.lat, lng: prevLoc.lng };
+          } else {
+            // Outside stationary bubble (> 30-50m):
+            // Depart immediately if moving speed >= 2.0 km/h, or after 2 consecutive fixes outside
+            bgDepartCount += 1;
+            if (effSpeedKmh >= 2.0 || bgDepartCount >= 2) {
+              bgMoving = true;
+              bgDepartCount = 0;
+              currentM += Math.round(distFromAnchor);
+              prevLoc = currLoc;
+              bgAnchor = { lat: latitude, lng: longitude };
+              console.log(`🚀 [TRIP_BG] Departed anchor +${distFromAnchor.toFixed(1)}m. Total: ${currentM}m (${(currentM / 1000).toFixed(2)} KM)`);
+            }
+          }
+        } else if (effSpeedKmh < 1.2 && distM < 3.0) {
+          // True complete halt (speed virtually zero & no displacement)
+          bgMoving = false;
+          bgDepartCount = 0;
+          bgAnchor = { lat: latitude, lng: longitude };
+          prevLoc = currLoc;
+          console.log(`🛑 [TRIP_BG] Halted. New stationary anchor dropped at ${currentM}m.`);
+        } else if (distM >= 4.0) {
+          // Continuous legitimate physical displacement (4m+ step)
           currentM += Math.round(distM);
           prevLoc = currLoc;
+          bgAnchor = { lat: latitude, lng: longitude };
           console.log(`🚗 [TRIP_BG] Moved +${distM.toFixed(1)}m. Total: ${currentM}m (${(currentM / 1000).toFixed(2)} KM)`);
         }
       } else {
         prevLoc = currLoc;
+        bgAnchor = { lat: latitude, lng: longitude };
       }
 
-      // Check distance to destination
-      if (destination?.lat && destination?.lng) {
-        const distToDest = haversineMeters(latitude, longitude, Number(destination.lat), Number(destination.lng));
+      // Check distance to destination (robust coordinate parsing)
+      const destLat = Number(destination?.lat ?? destination?.latitude);
+      const destLng = Number(destination?.lng ?? destination?.longitude);
+      if (Number.isFinite(destLat) && Number.isFinite(destLng)) {
+        const distToDest = haversineMeters(latitude, longitude, destLat, destLng);
         console.log(`🚗 [TRIP_BG] Distance to destination: ${distToDest.toFixed(0)}m`);
 
-        // 500M Arrival Trigger:
-        if (distToDest <= 500) {
+        // 500M Arrival Trigger (500m + accuracy tolerance):
+        const arrivalRadiusM = 500 + Math.min(60, Math.max(20, accuracy || 25));
+        if (distToDest <= arrivalRadiusM) {
           await storage.setItem('active_trip_planner_is_within_500m', 'true');
           const alreadyNotified = await storage.getItem('active_trip_planner_notified_500m');
 
@@ -133,6 +181,8 @@ TaskManager.defineTask(BACKGROUND_TRIP_PLANNER_TASK, async ({ data: { locations 
 
     // Persist latest state to AsyncStorage
     await storage.setItem('active_trip_planner_traveled_m', String(currentM));
+    if (bgAnchor) await storage.setItem('active_trip_planner_bg_anchor', JSON.stringify(bgAnchor));
+    await storage.setItem('active_trip_planner_bg_moving', bgMoving ? 'true' : 'false');
     if (prevLoc) {
       await storage.setItem('active_trip_planner_last_loc', JSON.stringify(prevLoc));
     }
@@ -166,6 +216,8 @@ export async function startTripBackgroundTracking(destination) {
     // 3. Reset 500m arrival notification locks
     await storage.setItem('active_trip_planner_is_within_500m', 'false');
     await storage.setItem('active_trip_planner_notified_500m', 'false');
+    await storage.removeItem('active_trip_planner_bg_anchor');
+    await storage.setItem('active_trip_planner_bg_moving', 'false');
 
     // 4. Start OS-level location updates with Sticky Foreground Service
     const isStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRIP_PLANNER_TASK).catch(() => false);

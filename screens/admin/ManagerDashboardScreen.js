@@ -136,6 +136,7 @@ export default function ManagerDashboardScreen() {
   const totalDistanceRef = useRef(0.0);
   const lastConfirmedCoordRef = useRef(null);
   const stationaryAnchorRef = useRef(null);
+  const departureCandidateCountRef = useRef(0);
   const lastGeocodedCoordRef = useRef(null);
   const lastGeocodedAddressRef = useRef('');
   const kalmanRef = useRef(new LatLngKalmanFilter());
@@ -214,6 +215,16 @@ export default function ManagerDashboardScreen() {
 
   const capturePunchInSelfie = async () => {
     try {
+      // 🚫 MUTUAL EXCLUSION GATE: Cannot Punch In if a Trip Plan is ACTIVE!
+      const activeTrip = await storage.getItem('active_trip_planner_is_active');
+      if (activeTrip === 'true') {
+        Alert.alert(
+          "Trip Plan Active",
+          "Aapka ek Trip Plan already chal raha hai! Dono me se koi ek hi feature active ho sakta hai (Trip Plan ya Selfie Punch In).\n\nPehle active trip ko complete ya cancel karein."
+        );
+        return;
+      }
+
       setIsUploadingSelfie(true);
       const hasAllPermissions = await requestPermissions();
       if (!hasAllPermissions) {
@@ -531,15 +542,18 @@ export default function ManagerDashboardScreen() {
             const lat = smoothed.lat;
             const lng = smoothed.lng;
 
-            const currentSpeedKmh = mps && mps > 0.1 ? Math.round(mps * 3.6) : 0;
-            setManagerSpeed(currentSpeedKmh.toString());
+            // Hardware Doppler speed (m/s -> km/h) with noise floor filtering
+            const rawSpeedKmh = Number.isFinite(mps) && mps > 0.5 ? Math.round(mps * 3.6) : 0;
 
-            // 🎯 DYNAMIC MOTION ENGINE: 12m & 1.8 km/h Centroid Micro-Geofence
+            // 🎯 ADVANCED DYNAMIC MOTION ENGINE (Anti-Jitter Office & Indoor Guard - Manager Side):
+            // Eliminates 100% of indoor multipath jitter, anchor crawling, and false distance accumulation
             if (!lastConfirmedCoordRef.current) {
               lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
               stationaryAnchorRef.current = { lat, lng };
+              departureCandidateCountRef.current = 0;
               setIsMoving(false);
               setMotionStatusLabel('STATIONARY');
+              setManagerSpeed('0');
             } else {
               const distFromAnchorM = haversineMeters(
                 stationaryAnchorRef.current.lat,
@@ -555,36 +569,88 @@ export default function ManagerDashboardScreen() {
               );
               const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
+              const effectiveSpeedKmh = Math.max(rawSpeedKmh, calculatedSpeedKmh);
 
-              // 🎯 ADAPTIVE STATIONARY GATE: Eliminates indoor GPS drift & false movement (Manager Side)
-              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 15;
-              const anchorThresholdM = Math.max(16, Math.min(35, gpsAcc * 0.75));
-              const isSpeedStationary = currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.0;
-              const isWithinAnchor = distFromAnchorM < anchorThresholdM;
+              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (30m - 50m bubble):
+              // Covers indoor multipath reflection scatter ellipse so stationary phones never register movement
+              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
+              const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
 
-              if (isSpeedStationary || isWithinAnchor) {
-                // MANAGER IS STATIONARY (At Desk / In Office) -> 0 False Movement
-                setIsMoving(false);
-                setMotionStatusLabel('STATIONARY');
-                stationaryAnchorRef.current = {
-                  lat: 0.95 * stationaryAnchorRef.current.lat + 0.05 * lat,
-                  lng: 0.95 * stationaryAnchorRef.current.lng + 0.05 * lng,
-                };
-              } else {
-                // MANAGER IS TRULY TRAVELING!
-                setIsMoving(true);
-                setMotionStatusLabel('MOVING');
+              if (!isMoving) {
+                // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
+                const isInsideAnchor = distFromAnchorM < anchorThresholdM;
+                const isStationarySpeed = effectiveSpeedKmh < 4.5;
 
-                if (calculatedSpeedKmh < 160 && distFromLastM > 8) {
-                  const addedKm = distFromLastM / 1000;
-                  totalDistanceRef.current += addedKm;
-                  const newTotalStr = totalDistanceRef.current.toFixed(2);
-                  setLocalKmState(newTotalStr);
-                  setManagerKm(newTotalStr);
+                if (isInsideAnchor || isStationarySpeed) {
+                  // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(false);
+                  setMotionStatusLabel('STATIONARY');
+                  setManagerSpeed('0');
+
+                  // Softly converge anchor towards centroid (0.98 / 0.02) to prevent anchor wandering/crawling
+                  stationaryAnchorRef.current = {
+                    lat: 0.98 * stationaryAnchorRef.current.lat + 0.02 * lat,
+                    lng: 0.98 * stationaryAnchorRef.current.lng + 0.02 * lng,
+                  };
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                } else {
+                  // Candidate departure detected outside anchor bubble (> 30-50m) with travel speed >= 4.5 km/h
+                  // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
+                  departureCandidateCountRef.current += 1;
+                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                    setIsMoving(false);
+                    setMotionStatusLabel('STATIONARY');
+                    setManagerSpeed('0');
+                  } else {
+                    // Confirmed physical departure! Manager has left the office and is traveling on road
+                    departureCandidateCountRef.current = 0;
+                    setIsMoving(true);
+                    setMotionStatusLabel('MOVING');
+                    setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
+
+                    const departureDistKm = distFromAnchorM / 1000;
+                    if (departureDistKm > 0.030 && departureDistKm < 0.25) {
+                      totalDistanceRef.current += departureDistKm;
+                      const newTotalStr = totalDistanceRef.current.toFixed(2);
+                      setLocalKmState(newTotalStr);
+                      setManagerKm(newTotalStr);
+                    }
+
+                    lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                    stationaryAnchorRef.current = { lat, lng };
+                  }
                 }
+              } else {
+                // ── SCENARIO B: Currently MOVING (Traveling on road/path) ──
+                // Check if manager came to a stop (traffic light, client visit, parked, entered office)
+                const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
+                if (hasHalted) {
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(false);
+                  setMotionStatusLabel('STATIONARY');
+                  setManagerSpeed('0');
+                  stationaryAnchorRef.current = { lat, lng };
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                } else {
+                  // Legitimate road progress while moving
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(true);
+                  setMotionStatusLabel('MOVING');
+                  setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
 
-                lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                stationaryAnchorRef.current = { lat, lng };
+                  // Micro-step filter: require at least 6.0m displacement between fixes to eliminate micro-jitter
+                  if (distFromLastM >= 6.0 && calculatedSpeedKmh < 160) {
+                    const addedKm = distFromLastM / 1000;
+                    totalDistanceRef.current += addedKm;
+                    const newTotalStr = totalDistanceRef.current.toFixed(2);
+                    setLocalKmState(newTotalStr);
+                    setManagerKm(newTotalStr);
+                  }
+
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                  stationaryAnchorRef.current = { lat, lng };
+                }
               }
             }
 

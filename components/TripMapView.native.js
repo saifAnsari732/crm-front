@@ -1,89 +1,12 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, View, Text, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import Constants from 'expo-constants';
 
 // Detect if running inside standard Expo Go (where Google Maps native SDK is unsupported)
-const isExpoGo = Constants.appOwnership === 'expo';
-const mapProvider = isExpoGo ? undefined : PROVIDER_GOOGLE;
-
-// 🌟 Uber Iconic Minimal Silver/Pale Map Styling for Google Maps
-const UBER_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-  {
-    featureType: 'administrative.land_parcel',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#bdbdbd' }],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'geometry',
-    stylers: [{ color: '#eeeeee' }],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#757575' }],
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'geometry',
-    stylers: [{ color: '#dcfce7' }], // Soft pale fresh green
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#16a34a' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [{ color: '#ffffff' }], // Crisp white roads
-  },
-  {
-    featureType: 'road.arterial',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#757575' }],
-  },
-  {
-    featureType: 'road.highway',
-    elementType: 'geometry',
-    stylers: [{ color: '#dadada' }], // Silver highway
-  },
-  {
-    featureType: 'road.highway',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#616161' }],
-  },
-  {
-    featureType: 'road.local',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#9e9e9e' }],
-  },
-  {
-    featureType: 'transit.line',
-    elementType: 'geometry',
-    stylers: [{ color: '#e5e5e5' }],
-  },
-  {
-    featureType: 'transit.station',
-    elementType: 'geometry',
-    stylers: [{ color: '#eeeeee' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [{ color: '#c7e9fb' }], // Soft light blue water
-  },
-  {
-    featureType: 'water',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#0284c7' }],
-  },
-];
+const isExpoGo =
+  Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+const mapProvider = isExpoGo ? undefined : (Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined);
 
 // Helper to compute bearing/heading angle between two coordinates
 function calculateBearing(start, end) {
@@ -97,10 +20,10 @@ function calculateBearing(start, end) {
   return (brng + 360) % 360;
 }
 
-// 🚗 Realistic Top-Down Uber 3D Car Marker
-function UberVehicleMarker({ heading = 0 }) {
+// 🚗 Realistic Top-Down 3D Vehicle Marker
+function UberVehicleMarker() {
   return (
-    <View style={[styles.uberCarContainer, { transform: [{ rotate: `${heading}deg` }] }]}>
+    <View style={styles.uberCarContainer}>
       {/* Soft Drop Shadow Under Vehicle */}
       <View style={styles.uberCarShadow} />
       {/* Sleek Car Body */}
@@ -137,111 +60,210 @@ export default function TripMapView({
   style,
 }) {
   const mapRef = useRef(null);
+  const isMapReadyRef = useRef(false);
 
-  // Auto-fit to coordinates when origin, destination or polyline changes
-  useEffect(() => {
-    if (!mapRef.current) return;
+  // Safe initial region with fallback to center Lucknow / Default India center
+  const defaultRegion = useMemo(() => {
+    const lat = Number(origin?.lat || destination?.lat || currentLocation?.latitude || 26.8467);
+    const lng = Number(origin?.lng || destination?.lng || currentLocation?.longitude || 80.9462);
+    return {
+      latitude: Number.isFinite(lat) && lat !== 0 ? lat : 26.8467,
+      longitude: Number.isFinite(lng) && lng !== 0 ? lng : 80.9462,
+      latitudeDelta: 0.06,
+      longitudeDelta: 0.06,
+    };
+  }, [origin?.lat, destination?.lat, currentLocation?.latitude, currentLocation?.longitude]);
+
+  // Fit camera bounds smoothly to route/points
+  const fitMapToRoute = () => {
+    if (!mapRef.current || !isMapReadyRef.current) return;
     const pointsToFit = [];
 
-    if (polyline && polyline.length > 0) {
-      pointsToFit.push(...polyline);
+    if (Array.isArray(polyline) && polyline.length > 0) {
+      for (const p of polyline) {
+        const pLat = Number(p.latitude ?? p.lat);
+        const pLng = Number(p.longitude ?? p.lng);
+        if (Number.isFinite(pLat) && Number.isFinite(pLng)) {
+          pointsToFit.push({ latitude: pLat, longitude: pLng });
+        }
+      }
     } else {
       if (origin?.lat && origin?.lng) {
-        pointsToFit.push({ latitude: Number(origin.lat), longitude: Number(origin.lng) });
+        const oLat = Number(origin.lat);
+        const oLng = Number(origin.lng);
+        if (Number.isFinite(oLat) && Number.isFinite(oLng)) {
+          pointsToFit.push({ latitude: oLat, longitude: oLng });
+        }
       }
       if (destination?.lat && destination?.lng) {
-        pointsToFit.push({ latitude: Number(destination.lat), longitude: Number(destination.lng) });
+        const dLat = Number(destination.lat);
+        const dLng = Number(destination.lng);
+        if (Number.isFinite(dLat) && Number.isFinite(dLng)) {
+          pointsToFit.push({ latitude: dLat, longitude: dLng });
+        }
       }
     }
 
     if (pointsToFit.length >= 2) {
-      setTimeout(() => {
-        mapRef.current?.fitToCoordinates(pointsToFit, {
-          edgePadding: { top: 90, right: 60, bottom: 250, left: 60 },
+      try {
+        mapRef.current.fitToCoordinates(pointsToFit, {
+          edgePadding: { top: 80, right: 40, bottom: 120, left: 40 },
           animated: true,
         });
-      }, 350);
+      } catch (err) {
+        console.warn('Map fitToCoordinates warning:', err);
+      }
     } else if (pointsToFit.length === 1) {
-      mapRef.current?.animateToRegion({
-        latitude: pointsToFit[0].latitude,
-        longitude: pointsToFit[0].longitude,
-        latitudeDelta: 0.03,
-        longitudeDelta: 0.03,
-      }, 500);
+      try {
+        mapRef.current.animateToRegion(
+          {
+            latitude: pointsToFit[0].latitude,
+            longitude: pointsToFit[0].longitude,
+            latitudeDelta: 0.03,
+            longitudeDelta: 0.03,
+          },
+          500
+        );
+      } catch (err) {
+        console.warn('Map animateToRegion warning:', err);
+      }
+    }
+  };
+
+  // Re-fit when origin, destination or polyline change, safely after onMapReady
+  useEffect(() => {
+    if (isMapReadyRef.current) {
+      const timer = setTimeout(fitMapToRoute, 250);
+      return () => clearTimeout(timer);
     }
   }, [origin, destination, polyline]);
 
   // Smooth camera follow as employee moves in real time
   useEffect(() => {
-    if (!mapRef.current || !currentLocation?.latitude || !currentLocation?.longitude) return;
+    if (!mapRef.current || !isMapReadyRef.current || !currentLocation?.latitude || !currentLocation?.longitude) return;
+    const cLat = Number(currentLocation.latitude);
+    const cLng = Number(currentLocation.longitude);
+    if (!Number.isFinite(cLat) || !Number.isFinite(cLng)) return;
+
     if (traveledTrail && traveledTrail.length > 1) {
-      mapRef.current.animateToRegion({
-        latitude: Number(currentLocation.latitude),
-        longitude: Number(currentLocation.longitude),
-        latitudeDelta: 0.015,
-        longitudeDelta: 0.015,
-      }, 600);
+      try {
+        mapRef.current.animateToRegion(
+          {
+            latitude: cLat,
+            longitude: cLng,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          },
+          600
+        );
+      } catch (err) {
+        console.warn('Map camera follow warning:', err);
+      }
     }
   }, [currentLocation?.latitude, currentLocation?.longitude, traveledTrail?.length]);
-
-  const defaultRegion = {
-    latitude: Number(origin?.lat || destination?.lat || currentLocation?.latitude || 26.8467),
-    longitude: Number(origin?.lng || destination?.lng || currentLocation?.longitude || 80.9462),
-    latitudeDelta: 0.08,
-    longitudeDelta: 0.08,
-  };
 
   // Determine vehicle position and heading
   const vehicleState = useMemo(() => {
     if (currentLocation?.latitude && currentLocation?.longitude) {
-      const heading = currentLocation.heading ?? (
-        polyline.length >= 2
-          ? calculateBearing(polyline[0], polyline[1])
-          : 0
-      );
-      return {
-        coordinate: {
-          latitude: Number(currentLocation.latitude),
-          longitude: Number(currentLocation.longitude),
-        },
-        heading: Math.round(heading),
-      };
+      const cLat = Number(currentLocation.latitude);
+      const cLng = Number(currentLocation.longitude);
+      if (Number.isFinite(cLat) && Number.isFinite(cLng)) {
+        const heading =
+          currentLocation.heading ??
+          (polyline && polyline.length >= 2
+            ? calculateBearing(polyline[0], polyline[1])
+            : 0);
+        return {
+          coordinate: { latitude: cLat, longitude: cLng },
+          heading: Math.round(heading),
+        };
+      }
     }
 
     // Default: Show vehicle at origin or starting point of polyline facing destination
     if (polyline && polyline.length >= 2) {
-      return {
-        coordinate: polyline[0],
-        heading: Math.round(calculateBearing(polyline[0], polyline[1])),
-      };
+      const pLat = Number(polyline[0].latitude ?? polyline[0].lat);
+      const pLng = Number(polyline[0].longitude ?? polyline[0].lng);
+      if (Number.isFinite(pLat) && Number.isFinite(pLng)) {
+        return {
+          coordinate: { latitude: pLat, longitude: pLng },
+          heading: Math.round(calculateBearing(polyline[0], polyline[1])),
+        };
+      }
     } else if (origin?.lat && origin?.lng && destination?.lat && destination?.lng) {
-      return {
-        coordinate: { latitude: Number(origin.lat), longitude: Number(origin.lng) },
-        heading: Math.round(calculateBearing(origin, destination)),
-      };
+      const oLat = Number(origin.lat);
+      const oLng = Number(origin.lng);
+      if (Number.isFinite(oLat) && Number.isFinite(oLng)) {
+        return {
+          coordinate: { latitude: oLat, longitude: oLng },
+          heading: Math.round(calculateBearing(origin, destination)),
+        };
+      }
     }
 
     return null;
   }, [currentLocation, polyline, origin, destination]);
 
+  const validOrigin =
+    origin?.lat && origin?.lng && Number.isFinite(Number(origin.lat)) && Number.isFinite(Number(origin.lng))
+      ? { latitude: Number(origin.lat), longitude: Number(origin.lng) }
+      : null;
+
+  const validDestination =
+    destination?.lat && destination?.lng && Number.isFinite(Number(destination.lat)) && Number.isFinite(Number(destination.lng))
+      ? { latitude: Number(destination.lat), longitude: Number(destination.lng) }
+      : null;
+
+  const validPolyline = useMemo(() => {
+    if (!Array.isArray(polyline)) return [];
+    return polyline
+      .map((p) => ({
+        latitude: Number(p.latitude ?? p.lat),
+        longitude: Number(p.longitude ?? p.lng),
+      }))
+      .filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+  }, [polyline]);
+
+  const validTraveledTrail = useMemo(() => {
+    if (!Array.isArray(traveledTrail)) return [];
+    return traveledTrail
+      .map((pt) => ({
+        latitude: Number(pt.lat ?? pt.latitude),
+        longitude: Number(pt.lng ?? pt.longitude),
+      }))
+      .filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+  }, [traveledTrail]);
+
   return (
     <View style={[styles.container, style]}>
       <MapView
         ref={mapRef}
-        style={StyleSheet.absoluteFillObject}
+        style={[styles.map, style]}
         provider={mapProvider}
-        customMapStyle={UBER_MAP_STYLE}
         initialRegion={defaultRegion}
         showsUserLocation={false}
         showsCompass={true}
         showsMyLocationButton={false}
-        loadingEnabled={true}
-        loadingIndicatorColor="#18181b"
+        onMapReady={() => {
+          isMapReadyRef.current = true;
+          fitMapToRoute();
+        }}
       >
-        {/* ── 1. UBER ORIGIN PIN (Sleek Pickup Dot) ── */}
-        {origin?.lat && origin?.lng && (
+        {/* ── 1. 500m ARRIVAL GEOFENCE BUBBLE ── */}
+        {validDestination && (
+          <Circle
+            center={validDestination}
+            radius={500}
+            fillColor="rgba(37, 99, 235, 0.12)"
+            strokeColor="rgba(37, 99, 235, 0.45)"
+            strokeWidth={1.5}
+          />
+        )}
+
+        {/* ── 2. UBER ORIGIN PIN (Sleek Pickup Dot) ── */}
+        {validOrigin && (
           <Marker
-            coordinate={{ latitude: Number(origin.lat), longitude: Number(origin.lng) }}
+            coordinate={validOrigin}
             title="Pickup Point"
             description={origin.address || 'Starting point'}
             anchor={{ x: 0.5, y: 0.5 }}
@@ -255,10 +277,10 @@ export default function TripMapView({
           </Marker>
         )}
 
-        {/* ── 2. UBER DESTINATION MARKER (Arrival Badge + Iconic Target Pin) ── */}
-        {destination?.lat && destination?.lng && (
+        {/* ── 3. UBER DESTINATION MARKER (Arrival Badge + Iconic Target Pin) ── */}
+        {validDestination && (
           <Marker
-            coordinate={{ latitude: Number(destination.lat), longitude: Number(destination.lng) }}
+            coordinate={validDestination}
             title="Destination"
             description={destination.address || 'Drop location'}
             anchor={{ x: 0.5, y: 0.92 }}
@@ -272,7 +294,7 @@ export default function TripMapView({
               {/* Callout Arrow Pointer */}
               <View style={styles.uberCalloutArrow} />
 
-              {/* Uber Iconic Black Target Pin */}
+              {/* Iconic Target Pin */}
               <View style={styles.uberTargetPin}>
                 <View style={styles.uberTargetPulse} />
                 <View style={styles.uberTargetOuter}>
@@ -285,23 +307,23 @@ export default function TripMapView({
           </Marker>
         )}
 
-        {/* ── 3. UBER ROUTE POLYLINE (Crisp White Casing + Dark Charcoal Inner) ── */}
-        {polyline && polyline.length > 1 && (
+        {/* ── 4. ROUTE POLYLINE (Crisp White Casing + Royal Blue Route) ── */}
+        {validPolyline.length > 1 && (
           <>
             {/* Outer White Casing Border */}
             <Polyline
-              coordinates={polyline}
+              coordinates={validPolyline}
               strokeColor="#ffffff"
-              strokeWidth={8}
+              strokeWidth={7}
               lineCap="round"
               lineJoin="round"
               geodesic
             />
-            {/* Inner Jet Black / Dark Charcoal Uber Route */}
+            {/* Inner Royal Blue Route Line */}
             <Polyline
-              coordinates={polyline}
-              strokeColor="#18181b"
-              strokeWidth={5}
+              coordinates={validPolyline}
+              strokeColor="#2563eb"
+              strokeWidth={4.5}
               lineCap="round"
               lineJoin="round"
               geodesic
@@ -309,13 +331,10 @@ export default function TripMapView({
           </>
         )}
 
-        {/* ── 4. REAL-TIME TRAVELED TRAIL (Emerald Green Trajectory) ── */}
-        {traveledTrail && traveledTrail.length > 1 && (
+        {/* ── 5. REAL-TIME TRAVELED TRAIL (Emerald Green Trajectory) ── */}
+        {validTraveledTrail.length > 1 && (
           <Polyline
-            coordinates={traveledTrail.map((pt) => ({
-              latitude: Number(pt.lat || pt.latitude),
-              longitude: Number(pt.lng || pt.longitude),
-            }))}
+            coordinates={validTraveledTrail}
             strokeColor="#10b981"
             strokeWidth={5}
             lineCap="round"
@@ -324,15 +343,16 @@ export default function TripMapView({
           />
         )}
 
-        {/* ── 5. UBER 3D VEHICLE CAR ON ROUTE ── */}
+        {/* ── 6. 3D VEHICLE CAR ON ROUTE (Native Marker Rotation) ── */}
         {vehicleState && (
           <Marker
             coordinate={vehicleState.coordinate}
             title="Vehicle"
             anchor={{ x: 0.5, y: 0.5 }}
+            rotation={vehicleState.heading}
             flat={true}
           >
-            <UberVehicleMarker heading={vehicleState.heading} />
+            <UberVehicleMarker />
           </Marker>
         )}
       </MapView>
@@ -343,6 +363,14 @@ export default function TripMapView({
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+    flex: 1,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
     flex: 1,
   },
 
@@ -471,7 +499,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
 
-  // ── UBER 3D TOP-DOWN VEHICLE ──
+  // ── 3D TOP-DOWN VEHICLE ──
   uberCarContainer: {
     width: 34,
     height: 50,

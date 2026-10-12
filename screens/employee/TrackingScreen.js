@@ -102,6 +102,7 @@ export default function ActiveShiftMapScreen() {
   // Reference anchors for stationary micro-geofencing & movement accumulation
   const lastConfirmedCoordRef = useRef(null);
   const stationaryAnchorRef = useRef(null);
+  const departureCandidateCountRef = useRef(0);
 
   // Smart Address Caching Ref (Eliminates 99%+ of redundant reverse-geocoding API calls)
   const lastGeocodedCoordRef = useRef(null);
@@ -282,17 +283,19 @@ export default function ActiveShiftMapScreen() {
 
             setLatitude(lat.toFixed(6));
             setLongitude(lng.toFixed(6));
-            
-            const currentSpeedKmh = mps && mps > 0.1 ? Math.round(mps * 3.6) : 0;
-            setSpeed(currentSpeedKmh.toString());
 
-            // 🎯 ADVANCED DYNAMIC MOTION ENGINE:
-            // Checks if employee moved vs stationary, calculates KM, and saves coordinates
+            // Hardware Doppler speed (m/s -> km/h) with noise floor filtering
+            const rawSpeedKmh = Number.isFinite(mps) && mps > 0.5 ? Math.round(mps * 3.6) : 0;
+
+            // 🎯 ADVANCED DYNAMIC MOTION ENGINE (Anti-Jitter Office & Indoor Guard):
+            // Eliminates 100% of indoor multipath jitter, anchor crawling, and false distance accumulation
             if (!lastConfirmedCoordRef.current) {
               lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
               stationaryAnchorRef.current = { lat, lng };
+              departureCandidateCountRef.current = 0;
               setIsMoving(false);
               setMotionStatusLabel('STATIONARY');
+              setSpeed('0');
             } else {
               const distFromAnchorM = haversineMeters(
                 stationaryAnchorRef.current.lat,
@@ -308,41 +311,96 @@ export default function ActiveShiftMapScreen() {
               );
               const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
+              const effectiveSpeedKmh = Math.max(rawSpeedKmh, calculatedSpeedKmh);
 
-              // 🎯 ADAPTIVE STATIONARY GATE: Eliminates indoor GPS drift & false movement
-              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 15;
-              const anchorThresholdM = Math.max(16, Math.min(35, gpsAcc * 0.75));
-              const isSpeedStationary = currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.0;
-              const isWithinAnchor = distFromAnchorM < anchorThresholdM;
+              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (30m - 50m bubble):
+              // Covers indoor multipath reflection scatter ellipse so stationary phones never register movement
+              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
+              const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
 
-              if (isSpeedStationary || isWithinAnchor) {
-                // EMPLOYEE IS STATIONARY (At Spot / Indoors / Sitting) -> 0 False Movement
-                setIsMoving(false);
-                setMotionStatusLabel('STATIONARY');
-                stationaryAnchorRef.current = {
-                  lat: 0.95 * stationaryAnchorRef.current.lat + 0.05 * lat,
-                  lng: 0.95 * stationaryAnchorRef.current.lng + 0.05 * lng,
-                };
-              } else {
-                // EMPLOYEE IS TRULY TRAVELING!
-                setIsMoving(true);
-                setMotionStatusLabel('MOVING');
+              if (!isMoving) {
+                // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
+                const isInsideAnchor = distFromAnchorM < anchorThresholdM;
+                const isStationarySpeed = effectiveSpeedKmh < 4.5;
 
-                if (calculatedSpeedKmh < 160 && distFromLastM > 8) {
-                  const addedKm = distFromLastM / 1000;
-                  totalDistanceRef.current += addedKm;
-                  setDistance(totalDistanceRef.current.toFixed(2));
+                if (isInsideAnchor || isStationarySpeed) {
+                  // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(false);
+                  setMotionStatusLabel('STATIONARY');
+                  setSpeed('0');
+
+                  // Softly converge anchor towards centroid (0.98 / 0.02) to prevent anchor wandering/crawling
+                  stationaryAnchorRef.current = {
+                    lat: 0.98 * stationaryAnchorRef.current.lat + 0.02 * lat,
+                    lng: 0.98 * stationaryAnchorRef.current.lng + 0.02 * lng,
+                  };
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                } else {
+                  // Candidate departure detected outside anchor bubble (> 30-50m) with travel speed >= 4.5 km/h
+                  // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
+                  departureCandidateCountRef.current += 1;
+                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                    setIsMoving(false);
+                    setMotionStatusLabel('STATIONARY');
+                    setSpeed('0');
+                  } else {
+                    // Confirmed physical departure! Employee has left the office and is traveling on road
+                    departureCandidateCountRef.current = 0;
+                    setIsMoving(true);
+                    setMotionStatusLabel('MOVING');
+                    setSpeed(Math.round(effectiveSpeedKmh).toString());
+
+                    const departureDistKm = distFromAnchorM / 1000;
+                    if (departureDistKm > 0.030 && departureDistKm < 0.25) {
+                      totalDistanceRef.current += departureDistKm;
+                      setDistance(totalDistanceRef.current.toFixed(2));
+                    }
+
+                    lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                    stationaryAnchorRef.current = { lat, lng };
+
+                    setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+                      latitude: lat,
+                      longitude: lng,
+                      timestamp: position.timestamp,
+                    }]).slice(-600));
+                  }
                 }
+              } else {
+                // ── SCENARIO B: Currently MOVING (Traveling on road/path) ──
+                // Check if user came to a stop (traffic light, client visit, parked, entered office)
+                const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
+                if (hasHalted) {
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(false);
+                  setMotionStatusLabel('STATIONARY');
+                  setSpeed('0');
+                  stationaryAnchorRef.current = { lat, lng };
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                } else {
+                  // Legitimate road progress while moving
+                  departureCandidateCountRef.current = 0;
+                  setIsMoving(true);
+                  setMotionStatusLabel('MOVING');
+                  setSpeed(Math.round(effectiveSpeedKmh).toString());
 
-                lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                stationaryAnchorRef.current = { lat, lng };
+                  // Micro-step filter: require at least 6.0m displacement between fixes to eliminate micro-jitter
+                  if (distFromLastM >= 6.0 && calculatedSpeedKmh < 160) {
+                    const addedKm = distFromLastM / 1000;
+                    totalDistanceRef.current += addedKm;
+                    setDistance(totalDistanceRef.current.toFixed(2));
+                  }
 
-                // Only append to map route when genuinely traveling to avoid stationary map hairballs
-                setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-                  latitude: lat,
-                  longitude: lng,
-                  timestamp: position.timestamp,
-                }]).slice(-600));
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                  stationaryAnchorRef.current = { lat, lng };
+
+                  setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+                    latitude: lat,
+                    longitude: lng,
+                    timestamp: position.timestamp,
+                  }]).slice(-600));
+                }
               }
             }
 
@@ -505,6 +563,15 @@ export default function ActiveShiftMapScreen() {
         );
       }
     } else {
+      // 🚫 MUTUAL EXCLUSION GATE: Cannot Start Shift if a Trip Plan is ACTIVE!
+      const activeTrip = await storage.getItem('active_trip_planner_is_active');
+      if (activeTrip === 'true') {
+        const msg = 'Aapka ek Trip Plan already chal raha hai! Dono me se koi ek hi feature active ho sakta hai (Trip Plan ya Selfie Punch In).\n\nPehle active trip ko complete ya cancel karein.';
+        if (Platform.OS === 'web') alert(`Trip Plan Active: ${msg}`);
+        else Alert.alert('Trip Plan Active', msg);
+        return;
+      }
+
       const res = await startTracking();
       if (res.success) {
         const msg = 'You are now ON DUTY. Background GPS tracking initialized.';

@@ -132,6 +132,26 @@ export default function useLocationTracker() {
 
       let activeSession = await storage.getItem('currentTrackingSessionId');
 
+      // Stale Multi-Day Session Purge: If local session belongs to a past date, purge it
+      if (activeSession) {
+        const startTimeStr = await storage.getItem('trackingStartTime');
+        if (startTimeStr) {
+          try {
+            const startDate = new Date(startTimeStr).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            if (startDate && todayDate && startDate !== todayDate) {
+              console.log(`🛡️ [DATE_ROLLOVER_CLIENT] Clearing stale session ${activeSession} from ${startDate} (today: ${todayDate})`);
+              await storage.removeItem('currentTrackingSessionId');
+              await storage.removeItem('tracking_accumulated_session_id');
+              await storage.removeItem('trackingStartTime');
+              await storage.removeItem('tracking_accumulated_distance');
+              await storage.setItem('isTrackingActive', 'false');
+              activeSession = null;
+            }
+          } catch (_) {}
+        }
+      }
+
       // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
       // If local storage was cleared or phone rebooted, verify with server if today's shift is active
       if (!activeSession && Platform.OS !== 'web') {
@@ -546,8 +566,19 @@ export default function useLocationTracker() {
         }
       }
 
-      if (!isAutoStart) {
-        await storage.removeItem('user_manually_punched_out');
+      // 🚫 MUTUAL EXCLUSION GATE: Cannot Punch In / Start Tracking if a Trip Plan is ACTIVE!
+      const activeTrip = await storage.getItem('active_trip_planner_is_active');
+      if (activeTrip === 'true') {
+        const errorMsg = 'A Trip Plan is currently active. Please complete or cancel your active trip before punching in.';
+        if (!isAutoStart) {
+          showCustomAlert(
+            'Trip Plan Active',
+            'Aapka ek Trip Plan already chal raha hai! Dono me se koi ek hi feature active ho sakta hai (Trip Plan ya Selfie Punch In).\n\nPehle active trip ko complete ya cancel karein.',
+            [{ text: 'OK' }],
+            'warning'
+          );
+        }
+        return { success: false, error: errorMsg };
       }
 
       // Verify permissions first

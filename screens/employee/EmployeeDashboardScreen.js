@@ -204,6 +204,16 @@ export default function EmployeeDashboardScreen() {
 
   const capturePunchInSelfie = async () => {
     try {
+      // 🚫 MUTUAL EXCLUSION GATE: Cannot Punch In if a Trip Plan is ACTIVE!
+      const activeTrip = await storage.getItem('active_trip_planner_is_active');
+      if (activeTrip === 'true') {
+        Alert.alert(
+          "Trip Plan Active",
+          "Aapka ek Trip Plan already chal raha hai! Dono me se koi ek hi feature active ho sakta hai (Trip Plan ya Selfie Punch In).\n\nPehle active trip ko complete ya cancel karein."
+        );
+        return;
+      }
+
       setIsUploadingSelfie(true);
       const hasAllPermissions = await requestPermissions();
       if (!hasAllPermissions) {
