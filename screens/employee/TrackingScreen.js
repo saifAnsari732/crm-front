@@ -7,12 +7,14 @@ import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   Navigation, Clock, Play, Square, MapPin, 
-  Bus, Activity, RefreshCw, Compass, ChevronRight 
+  Bus, Activity, RefreshCw, Compass, ChevronRight, Zap, Info
 } from 'lucide-react-native';
 import useLocationTracker from '../../hooks/useLocationTracker';
 import { storage } from '../../services/storage';
 import { trackingApi } from '../../services/api';
 import { processLocation } from '../../services/locationTask';
+import { enqueueCoordinate, flushOfflineQueue } from '../../services/offlineSync';
+import { openBatteryOptimizationSettings } from '../../services/batteryOptimization';
 import * as Location from 'expo-location';
 import MapViewComponent from '../../components/MapViewComponent';
 import { cleanTrackingRoute } from '../../utils/trackingRoute';
@@ -20,7 +22,7 @@ import { cleanTrackingRoute } from '../../utils/trackingRoute';
 const { width } = Dimensions.get('window');
 const DEFAULT_MAP_REGION = {
   latitude: 26.797531,
-  longitude: 88.901868,
+  longitude: 80.901868,
   latitudeDelta: 0.04,
   longitudeDelta: 0.04,
 };
@@ -36,7 +38,8 @@ const haversineMeters = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// 🧮 2D LatLng Extended Kalman Filter (EKF) for Real-Time Path Smoothing & Jitter Reduction
+// 🧮 2D LatLng Extended Kalman Filter (EKF) with Adaptive Coarse-Accuracy Gain
+// Prevents Acc:200m (cell/network/pocket GPS) from freezing position while smoothing indoor jitter
 class LatLngKalmanFilter {
   constructor() {
     this.lat = 0;
@@ -46,10 +49,11 @@ class LatLngKalmanFilter {
   }
 
   process(lat, lng, accuracyM, timestampMs) {
-    if (this.variance < 0) {
+    const clampedAcc = Math.min(Math.max(accuracyM || 15, 5), 35);
+    if (this.variance < 0 || !this.lat || !this.lng) {
       this.lat = lat;
       this.lng = lng;
-      this.variance = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+      this.variance = Math.pow(clampedAcc / 111320, 2);
       this.lastTimestampMs = timestampMs;
       return { lat, lng };
     }
@@ -57,11 +61,15 @@ class LatLngKalmanFilter {
     const dt = Math.max(0.5, (timestampMs - this.lastTimestampMs) / 1000);
     this.lastTimestampMs = timestampMs;
 
-    const Q = 0.00000005 * Math.min(dt, 15);
+    const rawDispM = haversineMeters(this.lat, this.lng, lat, lng);
+    const Q = (rawDispM >= 20 ? 0.0000008 : 0.0000001) * Math.min(dt, 15);
     const predVariance = this.variance + Q;
-    const R = Math.pow(Math.max(accuracyM || 15, 3) / 111320, 2);
+    const R = Math.pow(clampedAcc / 111320, 2);
 
-    const K = predVariance / (predVariance + R);
+    let K = predVariance / (predVariance + R);
+    if (rawDispM >= 22) {
+      K = Math.max(K, 0.82); // Instant responsiveness on real physical displacement >= 22m
+    }
     this.lat = this.lat + K * (lat - this.lat);
     this.lng = this.lng + K * (lng - this.lng);
     this.variance = (1 - K) * predVariance;
@@ -81,7 +89,7 @@ export default function ActiveShiftMapScreen() {
 
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [latitude, setLatitude] = useState('26.797531');
-  const [longitude, setLongitude] = useState('88.901868');
+  const [longitude, setLongitude] = useState('80.901868');
   const [address, setAddress] = useState(
     'Operational tracking inactive. Press START to begin shift.'
   );
@@ -103,14 +111,60 @@ export default function ActiveShiftMapScreen() {
   // Reference anchors for stationary micro-geofencing & movement accumulation
   const lastConfirmedCoordRef = useRef(null);
   const stationaryAnchorRef = useRef(null);
-  const departureCandidateCountRef = useRef(0);
+  const lastCapturedRawCoordRef = useRef(null);
+  const departureBufferRef = useRef([]);
 
-  // Smart Address Caching Ref (Eliminates 99%+ of redundant reverse-geocoding API calls)
+  // ⏱️ Dynamic 30-Minute Baseline & 1-Minute Coordinate Verification Engine
+  // User: "ek baar dono lati , or longi ka digit store ker lo then her minut per verify kro same are not"
+  // "Es lati , or longi ko const fix nhi store karna every 30minut per update new lati , or longi se conpare karna same are not"
+  const baselineCoordRef = useRef({
+    lat: 0,
+    lng: 0,
+    updatedAt: 0,
+    lastVerifiedAt: 0,
+    isSame: true,
+  });
+
+  // Smart Address Caching Ref & Persistent Zero-Drop Coordinate Outbox
   const lastGeocodedCoordRef = useRef(null);
   const lastGeocodedAddressRef = useRef('');
+  const lastScreenServerPushRef = useRef({ lat: 0, lng: 0, address: '', ts: 0 });
+  const screenOutboxRef = useRef([]);
+  const isFlushingOutboxRef = useRef(false);
+  const hasHydratedAnchorRef = useRef(false);
 
   // Extended Kalman Filter instance ref for continuous smoothing
   const kalmanRef = useRef(new LatLngKalmanFilter());
+
+  // 🔋 Battery Optimization Whitelist Banner & Hardware GPS Pulse Ref
+  const [showBatteryOptBanner, setShowBatteryOptBanner] = useState(Platform.OS === 'android');
+  const fetchLiveCoordsRef = useRef(null);
+  const [isForcingSync, setIsForcingSync] = useState(false);
+
+  const handleForceGpsSync = async () => {
+    if (isForcingSync) return;
+    setIsForcingSync(true);
+    try {
+      console.log('⚡ [FORCE_GPS_SYNC] User tapped Re-Sync GPS button...');
+      if (typeof fetchLiveCoordsRef.current === 'function') {
+        await fetchLiveCoordsRef.current();
+      } else {
+        const freshPos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+          maximumAge: 1000,
+        }).catch(() => Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        if (freshPos) {
+          await handleCoordinateFix(freshPos);
+        }
+      }
+      await flushScreenOutbox();
+      await flushOfflineQueue();
+    } catch (syncErr) {
+      console.log('⚡ [FORCE_GPS_SYNC] Error:', syncErr.message);
+    } finally {
+      setTimeout(() => setIsForcingSync(false), 1200);
+    }
+  };
 
   // 1. Timer logic to track duration
   useEffect(() => {
@@ -154,6 +208,84 @@ export default function ActiveShiftMapScreen() {
     };
   }, [isTracking, transportMode]);
 
+  // ── Persistent Zero-Drop Screen Coordinate Outbox Flusher ──────────────────
+  const enqueueAndFlushScreenCoord = async (coordPayload, currentAddr) => {
+    try {
+      if (coordPayload && coordPayload.eventId) {
+        const exists = screenOutboxRef.current.some((c) => c.eventId === coordPayload.eventId);
+        if (!exists) {
+          screenOutboxRef.current = [...screenOutboxRef.current.slice(-99), coordPayload];
+          await storage.setItem('tracking_screen_coord_outbox', JSON.stringify(screenOutboxRef.current)).catch(() => {});
+        }
+      }
+      await flushScreenOutbox(currentAddr);
+    } catch (_) {}
+  };
+
+  const flushScreenOutbox = async (overrideAddress = '') => {
+    if (isFlushingOutboxRef.current) return;
+    isFlushingOutboxRef.current = true;
+    try {
+      if (screenOutboxRef.current.length === 0) {
+        const savedOutboxStr = await storage.getItem('tracking_screen_coord_outbox');
+        if (savedOutboxStr) {
+          const parsed = JSON.parse(savedOutboxStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            screenOutboxRef.current = parsed;
+          }
+        }
+      }
+      if (screenOutboxRef.current.length === 0) return;
+
+      const manuallyOut = await storage.getItem('user_manually_punched_out');
+      if (manuallyOut === 'true') {
+        screenOutboxRef.current = [];
+        await storage.removeItem('tracking_screen_coord_outbox').catch(() => {});
+        return;
+      }
+
+      let activeSessionId = await storage.getItem('currentTrackingSessionId');
+      if (!activeSessionId) {
+        activeSessionId = 'AUTO_RECOVER_SESSION';
+      }
+
+      const batchToSend = [...screenOutboxRef.current];
+      const sentEventIds = new Set(batchToSend.map((c) => c.eventId));
+      const resolvedAddr = overrideAddress || lastGeocodedAddressRef.current || '';
+
+      const res = await trackingApi.update({
+        sessionId: activeSessionId,
+        coordinates: batchToSend,
+        currentAddress: resolvedAddr,
+      });
+
+      if (res?.data?.success) {
+        if (res.data.sessionId && (activeSessionId === 'AUTO_RECOVER_SESSION' || res.data.sessionId !== activeSessionId)) {
+          await storage.setItem('currentTrackingSessionId', res.data.sessionId).catch(() => {});
+          await storage.setItem('tracking_accumulated_session_id', res.data.sessionId).catch(() => {});
+          await storage.setItem('isTrackingActive', 'true').catch(() => {});
+        }
+
+        // Remove ACKed coordinates from persistent outbox
+        screenOutboxRef.current = screenOutboxRef.current.filter((c) => !sentEventIds.has(c.eventId));
+        await storage.setItem('tracking_screen_coord_outbox', JSON.stringify(screenOutboxRef.current)).catch(() => {});
+
+        const srvDist = Number(res?.data?.totalDistanceToday ?? res?.data?.totalDistance);
+        if (Number.isFinite(srvDist) && srvDist > totalDistanceRef.current) {
+          totalDistanceRef.current = srvDist;
+          const dStr = srvDist.toFixed(2);
+          setDistance(dStr);
+          await storage.setItem('tracking_accumulated_distance', dStr).catch(() => {});
+        }
+      }
+    } catch (flushErr) {
+      // Network drop or timeout: screenOutboxRef retains coordinates for the next 15s retry cycle.
+      // No duplicate queue dumping needed.
+    } finally {
+      isFlushingOutboxRef.current = false;
+    }
+  };
+
   // 1.5. Local Cache & AppState Sync for Active Tracking Session Distance
   useEffect(() => {
     let appStateSubscription = null;
@@ -162,17 +294,33 @@ export default function ActiveShiftMapScreen() {
     const loadLocalCachedDistance = async () => {
       try {
         const sessionId = await storage.getItem('currentTrackingSessionId');
-        if (!sessionId) {
-          totalDistanceRef.current = 0;
-          setDistance('0.00');
-          return;
-        }
         const cachedDist = await storage.getItem('tracking_accumulated_distance');
         if (cachedDist) {
           const parsed = parseFloat(cachedDist) || 0.0;
-          totalDistanceRef.current = parsed;
-          setDistance(parsed.toFixed(2));
-          console.log('📍 Tracking Screen: Initialized distance from local cache:', parsed);
+          if (parsed > 0 || sessionId) {
+            totalDistanceRef.current = Math.max(totalDistanceRef.current || 0, parsed);
+            setDistance(totalDistanceRef.current.toFixed(2));
+            console.log('📍 Tracking Screen: Initialized distance from local cache:', totalDistanceRef.current);
+          }
+        }
+        const cachedAddr = await storage.getItem('last_actual_address');
+        if (cachedAddr && !lastGeocodedAddressRef.current) {
+          lastGeocodedAddressRef.current = cachedAddr;
+          setAddress(cachedAddr);
+        }
+        const lastLocStr = await storage.getItem('last_recorded_location');
+        if (lastLocStr) {
+          try {
+            const lastLoc = JSON.parse(lastLocStr);
+            if (Number.isFinite(Number(lastLoc?.lat)) && Number.isFinite(Number(lastLoc?.lng))) {
+              setLatitude(Number(lastLoc.lat).toFixed(6));
+              setLongitude(Number(lastLoc.lng).toFixed(6));
+              if (!lastConfirmedCoordRef.current) {
+                lastConfirmedCoordRef.current = { lat: Number(lastLoc.lat), lng: Number(lastLoc.lng), timestamp: Date.now() };
+                stationaryAnchorRef.current = { lat: Number(lastLoc.lat), lng: Number(lastLoc.lng) };
+              }
+            }
+          } catch (_) {}
         }
       } catch (err) {
         console.log('📍 Tracking Screen: Failed to load cached distance:', err);
@@ -184,27 +332,60 @@ export default function ActiveShiftMapScreen() {
         const token = await storage.getItem('userToken') || await storage.getItem('token');
         if (!token) return;
 
+        // Step A: Flush any pending screen outbox coordinates & offline queue first
+        await flushScreenOutbox().catch(() => {});
+        flushOfflineQueue().catch(() => {});
+
         const response = await trackingApi.getTodaySessions();
         if (response && response.data && response.data.success) {
           const totalToday = typeof response.data.totalDistanceToday === 'number'
             ? response.data.totalDistanceToday
             : null;
 
-          const sessionId = await storage.getItem('currentTrackingSessionId');
+          let sessionId = await storage.getItem('currentTrackingSessionId');
           const activeSession = sessionId
-            ? response.data.sessions.find(s => s.sessionId === sessionId)
-            : null;
+            ? response.data.sessions.find(s => s.sessionId === sessionId) || response.data.sessions.find(s => s.isActive)
+            : response.data.sessions.find(s => s.isActive) || response.data.sessions[0];
+
+          if (activeSession?.sessionId && activeSession?.isActive) {
+            sessionId = activeSession.sessionId;
+            await storage.setItem('currentTrackingSessionId', sessionId);
+            await storage.setItem('tracking_accumulated_session_id', sessionId);
+            await storage.setItem('isTrackingActive', 'true');
+            await storage.removeItem('user_manually_punched_out');
+          }
 
           const backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
-          const synchronizedDistance = (typeof totalToday === 'number' && totalToday > 0)
-            ? totalToday
-            : backendDistance;
+          // Authoritative Distance: Use active session distance (never inflate with past session totals)
+          const synchronizedDistance = backendDistance;
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
           const distStr = synchronizedDistance.toFixed(2);
           setDistance(distStr);
           await storage.setItem('tracking_accumulated_distance', distStr);
+
+          // Step B: If local screen KM is ahead of server KM (e.g. 0.14 km on screen vs 0.00 km on server),
+          // immediately push the current screen coordinate + screenDistanceKm to reconcile the server ledger!
+          if (sessionId && totalDistanceRef.current > synchronizedDistance + 0.01 && lastCoordRef.current?.lat && lastCoordRef.current?.lng) {
+            const nowTs = Date.now();
+            const syncEventId = `${sessionId}:sync:${nowTs}:${lastCoordRef.current.lat.toFixed(6)}:${lastCoordRef.current.lng.toFixed(6)}`;
+            await enqueueAndFlushScreenCoord({
+              eventId: syncEventId,
+              lat: lastCoordRef.current.lat,
+              lng: lastCoordRef.current.lng,
+              speed: isMovingRef.current ? 1.5 : 0,
+              accuracy: 20,
+              heading: 0,
+              mocked: false,
+              timestamp: new Date(nowTs).toISOString(),
+              address: lastGeocodedAddressRef.current || '',
+              motionState: isMovingRef.current ? 'WALKING' : 'STATIONARY',
+              screenCaptured: true,
+              screenMoving: isMovingRef.current,
+              screenDistanceKm: Number(totalDistanceRef.current.toFixed(3)),
+            }, lastGeocodedAddressRef.current || '');
+          }
         }
       } catch (err) {
         console.log('📍 Tracking Screen: Failed to sync distance with backend:', err);
@@ -218,17 +399,19 @@ export default function ActiveShiftMapScreen() {
         syncDistanceWithBackend();
       });
 
-      // Step 3: Set 15-second polling interval for backend reconciliation (local engine updates distance in real-time)
+      // Step 3: Set 10-second polling interval for rapid backend reconciliation & outbox flush
       syncInterval = setInterval(() => {
         syncDistanceWithBackend();
-      }, 15000);
+      }, 10000);
 
-      // Step 4: Register AppState listener to sync distance when returning from background / lock screen
+      // Step 4: Register AppState listener to flush outbox when backgrounding and sync when returning to foreground
       appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
         if (nextAppState === 'active') {
           console.log('📍 Tracking Screen: App returned to active foreground. Syncing distance telemetry...');
           await loadLocalCachedDistance();
           await syncDistanceWithBackend();
+        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+          await flushScreenOutbox().catch(() => {});
         }
       });
     } else {
@@ -267,7 +450,55 @@ export default function ActiveShiftMapScreen() {
     };
   }, [isTracking]);
 
-  // 2. Real-time Location telemetry updates (Dual-Stream: Hardware watchPositionAsync + Polling Fallback)
+  // ⏱️ 1-Minute Cadence Coordinate Verification Timer against 30-Minute Dynamic Baseline
+  // User: "ek baar dono lati , or longi ka digit store ker lo then her minut per verify kro same are not"
+  // "Es lati , or longi ko const fix nhi store karna every 30minut per update new lati , or longi se conpare karna same are not"
+  useEffect(() => {
+    if (!isTracking) return;
+
+    const minuteVerifyInterval = setInterval(() => {
+      const curLat = lastCoordRef.current?.lat;
+      const curLng = lastCoordRef.current?.lng;
+      const base = baselineCoordRef.current;
+
+      if (curLat && curLng && base.updatedAt > 0) {
+        const dM = haversineMeters(base.lat, base.lng, curLat, curLng);
+        // 🎯 50-METER DYNAMIC RADIUS GEOFENCE (User Requirement: "50 miter ka radia like yesa kuch")
+        // If current coordinate is within 50 meters of dynamic baseline anchor:
+        // Employee is STATIONARY at this spot!
+        const isSame = dM <= 50.0;
+        base.lastVerifiedAt = Date.now();
+        base.isSame = isSame;
+
+        console.log(`⏱️ [1-MIN 50M RADIUS VERIFY] Status: ${isSame ? 'SAME (INSIDE 50M RADIUS - 0.000 KM)' : 'NOT SAME (DEPARTURE DETECTED)'} | Dist: ${dM.toFixed(1)}m / 50m max`);
+
+        if (isSame) {
+          // Inside 50m spot radius: strictly lock to 0 KM and speed 0!
+          isMovingRef.current = false;
+          setIsMoving(false);
+          setMotionStatusLabel('STATIONARY');
+          setSpeed('0');
+          departureBufferRef.current = [];
+        }
+
+        // Renew baseline every 30 minutes dynamically (not hardcoded constant)
+        if (Date.now() - base.updatedAt >= 30 * 60 * 1000) {
+          console.log(`⏱️ [30-MIN BASELINE RENEWED] Updating baseline coordinates to [${curLat.toFixed(6)}, ${curLng.toFixed(6)}]`);
+          baselineCoordRef.current = {
+            lat: curLat,
+            lng: curLng,
+            updatedAt: Date.now(),
+            lastVerifiedAt: Date.now(),
+            isSame: true,
+          };
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(minuteVerifyInterval);
+  }, [isTracking]);
+
+  // 2. Real-time Location telemetry updates (Tri-Channel: Hardware watchPositionAsync + 4s Active Poll + Persistent Outbox)
   useEffect(() => {
     let watchSubscription = null;
 
@@ -276,9 +507,24 @@ export default function ActiveShiftMapScreen() {
         try {
           if (position && position.coords) {
             const { latitude: rawLat, longitude: rawLng, speed: mps, accuracy: acc } = position.coords;
+            const fixTsMs = position.timestamp || Date.now();
             
-            // 🧮 Process raw fix through 2D Extended Kalman Filter to eliminate multipath noise
-            const smoothed = kalmanRef.current.process(rawLat, rawLng, acc, position.timestamp);
+            // 🛡️ GATE 1: IDENTICAL & MICRO-JITTER SUPPRESSION FILTER
+            // User: "validate kro pahle same coordinate to nhi aa raha h baar baar : then server ko bhejo"
+            // If the same coordinate (or within 2 meters) arrives repeatedly, exit immediately!
+            const rawDistFromPrevM = lastCapturedRawCoordRef.current
+              ? haversineMeters(lastCapturedRawCoordRef.current.lat, lastCapturedRawCoordRef.current.lng, rawLat, rawLng)
+              : 999;
+
+            if (rawDistFromPrevM < 2.0 && lastCapturedRawCoordRef.current) {
+              setLatitude(rawLat.toFixed(6));
+              setLongitude(rawLng.toFixed(6));
+              return;
+            }
+            lastCapturedRawCoordRef.current = { lat: rawLat, lng: rawLng, ts: fixTsMs };
+
+            // 🧮 Process raw fix through Adaptive 2D Extended Kalman Filter
+            const smoothed = kalmanRef.current.process(rawLat, rawLng, acc, fixTsMs);
             const lat = smoothed.lat;
             const lng = smoothed.lng;
 
@@ -288,17 +534,110 @@ export default function ActiveShiftMapScreen() {
             // Hardware Doppler speed (m/s -> km/h) with noise floor filtering
             const rawSpeedKmh = Number.isFinite(mps) && mps > 0.5 ? Math.round(mps * 3.6) : 0;
 
-            // 🎯 ADVANCED DYNAMIC MOTION ENGINE (Anti-Jitter Office & Indoor Guard):
-            // Eliminates 100% of indoor multipath jitter, anchor crawling, and false distance accumulation
-            if (!lastConfirmedCoordRef.current) {
-              lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+            // 🔄 HYDRATE PREVIOUS MOTION ANCHOR ACROSS TAB SWITCHES / SCREEN REMOUNTS:
+            if (!lastConfirmedCoordRef.current && !hasHydratedAnchorRef.current) {
+              hasHydratedAnchorRef.current = true;
+              try {
+                const activeSid = await storage.getItem('currentTrackingSessionId');
+                const savedMotionStr = await storage.getItem('tracking_screen_motion_state');
+                if (savedMotionStr) {
+                  const savedMotion = JSON.parse(savedMotionStr);
+                  if (savedMotion && (!activeSid || savedMotion.sessionId === activeSid) && savedMotion.lastConfirmedCoord?.lat) {
+                    lastConfirmedCoordRef.current = savedMotion.lastConfirmedCoord;
+                    stationaryAnchorRef.current = savedMotion.stationaryAnchor || savedMotion.lastConfirmedCoord;
+                    isMovingRef.current = Boolean(savedMotion.isMoving);
+                    setIsMoving(isMovingRef.current);
+                    setMotionStatusLabel(isMovingRef.current ? 'MOVING' : 'STATIONARY');
+                  }
+                }
+              } catch (_) {}
+            }
+
+            let isInitialScreenFix = false;
+            let didConfirmStep = false;
+
+            // 🎯 ADVANCED CONSENSUS VERIFICATION ENGINE:
+            if (!stationaryAnchorRef.current) {
               stationaryAnchorRef.current = { lat, lng };
-              departureCandidateCountRef.current = 0;
+            }
+
+            if (!lastConfirmedCoordRef.current) {
+              isInitialScreenFix = true;
+              lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+              stationaryAnchorRef.current = { lat, lng };
+              departureBufferRef.current = [];
               isMovingRef.current = false;
               setIsMoving(false);
               setMotionStatusLabel('STATIONARY');
               setSpeed('0');
+
+              // ⏱️ Initialize 30-Minute Dynamic Baseline
+              baselineCoordRef.current = {
+                lat,
+                lng,
+                updatedAt: fixTsMs,
+                lastVerifiedAt: fixTsMs,
+                isSame: true,
+              };
             } else {
+              // ⏱️ Dynamic 30-Minute Baseline Renewal Check on live fix:
+              if (baselineCoordRef.current.updatedAt === 0) {
+                baselineCoordRef.current = {
+                  lat,
+                  lng,
+                  updatedAt: fixTsMs,
+                  lastVerifiedAt: fixTsMs,
+                  isSame: true,
+                };
+              } else if (fixTsMs - baselineCoordRef.current.updatedAt >= 30 * 60 * 1000) {
+                // Only renew baseline coordinate if currently stationary or arriving at new spot
+                if (!isMovingRef.current) {
+                  console.log(`⏱️ [30-MIN BASELINE RENEWED] Updating stationary baseline coordinates to [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
+                  baselineCoordRef.current = {
+                    lat,
+                    lng,
+                    updatedAt: fixTsMs,
+                    lastVerifiedAt: fixTsMs,
+                    isSame: true,
+                  };
+                }
+              }
+
+              // 🎯 50-METER DYNAMIC SPOT RADIUS CHECK (User Requirement: "50 miter ka radia like yesa kuch")
+              const distFromBaselineM = haversineMeters(
+                baselineCoordRef.current.lat,
+                baselineCoordRef.current.lng,
+                lat,
+                lng
+              );
+              const isBaselineSame = distFromBaselineM <= 50.0;
+
+              if (fixTsMs - baselineCoordRef.current.lastVerifiedAt >= 60 * 1000) {
+                baselineCoordRef.current.lastVerifiedAt = fixTsMs;
+                baselineCoordRef.current.isSame = isBaselineSame;
+              }
+
+              // 🛑 ABSOLUTE ZERO-KM STATIONARY SPOT LOCK:
+              // Inside 50m radius of current baseline = employee is at the same spot!
+              if (isBaselineSame) {
+                departureBufferRef.current = [];
+                isMovingRef.current = false;
+                setIsMoving(false);
+                setMotionStatusLabel('STATIONARY');
+                setSpeed('0');
+
+                // Soft EMA convergence without chasing noisy jumps:
+                stationaryAnchorRef.current = {
+                  lat: 0.98 * stationaryAnchorRef.current.lat + 0.02 * lat,
+                  lng: 0.98 * stationaryAnchorRef.current.lng + 0.02 * lng,
+                };
+                lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                lastCoordRef.current = { lat, lng };
+
+                // STRICT ZERO DISTANCE ADDED: Exit immediately so no fake KM or upload can ever happen!
+                return;
+              }
+
               const distFromAnchorM = haversineMeters(
                 stationaryAnchorRef.current.lat,
                 stationaryAnchorRef.current.lng,
@@ -311,127 +650,168 @@ export default function ActiveShiftMapScreen() {
                 lat,
                 lng
               );
-              const timeDiffSecs = Math.max(0.5, (position.timestamp - lastConfirmedCoordRef.current.timestamp) / 1000);
-              const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
-              const effectiveSpeedKmh = Math.max(rawSpeedKmh, calculatedSpeedKmh);
+              const timeDiffSecs = Math.max(0.5, (fixTsMs - lastConfirmedCoordRef.current.timestamp) / 1000);
 
-              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (40m - 60m bubble):
-              // Covers indoor multipath reflection scatter ellipse so stationary phones never register movement
-              const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
-              const anchorThresholdM = Math.max(40.0, Math.min(60.0, gpsAcc * 1.2));
+              // 🎯 BASE DIGITS & SPOT ANCHOR DEADBAND (<= 50m radius):
+              const isInsideSpotDeadband = distFromAnchorM <= 50.0;
+              const isStationaryDopplerSpeed = rawSpeedKmh < 2.5;
 
               if (!isMovingRef.current) {
-                // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
-                const isInsideAnchor = distFromAnchorM < anchorThresholdM;
-                const isStationarySpeed = effectiveSpeedKmh < 4.5;
-
-                if (isInsideAnchor || isStationarySpeed) {
-                  // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
-                  departureCandidateCountRef.current = 0;
+                // 🛑 CURRENT STATE: STATIONARY (Employee is stopped at desk, home, or office)
+                if (isInsideSpotDeadband || isStationaryDopplerSpeed) {
+                  // Inside 50m stationary spot radius or stationary Doppler speed:
+                  departureBufferRef.current = [];
                   isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
 
-                  // Softly converge anchor towards centroid (0.98 / 0.02) to prevent anchor wandering/crawling
                   stationaryAnchorRef.current = {
                     lat: 0.98 * stationaryAnchorRef.current.lat + 0.02 * lat,
                     lng: 0.98 * stationaryAnchorRef.current.lng + 0.02 * lng,
                   };
-                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                  lastCoordRef.current = { lat, lng };
+                  return;
                 } else {
-                  // Candidate departure detected outside anchor bubble (> 40-60m) with travel speed >= 4.5 km/h
-                  // Always require 2 consecutive progressive confirmations (regardless of jump distance < 85m)
-                  // to prevent a single indoor satellite/Wi-Fi bounce (+0.04 km) from triggering false departure!
-                  departureCandidateCountRef.current += 1;
-                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 85) {
-                    isMovingRef.current = false;
-                    setIsMoving(false);
+                  // Potential departure detected (dist > 50m AND speed >= 2.5 km/h AND !isBaselineSame):
+                  // 3-Point Forward Consensus Gate to prevent single-spike indoor false trips!
+                  const buf = departureBufferRef.current;
+                  if (buf.length === 0) {
+                    // Candidate 1:
+                    if (distFromAnchorM > 50.0 && rawSpeedKmh >= 2.5) {
+                      departureBufferRef.current = [{ lat, lng, speed: rawSpeedKmh, ts: fixTsMs }];
+                    }
                     setMotionStatusLabel('STATIONARY');
                     setSpeed('0');
-                  } else {
-                    // Confirmed physical departure! Employee has left the office and is traveling on road
-                    departureCandidateCountRef.current = 0;
-                    isMovingRef.current = true;
-                    setIsMoving(true);
-                    setMotionStatusLabel('MOVING');
-                    setSpeed(Math.round(effectiveSpeedKmh).toString());
+                  } else if (buf.length === 1) {
+                    // Candidate 2: Check forward progress from Candidate 1
+                    const distFromCand1 = haversineMeters(buf[0].lat, buf[0].lng, lat, lng);
+                    const dt = Math.max(0.5, (fixTsMs - buf[0].ts) / 1000);
+                    const speedFromCand1 = (distFromCand1 / 1000) / (dt / 3600);
 
-                    const departureDistKm = distFromAnchorM / 1000;
-                    if (departureDistKm > 0.030 && departureDistKm < 0.25) {
-                      totalDistanceRef.current += departureDistKm;
-                      setDistance(totalDistanceRef.current.toFixed(2));
+                    if (distFromCand1 >= 15.0 && speedFromCand1 >= 2.5 && speedFromCand1 <= 150.0) {
+                      departureBufferRef.current.push({ lat, lng, speed: rawSpeedKmh, ts: fixTsMs });
+                    } else if (distFromAnchorM <= 50.0) {
+                      departureBufferRef.current = [];
                     }
+                  } else if (buf.length >= 2) {
+                    // Candidate 3: Final confirmation of continuous forward travel
+                    const distFromCand2 = haversineMeters(buf[1].lat, buf[1].lng, lat, lng);
+                    const dt = Math.max(0.5, (fixTsMs - buf[1].ts) / 1000);
+                    const speedFromCand2 = (distFromCand2 / 1000) / (dt / 3600);
 
-                    lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                    stationaryAnchorRef.current = { lat, lng };
+                    if (distFromCand2 >= 15.0 && speedFromCand2 >= 2.5 && speedFromCand2 <= 150.0) {
+                      // 🚗 3-POINT CONSENSUS MET: TRUE ROAD TRAVEL CONFIRMED!
+                      isMovingRef.current = true;
+                      didConfirmStep = true;
+                      setIsMoving(true);
+                      setMotionStatusLabel('MOVING');
 
-                    setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-                      latitude: lat,
-                      longitude: lng,
-                      timestamp: position.timestamp,
-                    }]).slice(-600));
+                      const travelSpeedKmh = Math.max(rawSpeedKmh, Math.round(speedFromCand2));
+                      setSpeed(Math.max(3, Math.round(Math.min(travelSpeedKmh, 120))).toString());
+
+                      const departureDistanceKm = distFromAnchorM / 1000;
+                      if (departureDistanceKm >= 0.050 && departureDistanceKm <= 1.5) {
+                        totalDistanceRef.current += departureDistanceKm;
+                        const dStr = totalDistanceRef.current.toFixed(2);
+                        setDistance(dStr);
+                        storage.setItem('tracking_accumulated_distance', dStr).catch(() => {});
+                      }
+
+                      stationaryAnchorRef.current = { lat, lng };
+                      lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                      departureBufferRef.current = [];
+
+                      setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+                        latitude: lat,
+                        longitude: lng,
+                        timestamp: fixTsMs,
+                      }]).slice(-600));
+                    } else {
+                      departureBufferRef.current = [];
+                    }
                   }
                 }
               } else {
-                // ── SCENARIO B: Currently MOVING (Traveling on road/path) ──
-                // Check if user came to a stop (traffic light, client visit, parked, entered office)
-                const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
-                if (hasHalted) {
-                  departureCandidateCountRef.current = 0;
+                // 🚗 CURRENT STATE: MOVING ON ROAD
+                // Check if employee has stopped (traffic stop, arrived at spot):
+                if (rawSpeedKmh < 1.8 && distFromLastM < 5.0 && timeDiffSecs >= 15.0) {
+                  // Transition back to STATIONARY:
                   isMovingRef.current = false;
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
                   stationaryAnchorRef.current = { lat, lng };
-                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                } else {
-                  // Legitimate road progress while moving
-                  departureCandidateCountRef.current = 0;
-                  isMovingRef.current = true;
-                  setIsMoving(true);
-                  setMotionStatusLabel('MOVING');
-                  setSpeed(Math.round(effectiveSpeedKmh).toString());
-
-                  // Micro-step filter: require at least 6.0m displacement between fixes to eliminate micro-jitter
-                  if (distFromLastM >= 6.0 && calculatedSpeedKmh < 160) {
+                  lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                  departureBufferRef.current = [];
+                  // Reset dynamic baseline to new stationary spot
+                  baselineCoordRef.current = {
+                    lat,
+                    lng,
+                    updatedAt: fixTsMs,
+                    lastVerifiedAt: fixTsMs,
+                    isSame: true,
+                  };
+                } else if (distFromLastM >= 5.0 && distFromLastM <= 2500) {
+                  const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
+                  if (calculatedSpeedKmh <= 160.0) {
+                    didConfirmStep = true;
                     const addedKm = distFromLastM / 1000;
                     totalDistanceRef.current += addedKm;
-                    setDistance(totalDistanceRef.current.toFixed(2));
+                    const dStr = totalDistanceRef.current.toFixed(2);
+                    setDistance(dStr);
+                    storage.setItem('tracking_accumulated_distance', dStr).catch(() => {});
+
+                    const travelSpeedKmh = Math.max(rawSpeedKmh, Math.round(calculatedSpeedKmh));
+                    setSpeed(Math.max(3, Math.round(Math.min(travelSpeedKmh, 120))).toString());
+
+                    stationaryAnchorRef.current = { lat, lng };
+                    lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+
+                    setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+                      latitude: lat,
+                      longitude: lng,
+                      timestamp: fixTsMs,
+                    }]).slice(-600));
                   }
-
-                  lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                  stationaryAnchorRef.current = { lat, lng };
-
-                  setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-                    latitude: lat,
-                    longitude: lng,
-                    timestamp: position.timestamp,
-                  }]).slice(-600));
                 }
               }
             }
 
-            // Feed screen GPS fix to location processor
-            await processLocation(position).catch(() => {});
-
             lastCoordRef.current = { lat, lng };
 
-            // 🎯 SMART GEONAME API SAVER:
-            // Reverse geocode ONLY if address is empty OR moved > 80 meters from last geocoded point
+            // Persist motion anchor state across tab switches / screen remounts
+            storage.getItem('currentTrackingSessionId').then((sid) => {
+              storage.setItem('tracking_screen_motion_state', JSON.stringify({
+                sessionId: sid || 'ACTIVE',
+                lastConfirmedCoord: lastConfirmedCoordRef.current,
+                stationaryAnchor: stationaryAnchorRef.current,
+                isMoving: isMovingRef.current,
+                updatedAt: fixTsMs,
+              })).catch(() => {});
+            }).catch(() => {});
+
+            // 🎯 NON-BLOCKING FAST GEONAME RESOLVER (2000ms Timeout Race):
+            // Never allows slow OS/network reverse geocoding to delay coordinate capture or server sync!
+            let resolvedActualAddress = lastGeocodedAddressRef.current || '';
             try {
               const distFromLastGeocoded = lastGeocodedCoordRef.current
                 ? haversineMeters(lastGeocodedCoordRef.current.lat, lastGeocodedCoordRef.current.lng, lat, lng)
                 : 999;
 
-              if (!lastGeocodedAddressRef.current || distFromLastGeocoded > 80) {
+              if (!lastGeocodedAddressRef.current || distFromLastGeocoded > 60) {
                 if (Platform.OS === 'web') {
                   const webAddr = `Location acquired: [${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
                   setAddress(webAddr);
                   lastGeocodedAddressRef.current = webAddr;
                   lastGeocodedCoordRef.current = { lat, lng };
+                  resolvedActualAddress = webAddr;
                 } else {
-                  const geocoded = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+                  const geocoded = await Promise.race([
+                    Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('geocode_timeout')), 2000)),
+                  ]);
                   if (geocoded && geocoded.length > 0) {
                     const res = geocoded[0];
                     const street = res.street || res.name || '';
@@ -448,21 +828,99 @@ export default function ActiveShiftMapScreen() {
                     setAddress(finalAddr);
                     lastGeocodedAddressRef.current = finalAddr;
                     lastGeocodedCoordRef.current = { lat, lng };
+                    resolvedActualAddress = finalAddr;
                   } else {
-                    const fallbackAddr = `Location acquired: [${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
+                    const fallbackAddr = lastGeocodedAddressRef.current || `Location acquired: [${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
                     setAddress(fallbackAddr);
                     lastGeocodedAddressRef.current = fallbackAddr;
                     lastGeocodedCoordRef.current = { lat, lng };
+                    resolvedActualAddress = fallbackAddr;
                   }
                 }
               } else if (lastGeocodedAddressRef.current) {
-                // Reuse cached address without hitting external Geocode API
                 setAddress(lastGeocodedAddressRef.current);
+                resolvedActualAddress = lastGeocodedAddressRef.current;
               }
             } catch (geoErr) {
-              console.log('📍 Tracking Screen: Reverse geocoding failed:', geoErr.message);
-              setAddress(`Location acquired: [${lat.toFixed(4)}, ${lng.toFixed(4)}] (Offline Mode)`);
+              const fallbackAddr = lastGeocodedAddressRef.current || `Location acquired: [${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
+              setAddress(fallbackAddr);
+              resolvedActualAddress = fallbackAddr;
             }
+
+            // 1. Feed screen GPS fix + Actual Address + Screen Moving state into background location processor FIRST (mutex-locked)
+            if (resolvedActualAddress) {
+              position.coords.address = resolvedActualAddress;
+              storage.setItem('last_actual_address', resolvedActualAddress).catch(() => {});
+            }
+            position.coords.screenCaptured = true;
+            position.coords.screenMoving = isMovingRef.current;
+            position.coords.screenDistanceKm = Number((totalDistanceRef.current || 0).toFixed(3));
+
+            await processLocation(position).catch(() => {});
+
+            // 2. 📡 GUARANTEED ZERO-DROP SCREEN-TO-SERVER OUTBOX RELAY (SEQUENTIAL FALLBACK):
+            // Works even if currentTrackingSessionId is missing (uses AUTO_RECOVER_SESSION) and retries via screenOutboxRef + offlineSync!
+            try {
+              const activeSessionId = (await storage.getItem('currentTrackingSessionId')) || 'AUTO_RECOVER_SESSION';
+              const expectedEventId = `${activeSessionId}:${fixTsMs}:${rawLat.toFixed(6)}:${rawLng.toFixed(6)}`;
+              const lastUploadedEventId = await storage.getItem('last_server_upload_event_id');
+
+              const prevPush = lastScreenServerPushRef.current;
+              const distFromLastPushM = prevPush.lat
+                ? haversineMeters(prevPush.lat, prevPush.lng, rawLat, rawLng)
+                : 999;
+              const addressJustUpdated = Boolean(resolvedActualAddress && resolvedActualAddress !== prevPush.address);
+              const elapsedSincePushMs = Date.now() - (prevPush.ts || 0);
+
+              if (
+                lastUploadedEventId !== expectedEventId &&
+                (
+                  isInitialScreenFix ||
+                  didConfirmStep ||
+                  (isMovingRef.current && (distFromLastPushM >= 8.0 || elapsedSincePushMs >= 5000)) ||
+                  (addressJustUpdated && elapsedSincePushMs >= 15000) ||
+                  elapsedSincePushMs >= 60000
+                )
+              ) {
+                const effectiveMps = isMovingRef.current ? Math.max(Number(mps) || 0, 1.4) : 0;
+                const displayLat = Number(lat.toFixed(6));
+                const displayLng = Number(lng.toFixed(6));
+                const screenCoordPayload = {
+                  eventId: expectedEventId,
+                  lat: displayLat,
+                  lng: displayLng,
+                  speed: effectiveMps,
+                  accuracy: Math.min(Number.isFinite(acc) && acc > 0 ? acc : 15, 45),
+                  heading: Number(position.coords?.heading) || 0,
+                  mocked: Boolean(position.mocked || position.coords?.isMocked),
+                  timestamp: new Date(fixTsMs).toISOString(),
+                  address: resolvedActualAddress,
+                  motionState: isMovingRef.current ? (effectiveMps >= 3.0 ? 'VEHICLE' : 'WALKING') : 'STATIONARY',
+                  screenCaptured: true,
+                  screenMoving: isMovingRef.current,
+                  screenDistanceKm: Number((totalDistanceRef.current || 0).toFixed(3)),
+                };
+
+                lastScreenServerPushRef.current = {
+                  lat: displayLat,
+                  lng: displayLng,
+                  address: resolvedActualAddress,
+                  ts: Date.now(),
+                };
+                await storage.setItem('last_server_upload_event_id', expectedEventId).catch(() => {});
+                await enqueueAndFlushScreenCoord(screenCoordPayload, resolvedActualAddress);
+              } else if (lastUploadedEventId === expectedEventId) {
+                lastScreenServerPushRef.current = {
+                  lat: rawLat,
+                  lng: rawLng,
+                  address: resolvedActualAddress,
+                  ts: Date.now(),
+                };
+                if (screenOutboxRef.current.length > 0) {
+                  await flushScreenOutbox(resolvedActualAddress);
+                }
+              }
+            } catch (_) {}
           }
         } catch (err) {
           console.log('📍 Tracking Screen: Could not query exact coordinates:', err.message);
@@ -477,9 +935,20 @@ export default function ActiveShiftMapScreen() {
 
       const fetchLiveCoords = async () => {
         try {
-          const position = await Location.getCurrentPositionAsync({
+          const posPromise = Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.High,
+            maximumAge: 3000,
           });
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('gps_timeout')), 2500)
+          );
+          let position = await Promise.race([posPromise, timeoutPromise]).catch(() => null);
+          if (!position) {
+            position = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              maximumAge: 5000,
+            }).catch(() => null);
+          }
           if (position) {
             await handleCoordinateFix(position);
           }
@@ -488,42 +957,38 @@ export default function ActiveShiftMapScreen() {
         }
       };
 
-      // Continuous OS Hardware GPS Callbacks (High Accuracy)
-      if (Platform.OS !== 'web') {
-        Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000,
-            distanceInterval: 8,
-          },
-          (pos) => {
-            handleCoordinateFix(pos);
-          }
-        ).then((sub) => {
-          watchSubscription = sub;
-          console.log('📡 Tracking Screen: Native hardware watchPositionAsync active! ✅');
-        }).catch((err) => {
-          console.log('⚠️ Tracking Screen: watchPositionAsync fallback to polling:', err.message);
-          locationIntervalRef.current = setInterval(fetchLiveCoords, 8000);
-        });
-        fetchLiveCoords();
-      } else {
-        fetchLiveCoords();
-        locationIntervalRef.current = setInterval(fetchLiveCoords, 8000);
-      }
+      // Continuous OS & Web Hardware GPS Callbacks (BestForNavigation + timeInterval: 2000 + distanceInterval: 0)
+      Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 2000,
+          distanceInterval: 0,
+        },
+        (pos) => {
+          handleCoordinateFix(pos);
+        }
+      ).then((sub) => {
+        watchSubscription = sub;
+        console.log('📡 Tracking Screen: Continuous hardware watchPositionAsync active! ✅');
+      }).catch((err) => {
+        console.log('⚠️ Tracking Screen: watchPositionAsync fallback to polling:', err.message);
+      });
+
+      fetchLiveCoordsRef.current = fetchLiveCoords;
+      fetchLiveCoords();
+      locationIntervalRef.current = setInterval(fetchLiveCoords, 3000);
     } else {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
-      setLatitude('26.797531');
-      setLongitude('88.901868');
-      setAddress('Tracking inactive. Press START to begin shift.');
-      totalDistanceRef.current = 0.0;
-      lastCoordRef.current = null;
-      lastConfirmedCoordRef.current = null;
-      stationaryAnchorRef.current = null;
-      kalmanRef.current.reset();
-      setIsMoving(false);
-      setMotionStatusLabel('STATIONARY');
-      setRouteCoords([]);
+      // Protect active sessions: only wipe to inactive defaults if user has truly stopped tracking!
+      storage.getItem('currentTrackingSessionId').then((activeSid) => {
+        if (!activeSid) {
+          hasHydratedAnchorRef.current = false;
+          setSpeed('0');
+          setIsMoving(false);
+          setMotionStatusLabel('STATIONARY');
+          setAddress('Tracking inactive. Press START to begin shift.');
+        }
+      }).catch(() => {});
     }
 
     return () => {
@@ -689,6 +1154,39 @@ export default function ActiveShiftMapScreen() {
         </Surface>
       </View>
 
+      {/* 🔋 Battery Optimization Whitelist Banner (Android OEM Keep-Alive) */}
+      {showBatteryOptBanner && Platform.OS === 'android' && (
+        <Surface style={styles.batteryBanner} elevation={1}>
+          <View style={styles.batteryBannerContent}>
+            <View style={styles.batteryIconWrap}>
+              <Zap size={18} color="#eab308" />
+            </View>
+            <View style={styles.batteryTextWrap}>
+              <Text style={styles.batteryBannerTitle}>Background GPS Protection</Text>
+              <Text style={styles.batteryBannerSubtitle}>
+                Set Battery to "Unrestricted" so Android never stops GPS when screen is locked.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.batteryBannerActions}>
+            <TouchableOpacity
+              style={styles.batteryFixBtn}
+              onPress={() => openBatteryOptimizationSettings()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.batteryFixBtnText}>Fix Setting</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.batteryDismissBtn}
+              onPress={() => setShowBatteryOptBanner(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.batteryDismissText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        </Surface>
+      )}
+
       {/* 4. Coordinate & Address Status Module */}
       <Surface style={styles.statusBox} elevation={1}>
         <View style={styles.statusBoxHeader}>
@@ -696,9 +1194,24 @@ export default function ActiveShiftMapScreen() {
             <MapPin size={18} color="#3b82f6" style={styles.gpsLabelIcon} />
             <Text style={styles.boxTitle}>CURRENT GPS STATUS</Text>
           </View>
-          <TouchableOpacity onPress={openGoogleMaps}>
-            <Text style={styles.googleMapsLink}>Google Maps ›</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRightActions}>
+            {isTracking && (
+              <TouchableOpacity
+                style={[styles.forceSyncBtn, isForcingSync && styles.forceSyncBtnActive]}
+                onPress={handleForceGpsSync}
+                activeOpacity={0.7}
+                disabled={isForcingSync}
+              >
+                <RefreshCw size={12} color={isForcingSync ? '#2563eb' : '#64748b'} />
+                <Text style={[styles.forceSyncText, isForcingSync && styles.forceSyncTextActive]}>
+                  {isForcingSync ? 'Syncing...' : 'Re-Sync'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={openGoogleMaps}>
+              <Text style={styles.googleMapsLink}>Google Maps ›</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Dynamic Motion State Live Banner */}
@@ -735,6 +1248,21 @@ export default function ActiveShiftMapScreen() {
           </View>
           <Text style={styles.addressBody}>{address}</Text>
         </LinearGradient>
+
+        {/* ℹ️ Live Operational Guide Card */}
+        {isTracking && (
+          <View style={styles.trackingGuideBox}>
+            <View style={styles.trackingGuideHeader}>
+              <Info size={14} color="#2563eb" style={{ marginRight: 6 }} />
+              <Text style={styles.trackingGuideTitle}>Live GPS & Distance Guide</Text>
+            </View>
+            <Text style={styles.trackingGuideText}>
+              • <Text style={{ fontWeight: 'bold', color: '#1e293b' }}>Same Spot / Address Par</Text>: KM strictly <Text style={{ fontWeight: 'bold', color: '#dc2626' }}>0.00 par locked</Text> rahega (koi fake drift nahi judegi).{'\n'}
+              • <Text style={{ fontWeight: 'bold', color: '#1e293b' }}>Always Connected</Text>: Satellite coordinates aur connection lagatar check hote rahenge.{'\n'}
+              • <Text style={{ fontWeight: 'bold', color: '#1e293b' }}>Jab Actual Address Badlega</Text>: Jaise hi aap yahan se nikal kar chalenge, <Text style={{ fontWeight: 'bold', color: '#16a34a' }}>KM turant update hona shuru hoga</Text>.
+            </Text>
+          </View>
+        )}
       </Surface>
 
       <Surface style={styles.mapCard} elevation={1}>
@@ -1083,5 +1611,120 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#64748b',
     letterSpacing: 0.5,
+  },
+  // 🔋 Battery Optimization Whitelist Banner Styles
+  batteryBanner: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#fef08a',
+    padding: 14,
+    marginBottom: 16,
+  },
+  batteryBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  batteryIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fef9c3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  batteryTextWrap: {
+    flex: 1,
+  },
+  batteryBannerTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#854d0e',
+    marginBottom: 2,
+  },
+  batteryBannerSubtitle: {
+    fontSize: 11,
+    color: '#a16207',
+    lineHeight: 16,
+  },
+  batteryBannerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  batteryFixBtn: {
+    backgroundColor: '#eab308',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  batteryFixBtnText: {
+    fontSize: 11.5,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  batteryDismissBtn: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  batteryDismissText: {
+    fontSize: 11.5,
+    color: '#713f12',
+    fontWeight: '600',
+  },
+  // Header Right Actions & Force Sync Button
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  forceSyncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  forceSyncBtnActive: {
+    backgroundColor: '#dbeafe',
+  },
+  forceSyncText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  forceSyncTextActive: {
+    color: '#2563eb',
+  },
+  // ℹ️ Live Operational Guide Card Styles
+  trackingGuideBox: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    padding: 12,
+    marginTop: 12,
+  },
+  trackingGuideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  trackingGuideTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1d4ed8',
+    letterSpacing: 0.3,
+  },
+  trackingGuideText: {
+    fontSize: 11,
+    color: '#475569',
+    lineHeight: 17,
   },
 });

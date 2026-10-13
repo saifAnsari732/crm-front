@@ -107,9 +107,29 @@ export default function useLocationTracker() {
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         checkActiveSession();
+        flushOfflineQueue().catch(() => {});
         if (Platform.OS !== 'web') {
           Location.getBackgroundPermissionsAsync().then(({ status }) => {
             if (status === 'granted') setPermissionStatus('granted');
+          }).catch(() => {});
+          // Immediately capture & upload current GPS coordinate on app wakeup so any sleep/doze travel is instantly recovered!
+          storage.getItem('user_manually_punched_out').then((manualOut) => {
+            if (manualOut !== 'true') {
+              Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, maximumAge: 3000 })
+                .catch(() => Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }))
+                .then((pos) => {
+                  if (pos && pos.coords) {
+                    const locationTaskModule = require('../services/locationTask');
+                    if (locationTaskModule && typeof locationTaskModule.processLocation === 'function') {
+                      locationTaskModule.processLocation({
+                        ...pos,
+                        coords: { ...pos.coords, screenCaptured: true, screenMoving: true }
+                      }).catch(() => {});
+                    }
+                  }
+                })
+                .catch(() => {});
+            }
           }).catch(() => {});
         }
       }
@@ -123,7 +143,8 @@ export default function useLocationTracker() {
       _globalWatchdogInterval = setInterval(async () => {
         try {
           const sessionId = await storage.getItem('currentTrackingSessionId');
-          if (sessionId) {
+          const manualOut = await storage.getItem('user_manually_punched_out');
+          if (sessionId && manualOut !== 'true') {
             if (!_globalIsTracking) {
               _globalIsTracking = true;
               DeviceEventEmitter.emit('TrackingStateChanged', true);
@@ -132,6 +153,18 @@ export default function useLocationTracker() {
             if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
               console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
               await safeRecoverLocation(health);
+            } else if (health === 'DEGRADED' && Platform.OS !== 'web' && !isExpoGo) {
+              // If OS background task hasn't delivered a fix in >30s, actively poll hardware GPS and feed to processor
+              Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, maximumAge: 5000 })
+                .then((pos) => {
+                  if (pos && pos.coords) {
+                    const locationTaskModule = require('../services/locationTask');
+                    if (locationTaskModule && typeof locationTaskModule.processLocation === 'function') {
+                      locationTaskModule.processLocation(pos).catch(() => {});
+                    }
+                  }
+                })
+                .catch(() => {});
             }
           }
         } catch (_) {}
@@ -142,7 +175,8 @@ export default function useLocationTracker() {
       subscription.remove();
       appStateSubscription.remove();
       _watchdogSubscribers = Math.max(0, _watchdogSubscribers - 1);
-      if (_watchdogSubscribers === 0 && _globalWatchdogInterval) {
+      // CRITICAL: Never clear _globalWatchdogInterval on screen navigation while tracking is active!
+      if (_watchdogSubscribers === 0 && !_globalIsTracking && _globalWatchdogInterval) {
         clearInterval(_globalWatchdogInterval);
         _globalWatchdogInterval = null;
         console.log('🛡️ [SINGLETON_WATCHDOG] Cleared global watchdog interval.');
@@ -174,23 +208,10 @@ export default function useLocationTracker() {
         }
       }
 
-      // If an active session exists locally for today, clear any stale manual punch-out lock
-      // so all screens (Dashboard + Tracking Screen) stay 100% synchronized as ON!
-      if (activeSession) {
-        await storage.removeItem('user_manually_punched_out');
-        await storage.setItem('isTrackingActive', 'true');
-        syncGlobalTrackingState(true);
-      } else {
-        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
-        if (manuallyPunchedOut === 'true') {
-          console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out. Auto-start/auto-heal disabled.');
-          syncGlobalTrackingState(false);
-          return;
-        }
-      }
-
       // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
-      // If local storage was cleared or phone rebooted, verify with server if today's shift is active
+      // Always check server FIRST if local activeSession is missing: if the server has an active
+      // shift for today (e.g. restored by Sentinel Guardian or after a false sessionClosed),
+      // immediately re-attach and clear any stale user_manually_punched_out flag!
       if (!activeSession && Platform.OS !== 'web') {
         try {
           const userToken = await storage.getItem('userToken');
@@ -214,6 +235,21 @@ export default function useLocationTracker() {
           }
         } catch (healErr) {
           // Best-effort auto-heal
+        }
+      }
+
+      // If an active session exists locally for today, clear any stale manual punch-out lock
+      // so all screens (Dashboard + Tracking Screen) stay 100% synchronized as ON!
+      if (activeSession) {
+        await storage.removeItem('user_manually_punched_out');
+        await storage.setItem('isTrackingActive', 'true');
+        syncGlobalTrackingState(true);
+      } else {
+        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+        if (manuallyPunchedOut === 'true') {
+          console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out and no active session on server. Auto-start disabled.');
+          syncGlobalTrackingState(false);
+          return;
         }
       }
 
@@ -368,16 +404,24 @@ export default function useLocationTracker() {
         return;
       }
 
-      // Auto-recover background location task if OS killed it
+      // Auto-recover background location task if OS killed it OR if Android FusedLocationProvider froze after hours stationary
       if (Platform.OS !== 'web' && !isExpoGo) {
         const isTaskRegistered = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
-        if (!isTaskRegistered) {
+        const lastGpsTs = Number(await storage.getItem('last_gps_received_at')) || 0;
+        const isGpsFrozen = lastGpsTs > 0 && (Date.now() - lastGpsTs > 90000);
+
+        if (!isTaskRegistered || isGpsFrozen) {
           try {
-            console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
+            if (isTaskRegistered && isGpsFrozen) {
+              console.log(`🛡️ [IMMORTAL_WATCHDOG] GPS stream frozen for ${((Date.now() - lastGpsTs) / 1000).toFixed(0)}s after stationary period. Force-restarting native GPS task...`);
+              await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+            } else {
+              console.log('🛡️ [IMMORTAL_WATCHDOG] Active session detected in storage but OS task was dead. Auto-resurrecting background GPS task...');
+            }
             await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
               accuracy: Location.Accuracy.BestForNavigation,
               timeInterval: 10000,
-              distanceInterval: 8,
+              distanceInterval: 0,
               foregroundService: {
                 notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
                 notificationBody: 'Live distance tracking is running. Tap to open Kisan Team.',
@@ -711,8 +755,10 @@ export default function useLocationTracker() {
         lat: anchorLat,
         lng: anchorLng,
         speed: 0,
-        accuracy: 0,
+        accuracy: 15,
         timestamp: anchorTs,
+        lastTickTimestamp: anchorTs,
+        needsInitialSeedUpload: true,
       }));
       await storage.setItem('currentTrackingSessionId', sessionId);
       await storage.setItem('tracking_accumulated_session_id', sessionId);
@@ -788,8 +834,9 @@ export default function useLocationTracker() {
             // Android: poll continuously every 10 seconds without stopping
             timeInterval: 10000,
 
-            // Set distanceInterval to 8m so Android FusedLocationProvider filters indoor desk jitter
-            distanceInterval: 8,
+            // Set distanceInterval to 0 so Android FusedLocationProvider never enters Stationary Hardware Geofence Sleep after hours of being still;
+            // software 2-point CUSUM filter in locationTask.js suppresses 100% of indoor stationary jitter!
+            distanceInterval: 0,
 
             // ── CRITICAL: Android Foreground Service config ────────────────────
             // This is what allows GPS to continue running after the USER swipes the app away.
@@ -860,6 +907,9 @@ export default function useLocationTracker() {
       await storage.setItem('user_manually_punched_out', 'true');
       await storage.setItem('isTrackingActive', 'false');
       const sessionId = await storage.getItem('currentTrackingSessionId');
+      const savedLocalDistStr = await storage.getItem('tracking_accumulated_distance');
+      const savedLastLocationStr = await storage.getItem('last_recorded_location');
+      let savedLocalDist = parseFloat(savedLocalDistStr) || 0;
       
       // Always purge current session keys immediately from local storage
       await storage.removeItem('currentTrackingSessionId');
@@ -930,12 +980,11 @@ export default function useLocationTracker() {
           const finalResponse = await trackingApi.updateLocation(sessionId, [finalCoordinate]);
           if (finalResponse.data?.success) {
             const confirmedDist = Number(finalResponse.data.totalDistance) || 0;
-            await storage.setItem('tracking_accumulated_distance', String(confirmedDist));
+            if (confirmedDist > savedLocalDist) savedLocalDist = confirmedDist;
           }
         } catch (finalErr) {
           console.log('⚠️ useLocationTracker: Final coordinate upload deferred:', finalErr.message);
-          const previousLocation = await storage.getItem('last_recorded_location');
-          await enqueueCoordinate(sessionId, finalCoordinate, previousLocation ? JSON.parse(previousLocation) : null);
+          await enqueueCoordinate(sessionId, finalCoordinate, savedLastLocationStr ? JSON.parse(savedLastLocationStr) : null);
         }
       }
 
@@ -951,16 +1000,13 @@ export default function useLocationTracker() {
 
       // 3. Stop backend session via REST API
       let totalDistance = 0;
-      let stopSucceeded = false;
       try {
         const response = await trackingApi.stopTracking(sessionId, new Date().toISOString(), '', 0, true);
-        const localAcc = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        totalDistance = typeof response.data?.totalDistance === 'number' ? response.data.totalDistance : localAcc;
-        stopSucceeded = true;
+        totalDistance = typeof response.data?.totalDistance === 'number' ? response.data.totalDistance : savedLocalDist;
       } catch (netErr) {
         console.log('⚠️ useLocationTracker: Backend unreachable during stop, queueing stop for retry.');
         await enqueueStop(sessionId, new Date().toISOString());
-        totalDistance = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+        totalDistance = savedLocalDist;
       }
 
       // 4. Emit tracking_stopped event over Socket
@@ -973,18 +1019,6 @@ export default function useLocationTracker() {
           });
         }
       } catch (socketErr) {}
-
-      // 5. Clean up local secure storage cache ONLY if stop was confirmed by server.
-      // If offline, offlineSync will safely clean up storage after the stop item is flushed and confirmed.
-      if (stopSucceeded) {
-        await storage.removeItem('currentTrackingSessionId');
-        await storage.removeItem('trackingStartTime');
-        await storage.removeItem('tracking_accumulated_distance');
-        await storage.removeItem('tracking_accumulated_session_id');
-        await storage.removeItem('last_recorded_location');
-      } else {
-        console.log('📦 useLocationTracker: Local session metadata preserved until offline sync confirms stop.');
-      }
       await cancelNoMovementNotification();
       // Stop heartbeat timer
       stopHeartbeat();

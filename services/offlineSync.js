@@ -53,6 +53,21 @@ export async function enqueueCoordinate(sessionId, coord, prevCoord) {
       const queueStr = await storage.getItem(QUEUE_KEY);
       const queue = queueStr ? JSON.parse(queueStr) : [];
 
+      // Deduplicate: do not queue if same eventId or exact same lat/lng coordinate is already at the tail of the queue
+      const lastItem = queue.length > 0 ? queue[queue.length - 1] : null;
+      const lastCoord = lastItem?.data?.coordinates?.[0];
+      if (lastCoord) {
+        if (coord?.eventId && lastCoord?.eventId === coord.eventId) {
+          return true; // Already queued
+        }
+        if (
+          Math.abs(Number(lastCoord.lat) - Number(coord.lat)) < 0.000005 &&
+          Math.abs(Number(lastCoord.lng) - Number(coord.lng)) < 0.000005
+        ) {
+          return true; // Exact same stationary spot already queued
+        }
+      }
+
       queue.push({
         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
         endpoint: '/tracking/update',
@@ -61,8 +76,10 @@ export async function enqueueCoordinate(sessionId, coord, prevCoord) {
         timestamp: new Date().toISOString(),
       });
 
-      await storage.setItem(QUEUE_KEY, JSON.stringify(queue));
-      console.log(`📦 OfflineSync: Queued coordinate. Queue size: ${queue.length}`);
+      // Keep queue size healthy (max 100 items)
+      const trimmedQueue = queue.slice(-100);
+      await storage.setItem(QUEUE_KEY, JSON.stringify(trimmedQueue));
+      console.log(`📦 OfflineSync: Queued coordinate. Queue size: ${trimmedQueue.length}`);
       return true;
     } catch (e) {
       console.error('📦 OfflineSync: Critical failure enqueuing coordinate:', e);
@@ -100,11 +117,12 @@ export async function getQueueSize() {
   }
 }
 
-// ─── Coalesce consecutive tracking coordinates ───────────────────────────────
+// ─── Coalesce consecutive tracking coordinates with eventId deduplication ────
 function coalesceQueue(queue) {
   if (!queue || queue.length <= 1) return queue;
   const coalesced = [];
   let currentBatchItem = null;
+  const seenEventIds = new Set();
 
   for (const item of queue) {
     if (
@@ -114,18 +132,26 @@ function coalesceQueue(queue) {
       item.data.coordinates.length > 0 &&
       !item.kind
     ) {
+      const uniqueCoords = item.data.coordinates.filter((c) => {
+        if (!c?.eventId) return true;
+        if (seenEventIds.has(c.eventId)) return false;
+        seenEventIds.add(c.eventId);
+        return true;
+      });
+      if (uniqueCoords.length === 0) continue;
+
       if (
         currentBatchItem &&
         currentBatchItem.data.sessionId === item.data.sessionId &&
-        currentBatchItem.data.coordinates.length < 100
+        currentBatchItem.data.coordinates.length + uniqueCoords.length <= 100
       ) {
-        currentBatchItem.data.coordinates.push(...item.data.coordinates);
+        currentBatchItem.data.coordinates.push(...uniqueCoords);
       } else {
         currentBatchItem = {
           ...item,
           data: {
             ...item.data,
-            coordinates: [...item.data.coordinates]
+            coordinates: [...uniqueCoords]
           }
         };
         coalesced.push(currentBatchItem);
@@ -141,9 +167,9 @@ function coalesceQueue(queue) {
 // ─── Main flush function ──────────────────────────────────────────────────────
 async function flushOfflineQueueUnlocked() {
   try {
-    // Check connectivity first
+    // Check connectivity first (do not block on isInternetReachable === null/false on Android mobile data)
     const netState = await NetInfo.fetch();
-    if (!netState.isConnected || !netState.isInternetReachable) {
+    if (netState.isConnected === false) {
       console.log('📦 OfflineSync: No internet. Skipping flush.');
       return false;
     }
@@ -157,7 +183,7 @@ async function flushOfflineQueueUnlocked() {
     // Coalesce consecutive tracking coordinates for the same session to avoid API overload and race conditions
     const queue = coalesceQueue(rawQueue);
 
-    const token = await storage.getItem('userToken');
+    const token = await storage.getItem('userToken') || await storage.getItem('token');
     if (!token) {
       console.log('📦 OfflineSync: No auth token. Skipping flush.');
       return false;
@@ -168,16 +194,22 @@ async function flushOfflineQueueUnlocked() {
     const retryCounts = retryStr ? JSON.parse(retryStr) : {};
 
     const failedItems = [];
-    const blockedSessions = new Set();
+    const closedSessions = new Set();
+    const networkFailedSessions = new Set();
     let successCount = 0;
 
     console.log(`📦 OfflineSync: Starting flush of ${rawQueue.length} queued requests (compressed to ${queue.length} batch requests)...`);
 
     for (const item of queue) {
       const itemSessionId = item.data?.sessionId;
-      if (itemSessionId && blockedSessions.has(itemSessionId)) {
-        // Discard remaining queued telemetry for already-closed/blocked sessions
+      if (itemSessionId && closedSessions.has(itemSessionId)) {
+        // Discard remaining queued telemetry ONLY for explicitly closed sessions
         delete retryCounts[item.id];
+        continue;
+      }
+      if (itemSessionId && networkFailedSessions.has(itemSessionId)) {
+        // Preserve chronological order: keep remaining batches for this session in failedItems for the next flush!
+        failedItems.push(item);
         continue;
       }
 
@@ -200,20 +232,28 @@ async function flushOfflineQueueUnlocked() {
           url: `${BASE_URL}${item.endpoint}`,
           data: item.data,
           headers: { Authorization: `Bearer ${token}` },
-          timeout: 8000,
+          timeout: 10000,
         });
 
         if (response.data?.sessionClosed === true) {
           console.log(`📦 OfflineSync: Session ${itemSessionId} was ended on server. Discarding remaining queued points.`);
-          if (itemSessionId) blockedSessions.add(itemSessionId);
+          if (itemSessionId) closedSessions.add(itemSessionId);
           delete retryCounts[item.id];
           continue;
         }
 
+        if (response.data?.sessionId && (!itemSessionId || itemSessionId === 'AUTO_RECOVER_SESSION')) {
+          await storage.setItem('currentTrackingSessionId', response.data.sessionId).catch(() => {});
+          await storage.setItem('tracking_accumulated_session_id', response.data.sessionId).catch(() => {});
+        }
+
         successCount++;
         const serverDistance = Number(response.data?.totalDistanceToday ?? response.data?.totalDistance);
-        if (Number.isFinite(serverDistance) && serverDistance >= 0) {
-          await storage.setItem('tracking_accumulated_distance', serverDistance.toFixed(2));
+        if (Number.isFinite(serverDistance) && serverDistance > 0) {
+          const prevCached = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+          if (serverDistance >= prevCached) {
+            await storage.setItem('tracking_accumulated_distance', serverDistance.toFixed(2));
+          }
         }
         delete retryCounts[item.id];
         if (item.kind === 'stop') {
@@ -226,15 +266,23 @@ async function flushOfflineQueueUnlocked() {
       } catch (err) {
         if (err?.response?.data?.sessionClosed === true || err?.response?.status === 409) {
           // Closed or invalid session: drop stale item cleanly without transferring into a new shift
-          if (itemSessionId) blockedSessions.add(itemSessionId);
+          if (itemSessionId) closedSessions.add(itemSessionId);
           delete retryCounts[item.id];
           console.log(`📦 OfflineSync: Dropped stale point for closed session ${itemSessionId}.`);
           continue;
         }
-        // Keep in queue for next retry
+        // If an individual batch fails repeatedly (e.g. malformed or rejected by server 6+ times),
+        // drop it cleanly so it does not block the offline queue indefinitely
+        if (retries + 1 >= 6) {
+          console.warn(`📦 OfflineSync: Item ${item.id} exceeded max retries (${retries + 1}). Dropping from queue.`);
+          delete retryCounts[item.id];
+          continue;
+        }
+
+        // Keep in queue for next retry AND preserve all subsequent batches for this session
         retryCounts[item.id] = retries + 1;
         failedItems.push(item);
-        if (itemSessionId) blockedSessions.add(itemSessionId);
+        if (itemSessionId) networkFailedSessions.add(itemSessionId);
         console.log(`📦 OfflineSync: Item ${item.id} failed (attempt ${retries + 1}). Will retry until synced.`);
       }
     }
@@ -263,17 +311,27 @@ export function flushOfflineQueue() {
 TaskManager.defineTask(OFFLINE_SYNC_TASK, async () => {
   console.log('📦 OfflineSync: Background fetch triggered by OS...');
   try {
-    // 1. Auto-revive background tracking task if active session exists but task died
+    // 1. Auto-revive background tracking task if active session exists but task died or froze
     const activeSession = await storage.getItem('currentTrackingSessionId');
-    if (activeSession && Platform.OS !== 'web' && !isExpoGo) {
+    const manuallyStopped = await storage.getItem('user_manually_punched_out');
+    if (activeSession && manuallyStopped !== 'true' && Platform.OS !== 'web' && !isExpoGo) {
       try {
         const isLocRunning = await Location.hasStartedLocationUpdatesAsync('BACKGROUND_TRACKING');
-        if (!isLocRunning) {
-          console.log('📦 OfflineSync: Reviving dead background GPS task...');
+        const lastGpsStr = await storage.getItem('last_gps_received_at');
+        const lastGpsTs = Number(lastGpsStr || 0);
+        const isGpsFrozen = lastGpsTs > 0 && (Date.now() - lastGpsTs) > 90000;
+
+        if (!isLocRunning || isGpsFrozen) {
+          console.log(`📦 OfflineSync: Reviving ${isGpsFrozen ? 'frozen' : 'dead'} background GPS task...`);
+          if (isLocRunning) {
+            try { await Location.stopLocationUpdatesAsync('BACKGROUND_TRACKING'); } catch (_) {}
+          }
           await Location.startLocationUpdatesAsync('BACKGROUND_TRACKING', {
-            accuracy: Location.Accuracy.High,
+            accuracy: Location.Accuracy.BestForNavigation,
             timeInterval: 10000,
-            distanceInterval: 10,
+            distanceInterval: 0,
+            deferredUpdatesInterval: 0,
+            deferredUpdatesDistance: 0,
             foregroundService: {
               notificationTitle: '🟢 Shift Active — Tracking ON',
               notificationBody: 'Tap to open app. Tracking continues in background.',
@@ -284,6 +342,18 @@ TaskManager.defineTask(OFFLINE_SYNC_TASK, async () => {
             pausesUpdatesAutomatically: false,
           });
         }
+
+        // Proactively wake GNSS hardware chip and process current coordinate during background fetch
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, maximumAge: 0 })
+          .then((pos) => {
+            if (pos && pos.coords) {
+              const locTaskMod = require('./locationTask');
+              if (locTaskMod && typeof locTaskMod.processLocation === 'function') {
+                locTaskMod.processLocation(pos).catch(() => {});
+              }
+            }
+          })
+          .catch(() => {});
       } catch (locReviveErr) {
         console.warn('📦 OfflineSync: Location revive failed:', locReviveErr.message);
       }
@@ -323,7 +393,7 @@ export function startNetworkListener() {
   if (unsubscribeNetListener) return; // Already listening
   
   unsubscribeNetListener = NetInfo.addEventListener((state) => {
-    if (state.isConnected && state.isInternetReachable) {
+    if (state.isConnected !== false) {
       console.log('📦 OfflineSync: Network reconnected! Auto-flushing offline queue...');
       flushOfflineQueue();
     }

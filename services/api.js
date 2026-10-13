@@ -125,7 +125,7 @@ API.interceptors.response.use(
       try {
         // Only refresh token once (prevent multiple refresh requests)
         if (!refreshTokenPromise) {
-          refreshTokenPromise = API.post('/auth/refresh-token');
+          refreshTokenPromise = API.post('/auth/refresh-token', { token: currentToken });
         }
 
         const { data } = await refreshTokenPromise;
@@ -139,13 +139,18 @@ API.interceptors.response.use(
         }
       } catch (refreshErr) {
         refreshTokenPromise = null;
-        // Refresh failed - clear mobile auth
-        await storage.removeItem('userToken');
-        await storage.removeItem('token');
-        await storage.removeItem('user');
-        await storage.removeItem('userData');
-        if (unauthorizedCallback && !isLoggingOutState) {
-          unauthorizedCallback();
+        const refreshStatus = refreshErr?.response?.status;
+        // CRITICAL: Only wipe auth tokens if server explicitly rejected the token (401/403) AND no active shift is running.
+        // Never log out on network timeouts, offline drops, or 5xx server restarts!
+        const activeShift = await storage.getItem('currentTrackingSessionId');
+        if ((refreshStatus === 401 || refreshStatus === 403) && !activeShift) {
+          await storage.removeItem('userToken');
+          await storage.removeItem('token');
+          await storage.removeItem('user');
+          await storage.removeItem('userData');
+          if (unauthorizedCallback && !isLoggingOutState) {
+            unauthorizedCallback();
+          }
         }
         return Promise.reject(refreshErr);
       }

@@ -180,6 +180,13 @@ export default function AdminTrackingScreen(props = {}) {
   const selfKalmanRef = useRef(new LatLngKalmanFilter());
   const selfLastCoordRef = useRef(null);
   const selfAnchorRef = useRef(null);
+  const selfBaselineCoordRef = useRef({
+    lat: 0,
+    lng: 0,
+    updatedAt: 0,
+    lastVerifiedAt: 0,
+    isSame: true,
+  });
 
   const [liveLocations, setLiveLocations] = useState([]);
   const [allEmployeesList, setAllEmployeesList] = useState([]);
@@ -198,6 +205,7 @@ export default function AdminTrackingScreen(props = {}) {
       selfKalmanRef.current.reset();
       selfLastCoordRef.current = null;
       selfAnchorRef.current = null;
+      selfBaselineCoordRef.current = { lat: 0, lng: 0, updatedAt: 0, lastVerifiedAt: 0, isSame: true };
       return;
     }
 
@@ -217,27 +225,67 @@ export default function AdminTrackingScreen(props = {}) {
           if (!selfLastCoordRef.current) {
             selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
             selfAnchorRef.current = { lat, lng };
+            selfBaselineCoordRef.current = {
+              lat,
+              lng,
+              updatedAt: position.timestamp,
+              lastVerifiedAt: position.timestamp,
+              isSame: true,
+            };
           } else {
+            // ⏱️ Dynamic 30-Minute Baseline Renewal (30 mint per reset)
+            if (selfBaselineCoordRef.current.updatedAt === 0) {
+              selfBaselineCoordRef.current = {
+                lat,
+                lng,
+                updatedAt: position.timestamp,
+                lastVerifiedAt: position.timestamp,
+                isSame: true,
+              };
+            } else if (position.timestamp - selfBaselineCoordRef.current.updatedAt >= 30 * 60 * 1000) {
+              console.log(`⏱️ [ADMIN 30-MIN BASELINE RESET] Re-anchoring at [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
+              selfBaselineCoordRef.current = {
+                lat,
+                lng,
+                updatedAt: position.timestamp,
+                lastVerifiedAt: position.timestamp,
+                isSame: true,
+              };
+            }
+
+            // 🎯 50-METER DYNAMIC SPOT RADIUS CHECK (Manager Self-Tracking Protection)
+            const distFromBaselineM = haversineMeters(
+              selfBaselineCoordRef.current.lat,
+              selfBaselineCoordRef.current.lng,
+              lat,
+              lng
+            );
+            const isBaselineSame = distFromBaselineM <= 50.0;
+
+            if (position.timestamp - selfBaselineCoordRef.current.lastVerifiedAt >= 60 * 1000) {
+              selfBaselineCoordRef.current.lastVerifiedAt = position.timestamp;
+              selfBaselineCoordRef.current.isSame = isBaselineSame;
+            }
+
             const distFromAnchorM = haversineMeters(selfAnchorRef.current.lat, selfAnchorRef.current.lng, lat, lng);
             const distFromLastM = haversineMeters(selfLastCoordRef.current.lat, selfLastCoordRef.current.lng, lat, lng);
             const timeDiffSecs = Math.max(0.5, (position.timestamp - selfLastCoordRef.current.timestamp) / 1000);
             const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
 
-            if (distFromAnchorM < 12 && currentSpeedKmh < 1.8 && calculatedSpeedKmh < 2.2) {
+            const isInside50mRadius = distFromAnchorM <= 50.0 || isBaselineSame;
+            const isStationarySpeed = currentSpeedKmh < 2.5 && calculatedSpeedKmh < 2.5;
+
+            if (isInside50mRadius || isStationarySpeed) {
+              // Stationary at spot: strictly 0 KM added, soft EMA anchor center pull
               selfAnchorRef.current = {
-                lat: 0.95 * selfAnchorRef.current.lat + 0.05 * lat,
-                lng: 0.95 * selfAnchorRef.current.lng + 0.05 * lng,
+                lat: 0.98 * selfAnchorRef.current.lat + 0.02 * lat,
+                lng: 0.98 * selfAnchorRef.current.lng + 0.02 * lng,
               };
+              selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
+              position.coords.screenMoving = false;
             } else {
-              if (calculatedSpeedKmh < 180 && distFromLastM > 5) {
-                const addedKm = distFromLastM / 1000;
-                try {
-                  const storedDist = await storage.getItem('tracking_accumulated_distance');
-                  const currentTotal = parseFloat(storedDist) || 0.0;
-                  const newTotalStr = (currentTotal + addedKm).toFixed(2);
-                  await storage.setItem('tracking_accumulated_distance', newTotalStr);
-                } catch (_) {}
-              }
+              // Real movement confirmed: major base digits changed & speed >= 2.2 km/h
+              position.coords.screenMoving = true;
               selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
               selfAnchorRef.current = { lat, lng };
             }
@@ -294,9 +342,12 @@ export default function AdminTrackingScreen(props = {}) {
         if (socket) {
           socket.on('employee_location', (data) => {
             const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
-            const speedVal = Number(data.speed || 0);
-            const isMovingNow = (speedVal >= 1.8) || data.motionState === 'MOVING';
+            const rawSpeedVal = Number(data.speed || 0);
+            const isMovingNow = (data.motionState && data.motionState !== 'STATIONARY')
+              ? true
+              : (data.motionState === 'STATIONARY' ? false : (rawSpeedVal >= 2.2));
             const motionStateVal = data.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY');
+            const speedVal = isMovingNow ? rawSpeedVal : 0;
 
             setLiveLocations((prev) => {
               const idx = prev.findIndex((l) => (l.employeeId?._id || l.employeeId) === data.employeeId || l.sessionId === data.sessionId);
@@ -383,7 +434,10 @@ export default function AdminTrackingScreen(props = {}) {
       seen.add(idStr);
 
       const empMatch = allEmployeesList.find(e => String(e._id) === idStr);
-      const isMovingNow = (Number(loc.speed) >= 1.8) || loc.motionState === 'MOVING';
+      const isMovingNow = (loc.motionState && loc.motionState !== 'STATIONARY')
+        ? true
+        : (loc.motionState === 'STATIONARY' ? false : (Number(loc.speed) >= 2.2));
+      const effectiveSpeed = isMovingNow ? Number(loc.speed || 0) : 0;
 
       result.push({
         _id: idStr,
@@ -394,7 +448,7 @@ export default function AdminTrackingScreen(props = {}) {
         status: isMovingNow ? 'IN_TRANSIT' : 'ON_FIELD',
         isTracking: true,
         isOnline: true,
-        speed: Number(loc.speed || 0),
+        speed: effectiveSpeed,
         motionState: loc.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: loc.lat || loc.latitude,
         lng: loc.lng || loc.longitude,
@@ -415,7 +469,10 @@ export default function AdminTrackingScreen(props = {}) {
         || liveLocationIndex.byEmployeeCode.get(String(emp.employeeId || ''))
         || liveLocationIndex.byName.get((emp.name || '').toLowerCase());
       const tracking = !!liveLoc || emp.isTracking;
-      const isMovingNow = (Number(liveLoc?.speed) >= 1.8) || liveLoc?.motionState === 'MOVING';
+      const isMovingNow = (liveLoc?.motionState && liveLoc.motionState !== 'STATIONARY')
+        ? true
+        : (liveLoc?.motionState === 'STATIONARY' ? false : (Number(liveLoc?.speed) >= 2.2));
+      const effectiveSpeed = isMovingNow ? Number(liveLoc?.speed || 0) : 0;
 
       let memberStatus = 'OFFLINE';
       if (tracking) {
@@ -435,7 +492,7 @@ export default function AdminTrackingScreen(props = {}) {
         status: memberStatus,
         isTracking: tracking,
         isOnline: emp.isOnline,
-        speed: Number(liveLoc?.speed || 0),
+        speed: effectiveSpeed,
         motionState: liveLoc?.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: liveLoc?.lat || emp.lat || null,
         lng: liveLoc?.lng || emp.lng || null,
