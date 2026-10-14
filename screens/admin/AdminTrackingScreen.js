@@ -91,8 +91,10 @@ const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('en-US', { hour: 'num
 const normalizeAddress = (value) => {
   if (!value) return '';
   if (typeof value === 'string') {
-    const trimmed = value.trim();
+    let trimmed = value.trim();
     if (trimmed === 'Tracking Active' || trimmed === 'Location unavailable' || trimmed === 'Not Punched In') return '';
+    // Strip raw Google Plus codes e.g. "4PQC+X68, "
+    trimmed = trimmed.replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '');
     return trimmed;
   }
   if (typeof value === 'object') {
@@ -125,10 +127,22 @@ const buildPathTimeline = (coordinates = []) => {
 
     distSinceLastCheckpoint += Number.isFinite(distanceKm) ? distanceKm : 0;
 
-    if (timeGapMinutes >= 5 || distSinceLastCheckpoint >= 5 || index === sorted.length - 1) {
-      timeline.push(current);
-      checkpointRef = current;
-      distSinceLastCheckpoint = 0;
+    const isMeaningfulMove = distanceKm >= 0.05; // >= 50m displacement
+    const isLastPoint = index === sorted.length - 1;
+
+    // Only create a new checkpoint when employee actually moves (>= 50m with time/dist gap) or at final live point
+    if ((isMeaningfulMove && (timeGapMinutes >= 3 || distSinceLastCheckpoint >= 0.3)) || isLastPoint) {
+      if (isLastPoint && distanceKm < 0.02 && timeline.length > 1) {
+        // Same stationary spot: update last checkpoint timestamp instead of adding duplicate row
+        timeline[timeline.length - 1] = {
+          ...timeline[timeline.length - 1],
+          timestamp: current.timestamp,
+        };
+      } else {
+        timeline.push(current);
+        checkpointRef = current;
+        distSinceLastCheckpoint = 0;
+      }
     }
   }
 
@@ -211,8 +225,11 @@ export default function AdminTrackingScreen(props = {}) {
 
     const fetchSelfLiveCoords = async () => {
       try {
+        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+        if (manuallyPunchedOut === 'true') return;
+
         const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.High,
         });
 
         if (position && position.coords) {
@@ -253,14 +270,14 @@ export default function AdminTrackingScreen(props = {}) {
               };
             }
 
-            // 🎯 50-METER DYNAMIC SPOT RADIUS CHECK (Manager Self-Tracking Protection)
+            // 🎯 45-METER DYNAMIC SPOT RADIUS CHECK (Manager Self-Tracking Protection)
             const distFromBaselineM = haversineMeters(
               selfBaselineCoordRef.current.lat,
               selfBaselineCoordRef.current.lng,
               lat,
               lng
             );
-            const isBaselineSame = distFromBaselineM <= 50.0;
+            const isBaselineSame = distFromBaselineM <= 45.0;
 
             if (position.timestamp - selfBaselineCoordRef.current.lastVerifiedAt >= 60 * 1000) {
               selfBaselineCoordRef.current.lastVerifiedAt = position.timestamp;
@@ -272,10 +289,10 @@ export default function AdminTrackingScreen(props = {}) {
             const timeDiffSecs = Math.max(0.5, (position.timestamp - selfLastCoordRef.current.timestamp) / 1000);
             const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
 
-            const isInside50mRadius = distFromAnchorM <= 50.0 || isBaselineSame;
-            const isStationarySpeed = currentSpeedKmh < 2.5 && calculatedSpeedKmh < 2.5;
+            const isInside45mRadius = (distFromAnchorM <= 45.0 || isBaselineSame);
+            const isStationarySpeed = currentSpeedKmh < 2.8 && calculatedSpeedKmh < 3.5;
 
-            if (isInside50mRadius || isStationarySpeed) {
+            if (isInside45mRadius && isStationarySpeed) {
               // Stationary at spot: strictly 0 KM added, soft EMA anchor center pull
               selfAnchorRef.current = {
                 lat: 0.98 * selfAnchorRef.current.lat + 0.02 * lat,
@@ -286,6 +303,7 @@ export default function AdminTrackingScreen(props = {}) {
             } else {
               // Real movement confirmed: major base digits changed & speed >= 2.2 km/h
               position.coords.screenMoving = true;
+              position.coords.screenCaptured = true;
               selfLastCoordRef.current = { lat, lng, timestamp: position.timestamp };
               selfAnchorRef.current = { lat, lng };
             }
@@ -964,17 +982,17 @@ export default function AdminTrackingScreen(props = {}) {
                 {/* Dynamic Motion State Live Banner */}
                 {selectedEmployee.isTracking && (
                   <View style={[styles.modalMotionBanner, {
-                    backgroundColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#dcfce7' : '#f1f5f9',
-                    borderColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#bbf7d0' : '#e2e8f0',
+                    backgroundColor: (selectedEmployee.motionState !== 'STATIONARY' && Number(selectedEmployee.speed) >= 1.5) ? '#dcfce7' : '#f1f5f9',
+                    borderColor: (selectedEmployee.motionState !== 'STATIONARY' && Number(selectedEmployee.speed) >= 1.5) ? '#bbf7d0' : '#e2e8f0',
                   }]}>
                     <View style={[styles.modalMotionDot, {
-                      backgroundColor: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#16a34a' : '#64748b',
+                      backgroundColor: (selectedEmployee.motionState !== 'STATIONARY' && Number(selectedEmployee.speed) >= 1.5) ? '#16a34a' : '#64748b',
                     }]} />
                     <Text style={[styles.modalMotionText, {
-                      color: (selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8) ? '#15803d' : '#475569',
+                      color: (selectedEmployee.motionState !== 'STATIONARY' && Number(selectedEmployee.speed) >= 1.5) ? '#15803d' : '#475569',
                     }]}>
-                      {(selectedEmployee.motionState === 'MOVING' || Number(selectedEmployee.speed) >= 1.8)
-                        ? `🟢 MOVING — Active Travel (${Math.round(Number(selectedEmployee.speed) || 0)} km/h)`
+                      {(selectedEmployee.motionState !== 'STATIONARY' && Number(selectedEmployee.speed) >= 1.5)
+                        ? `🟢 MOVING — Active Travel (${Math.round(Number(selectedEmployee.speed))} km/h)`
                         : '⏸️ STATIONARY — 0 KM Added (At Spot)'}
                     </Text>
                   </View>

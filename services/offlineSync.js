@@ -328,7 +328,7 @@ TaskManager.defineTask(OFFLINE_SYNC_TASK, async () => {
           }
           await Location.startLocationUpdatesAsync('BACKGROUND_TRACKING', {
             accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 10000,
+            timeInterval: 4000,
             distanceInterval: 0,
             deferredUpdatesInterval: 0,
             deferredUpdatesDistance: 0,

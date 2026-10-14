@@ -91,7 +91,8 @@ const formatAddress = (addr, fallback = 'Location unavailable') => {
         return trimmed || fallback;
       }
     }
-    return trimmed || fallback;
+    const cleaned = trimmed.replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '');
+    return cleaned || fallback;
   }
   if (typeof addr === 'object' && addr !== null) {
     const parts = [addr.street, addr.city, addr.state, addr.pincode].filter(Boolean);

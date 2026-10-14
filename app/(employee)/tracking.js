@@ -26,13 +26,15 @@ export default function DynamicTrackingScreen() {
     return null;
   }
 
+  const roleUpper = user?.role ? String(user.role).toUpperCase() : '';
+
   // Regular employees get their personal tracking screen
-  if (user?.role === 'employee') {
+  if (roleUpper === 'EMPLOYEE') {
     return <TrackingScreen />;
   }
 
   // Admins (not managers) get the team monitoring screen
-  if (user?.role === 'admin' || user?.role === 'super_admin') {
+  if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN' || roleUpper === 'ORG_ADMIN') {
     return (
       <AdminTrackingScreen
         employeeId={searchParams?.employeeId}

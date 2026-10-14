@@ -545,6 +545,7 @@ export const trackingApi = {
   getTodaySessions: () => trackingAPI.getToday(),
   getLiveEmployees:  () => trackingAPI.getLive(),
   getSessionRoute:   (id) => trackingAPI.getSession(id),
+  geocode:           (lat, lng) => trackingAPI.geocode(lat, lng),
 };
 
 export const meetingApi = {

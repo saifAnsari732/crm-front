@@ -208,10 +208,17 @@ export default function useLocationTracker() {
         }
       }
 
-      // ─── SELF-HEALING AUTO-START ENGINE ────────────────────────────────────
-      // Always check server FIRST if local activeSession is missing: if the server has an active
-      // shift for today (e.g. restored by Sentinel Guardian or after a false sessionClosed),
-      // immediately re-attach and clear any stale user_manually_punched_out flag!
+      // 🛑 User Manual Punch Out Guard: If user explicitly punched out, NEVER auto-heal or auto-start!
+      const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
+      if (manuallyPunchedOut === 'true') {
+        console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out. Auto-start and auto-heal disabled.');
+        syncGlobalTrackingState(false);
+        return;
+      }
+
+      // ─── SELF-HEALING AUTO-START ENGINE (Crash & Reboot Recovery Only) ──────
+      // If local activeSession is missing (e.g. after app crash or phone restart during active shift):
+      // query server to re-attach to active shift
       if (!activeSession && Platform.OS !== 'web') {
         try {
           const userToken = await storage.getItem('userToken');
@@ -220,7 +227,7 @@ export default function useLocationTracker() {
             if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
               const liveTodaySession = todayRes.data.sessions.find((s) => s.isActive === true);
               if (liveTodaySession && liveTodaySession.sessionId) {
-                console.log('🛡️ [AUTO_HEAL] Active shift found on server. Auto-starting local tracking:', liveTodaySession.sessionId);
+                console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
                 await storage.removeItem('user_manually_punched_out');
                 await storage.setItem('isTrackingActive', 'true');
                 await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
@@ -238,19 +245,11 @@ export default function useLocationTracker() {
         }
       }
 
-      // If an active session exists locally for today, clear any stale manual punch-out lock
-      // so all screens (Dashboard + Tracking Screen) stay 100% synchronized as ON!
+      // If an active session exists locally for today, ensure state stays synced
       if (activeSession) {
         await storage.removeItem('user_manually_punched_out');
         await storage.setItem('isTrackingActive', 'true');
         syncGlobalTrackingState(true);
-      } else {
-        const manuallyPunchedOut = await storage.getItem('user_manually_punched_out');
-        if (manuallyPunchedOut === 'true') {
-          console.log('🛑 [MANUAL_PUNCH_OUT_LOCK] User manually punched out and no active session on server. Auto-start disabled.');
-          syncGlobalTrackingState(false);
-          return;
-        }
       }
 
       if (!activeSession) {
@@ -420,7 +419,7 @@ export default function useLocationTracker() {
             }
             await Location.startLocationUpdatesAsync(BACKGROUND_TRACKING_TASK, {
               accuracy: Location.Accuracy.BestForNavigation,
-              timeInterval: 10000,
+              timeInterval: 4000,
               distanceInterval: 0,
               foregroundService: {
                 notificationTitle: '🟢 Kisan Team — Duty Active (ON)',
@@ -831,8 +830,8 @@ export default function useLocationTracker() {
             // BestForNavigation accuracy forces true hardware GPS chip to remain active
             accuracy: Location.Accuracy.BestForNavigation,
 
-            // Android: poll continuously every 10 seconds without stopping
-            timeInterval: 10000,
+            // Android: poll continuously every 4 seconds without stopping (captures road curves)
+            timeInterval: 4000,
 
             // Set distanceInterval to 0 so Android FusedLocationProvider never enters Stationary Hardware Geofence Sleep after hours of being still;
             // software 2-point CUSUM filter in locationTask.js suppresses 100% of indoor stationary jitter!

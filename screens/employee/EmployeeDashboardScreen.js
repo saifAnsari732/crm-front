@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -37,11 +37,12 @@ import {
   Car,
 } from "lucide-react-native";
 import useLocationTracker from "../../hooks/useLocationTracker";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
 import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl, compressImageWeb } from "../../services/api";
 import { storage } from "../../services/storage";
+import socketService from "../../services/socket";
 
 const { width } = Dimensions.get("window");
 
@@ -182,9 +183,66 @@ export default function EmployeeDashboardScreen() {
     } catch (err) {}
   };
 
+  const syncLocalDistance = async () => {
+    try {
+      const cachedDist = await storage.getItem('tracking_accumulated_distance');
+      if (cachedDist) {
+        const parsed = parseFloat(cachedDist) || 0;
+        if (parsed > 0) {
+          setStats((prev) => ({
+            ...prev,
+            distanceToday: Math.max(parseFloat(prev?.distanceToday || 0), parsed).toFixed(2),
+          }));
+        }
+      }
+    } catch (_) {}
+  };
+
+  // Re-sync instantly whenever the employee opens or switches back to this dashboard tab
+  useFocusEffect(
+    useCallback(() => {
+      syncLocalDistance();
+      loadDashboardData();
+      fetchNotifications();
+    }, [isTracking])
+  );
+
+  // Real-time live distance stream from WebSocket + storage cache while on duty
   useEffect(() => {
-    loadDashboardData();
-    fetchNotifications();
+    let activeSock = null;
+    let pollTimer = null;
+
+    if (isTracking) {
+      syncLocalDistance();
+
+      socketService.connect().then((sock) => {
+        if (!sock) return;
+        activeSock = sock;
+        activeSock.on('employee_location', (payload) => {
+          if (!payload) return;
+          const incomingKm = parseFloat(payload.sessionDistance || payload.totalDistance);
+          if (!isNaN(incomingKm) && incomingKm >= 0) {
+            setStats((prev) => ({
+              ...prev,
+              distanceToday: Math.max(parseFloat(prev?.distanceToday || 0), incomingKm).toFixed(2),
+            }));
+          }
+        });
+      }).catch(() => {});
+
+      pollTimer = setInterval(() => {
+        syncLocalDistance();
+      }, 5000);
+    }
+
+    return () => {
+      if (activeSock) {
+        activeSock.off('employee_location');
+      }
+      if (pollTimer) {
+        clearInterval(pollTimer);
+      }
+    };
   }, [isTracking]);
 
   const onRefresh = async () => {
