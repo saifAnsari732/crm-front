@@ -76,8 +76,8 @@ export async function enqueueCoordinate(sessionId, coord, prevCoord) {
         timestamp: new Date().toISOString(),
       });
 
-      // Keep queue size healthy (max 100 items)
-      const trimmedQueue = queue.slice(-100);
+      // Zero Data Loss: Buffer up to 1500 offline points during long rural/highway dead-zones
+      const trimmedQueue = queue.slice(-1500);
       await storage.setItem(QUEUE_KEY, JSON.stringify(trimmedQueue));
       console.log(`📦 OfflineSync: Queued coordinate. Queue size: ${trimmedQueue.length}`);
       return true;

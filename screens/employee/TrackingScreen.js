@@ -215,7 +215,7 @@ export default function ActiveShiftMapScreen() {
       if (coordPayload && coordPayload.eventId) {
         const exists = screenOutboxRef.current.some((c) => c.eventId === coordPayload.eventId);
         if (!exists) {
-          screenOutboxRef.current = [...screenOutboxRef.current.slice(-99), coordPayload];
+          screenOutboxRef.current = [...screenOutboxRef.current.slice(-499), coordPayload];
           await storage.setItem('tracking_screen_coord_outbox', JSON.stringify(screenOutboxRef.current)).catch(() => {});
         }
       }
