@@ -368,7 +368,11 @@ export default function AdminTrackingScreen(props = {}) {
             const speedVal = isMovingNow ? rawSpeedVal : 0;
 
             setLiveLocations((prev) => {
-              const idx = prev.findIndex((l) => (l.employeeId?._id || l.employeeId) === data.employeeId || l.sessionId === data.sessionId);
+              const targetEmpId = String(data.employeeId || '');
+              const idx = prev.findIndex((l) => {
+                const lEmpId = String(l.employeeId || l.employee?._id || l.employee || l._id || '');
+                return (targetEmpId && lEmpId === targetEmpId) || (l.sessionId && data.sessionId && l.sessionId === data.sessionId);
+              });
               if (idx > -1) {
                 const upd = [...prev];
                 const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
@@ -386,7 +390,13 @@ export default function AdminTrackingScreen(props = {}) {
                 };
                 return upd;
               }
-              return prev;
+              return [...prev, {
+                ...data,
+                employeeId: targetEmpId,
+                totalDistance: incomingDist,
+                officialDistance: incomingDist,
+                updatedAt: new Date().toISOString()
+              }];
             });
 
             setSelectedEmployee((prev) => {
@@ -433,9 +443,12 @@ export default function AdminTrackingScreen(props = {}) {
     const byName = new Map();
 
     liveLocations.forEach((location) => {
-      if (location.employeeId) byEmployeeId.set(String(location.employeeId), location);
-      if (location.employeeIdCode) byEmployeeCode.set(String(location.employeeIdCode), location);
-      if (location.name) byName.set(location.name.toLowerCase(), location);
+      const empIdStr = String(location.employeeId || location.employee?._id || location.employee || location._id || '');
+      if (empIdStr) byEmployeeId.set(empIdStr, location);
+      const code = location.employeeIdCode || location.employee?.employeeId;
+      if (code) byEmployeeCode.set(String(code), location);
+      const n = location.name || location.employee?.name;
+      if (n) byName.set(n.toLowerCase(), location);
     });
 
     return { byEmployeeId, byEmployeeCode, byName };

@@ -3,7 +3,7 @@
     "name": "kisanTeam",
     "slug": "mobile-app",
     "scheme": "mobile-app",
-    "version": "1.0.33",
+    "version": "1.0.34",
     "orientation": "portrait",
     "icon": "./assets/kisanLogo.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kisanteam.crm",
-      "buildNumber": "53",
+      "buildNumber": "54",
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "contain",
@@ -33,7 +33,7 @@
       }
     },
     "android": {
-      "versionCode": 53,
+      "versionCode": 54,
       "package": "com.kisanteam.crm",
       "splash": {
         "image": "./assets/splash.png",

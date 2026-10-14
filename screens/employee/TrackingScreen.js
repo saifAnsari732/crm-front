@@ -314,11 +314,18 @@ export default function ActiveShiftMapScreen() {
           try {
             const lastLoc = JSON.parse(lastLocStr);
             if (Number.isFinite(Number(lastLoc?.lat)) && Number.isFinite(Number(lastLoc?.lng))) {
-              setLatitude(Number(lastLoc.lat).toFixed(6));
-              setLongitude(Number(lastLoc.lng).toFixed(6));
-              if (!lastConfirmedCoordRef.current) {
-                lastConfirmedCoordRef.current = { lat: Number(lastLoc.lat), lng: Number(lastLoc.lng), timestamp: Date.now() };
-                stationaryAnchorRef.current = { lat: Number(lastLoc.lat), lng: Number(lastLoc.lng) };
+              const bgLat = Number(lastLoc.lat);
+              const bgLng = Number(lastLoc.lng);
+              const bgTs = lastLoc.timestamp ? new Date(lastLoc.timestamp).getTime() : Date.now();
+              setLatitude(bgLat.toFixed(6));
+              setLongitude(bgLng.toFixed(6));
+              lastConfirmedCoordRef.current = { lat: bgLat, lng: bgLng, timestamp: bgTs };
+              stationaryAnchorRef.current = { lat: bgLat, lng: bgLng };
+              lastCoordRef.current = { lat: bgLat, lng: bgLng };
+              if (lastLoc.isConfirmedMoving) {
+                isMovingRef.current = true;
+                setIsMoving(true);
+                setMotionStatusLabel('MOVING');
               }
             }
           } catch (_) {}
@@ -348,7 +355,8 @@ export default function ActiveShiftMapScreen() {
             ? response.data.sessions.find(s => s.sessionId === sessionId) || response.data.sessions.find(s => s.isActive)
             : response.data.sessions.find(s => s.isActive) || response.data.sessions[0];
 
-          if (activeSession?.sessionId && activeSession?.isActive) {
+          const userManuallyStopped = await storage.getItem('user_manually_punched_out');
+          if (activeSession?.sessionId && activeSession?.isActive && userManuallyStopped !== 'true') {
             sessionId = activeSession.sessionId;
             await storage.setItem('currentTrackingSessionId', sessionId);
             await storage.setItem('tracking_accumulated_session_id', sessionId);

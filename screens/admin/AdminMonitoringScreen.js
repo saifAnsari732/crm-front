@@ -181,15 +181,32 @@ export default function AdminMonitoringScreen() {
           socket.on('employee_location', (data) => {
             const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
             setLiveLocations((prev) => {
-              const idx = prev.findIndex(l => l.employeeId === data.employeeId || l.sessionId === data.sessionId);
+              const targetEmpId = String(data.employeeId || '');
+              const idx = prev.findIndex((l) => {
+                const lEmpId = String(l.employeeId || l.employee?._id || l.employee || l._id || '');
+                return (targetEmpId && lEmpId === targetEmpId) || (l.sessionId && data.sessionId && l.sessionId === data.sessionId);
+              });
               if (idx > -1) {
                 const upd = [...prev];
                 const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
                 const finalDist = Math.max(existingDist, incomingDist);
-                upd[idx] = { ...upd[idx], ...data, totalDistance: finalDist, officialDistance: finalDist, updatedAt: new Date().toISOString() };
+                upd[idx] = {
+                  ...upd[idx],
+                  ...data,
+                  employeeId: targetEmpId,
+                  totalDistance: finalDist,
+                  officialDistance: finalDist,
+                  updatedAt: new Date().toISOString()
+                };
                 return upd;
               }
-              return [...prev, { ...data, totalDistance: incomingDist, officialDistance: incomingDist, updatedAt: new Date().toISOString() }];
+              return [...prev, {
+                ...data,
+                employeeId: targetEmpId,
+                totalDistance: incomingDist,
+                officialDistance: incomingDist,
+                updatedAt: new Date().toISOString()
+              }];
             });
 
             // Update in employees list as well
@@ -202,6 +219,10 @@ export default function AdminMonitoringScreen() {
                     ...e,
                     isTracking: true,
                     isLive: true,
+                    lat: data.lat,
+                    lng: data.lng,
+                    speed: data.speed,
+                    currentAddress: data.address || e.currentAddress,
                     totalDistance: finalEmpDist,
                     totalDistanceToday: finalEmpDist,
                     lastPing: new Date().toISOString(),

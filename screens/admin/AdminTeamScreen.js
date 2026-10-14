@@ -224,14 +224,16 @@ export default function AdminTeamScreen() {
       isLive,
       isIdle,
       isPunchedIn,
-      distanceToday: liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || (Math.random() * 40 + 10).toFixed(1),
-      currentLocation: liveLoc?.address || emp.location || 'Gorakhpur, Uttar Pradesh',
-      punchInTime: emp.punchInTime || liveLoc?.startTime || '09:12 AM',
-      punchOutTime: emp.punchOutTime || '--',
-      workingHours: emp.workingHours || '3h 4m',
-      todayVisits: emp.todayVisits || 5,
-      todayExpenses: emp.todayExpenses || 320,
-      empCode: emp.employeeCode || emp.employeeId || `KC-${String(Math.floor(Math.random() * 90000) + 10000)}`,
+      distanceToday: (liveLoc?.totalDistance != null || liveLoc?.officialDistance != null || emp.todayKm != null)
+        ? Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || 0).toFixed(1)
+        : '0.0',
+      currentLocation: liveLoc?.address || emp.location || (isLive ? 'Active On Field' : 'Offline / Idle'),
+      punchInTime: emp.punchInTime || (liveLoc?.startTime ? new Date(liveLoc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),
+      punchOutTime: emp.punchOutTime || (liveLoc?.endTime ? new Date(liveLoc.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),
+      workingHours: emp.workingHours || '--',
+      todayVisits: Number(emp.todayVisits || 0),
+      todayExpenses: Number(emp.todayExpenses || 0),
+      empCode: emp.employeeCode || emp.employeeId || '—',
     };
   });
 

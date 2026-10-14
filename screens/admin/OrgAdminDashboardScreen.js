@@ -18,6 +18,7 @@ import {
 import MapViewComponent from '../../components/MapViewComponent';
 import { adminAPI, trackingAPI, meetingAPI, getAvatarUrl, stopHeartbeat, expenseAPI } from '../../services/api';
 import { storage } from '../../services/storage';
+import socketService from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -199,6 +200,89 @@ export default function OrgAdminDashboardScreen() {
 
   useEffect(() => {
     fetchData();
+
+    let socket;
+    const initSocket = async () => {
+      try {
+        socket = await socketService.connect();
+        if (socket) {
+          socket.on('employee_location', (data) => {
+            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            setLiveLocations((prev) => {
+              const targetEmpId = String(data.employeeId || '');
+              const idx = prev.findIndex((l) => {
+                const lEmpId = String(l.employeeId || l.employee?._id || l.employee || l._id || '');
+                return (targetEmpId && lEmpId === targetEmpId) || (l.sessionId && data.sessionId && l.sessionId === data.sessionId);
+              });
+              if (idx > -1) {
+                const upd = [...prev];
+                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
+                const finalDist = Math.max(existingDist, incomingDist);
+                upd[idx] = {
+                  ...upd[idx],
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: data.speed,
+                  motionState: data.motionState,
+                  totalDistance: finalDist,
+                  officialDistance: finalDist,
+                  address: data.address || upd[idx].address,
+                  updatedAt: new Date().toISOString()
+                };
+                return upd;
+              }
+              return [...prev, {
+                ...data,
+                employeeId: targetEmpId,
+                totalDistance: incomingDist,
+                officialDistance: incomingDist,
+                updatedAt: new Date().toISOString()
+              }];
+            });
+
+            // Update in employees list as well so directory cards update in real time
+            setEmployees((prev) =>
+              prev.map((e) => {
+                if (String(e._id) === String(data.employeeId)) {
+                  const existingEmpDist = Number(e.totalDistance || e.todayKm || 0);
+                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+                  return {
+                    ...e,
+                    isTracking: true,
+                    isLive: true,
+                    lat: data.lat,
+                    lng: data.lng,
+                    speed: data.speed,
+                    currentAddress: data.address || e.currentAddress,
+                    totalDistance: finalEmpDist,
+                    todayKm: finalEmpDist.toFixed(1),
+                    lastPing: new Date().toISOString(),
+                  };
+                }
+                return e;
+              })
+            );
+          });
+
+          socket.on('employee_tracking_started', () => fetchData());
+          socket.on('employee_tracking_stopped', () => fetchData());
+        }
+      } catch (e) {
+        console.log('📍 OrgAdmin Dashboard: Socket init error:', e.message);
+      }
+    };
+
+    initSocket();
+    const interval = setInterval(() => fetchData(), 25000);
+
+    return () => {
+      clearInterval(interval);
+      if (socket) {
+        socket.off('employee_location');
+        socket.off('employee_tracking_started');
+        socket.off('employee_tracking_stopped');
+      }
+    };
   }, [fetchData]);
 
   const onRefresh = async () => {

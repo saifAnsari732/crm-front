@@ -451,7 +451,11 @@ export default function ManagerDashboardScreen() {
           socket.on('employee_location', (data) => {
             const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
             setLiveLocations((prev) => {
-              const idx = prev.findIndex((l) => (l.employeeId?._id || l.employeeId) === data.employeeId || l.sessionId === data.sessionId);
+              const targetEmpId = String(data.employeeId || '');
+              const idx = prev.findIndex((l) => {
+                const lEmpId = String(l.employeeId || l.employee?._id || l.employee || l._id || '');
+                return (targetEmpId && lEmpId === targetEmpId) || (l.sessionId && data.sessionId && l.sessionId === data.sessionId);
+              });
               if (idx > -1) {
                 const upd = [...prev];
                 const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
@@ -469,8 +473,37 @@ export default function ManagerDashboardScreen() {
                 };
                 return upd;
               }
-              return prev;
+              return [...prev, {
+                ...data,
+                employeeId: targetEmpId,
+                totalDistance: incomingDist,
+                officialDistance: incomingDist,
+                updatedAt: new Date().toISOString()
+              }];
             });
+
+            // Update in teamMembers list as well so directory cards update in real time
+            setTeamMembers((prev) =>
+              prev.map((e) => {
+                if (String(e._id) === String(data.employeeId)) {
+                  const existingEmpDist = Number(e.totalDistance || e.todayKm || 0);
+                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+                  return {
+                    ...e,
+                    isTracking: true,
+                    isLive: true,
+                    lat: data.lat,
+                    lng: data.lng,
+                    speed: data.speed,
+                    currentAddress: data.address || e.currentAddress,
+                    totalDistance: finalEmpDist,
+                    todayKm: finalEmpDist.toFixed(1),
+                    lastPing: new Date().toISOString(),
+                  };
+                }
+                return e;
+              })
+            );
 
             // If incoming socket data belongs to this manager, update local state immediately
             if (String(data.employeeId) === String(user?._id)) {
@@ -720,17 +753,14 @@ export default function ManagerDashboardScreen() {
               }
             }
 
-            // 🎯 DIRECT COORDINATE STORE & CALCULATE: Feed screen GPS fixes into processLocation engine
-            await processLocation(position).catch(() => {});
-
             // 🎯 SMART GEONAME API SAVER (80m displacement cache)
+            let formatted = lastGeocodedAddressRef.current || '';
             try {
               const distFromLastGeocoded = lastGeocodedCoordRef.current
                 ? haversineMeters(lastGeocodedCoordRef.current.lat, lastGeocodedCoordRef.current.lng, lat, lng)
                 : 999;
 
               if (!lastGeocodedAddressRef.current || distFromLastGeocoded > 80) {
-                let formatted = '';
                 if (Platform.OS === 'web') {
                   formatted = await reverseGeocodeLocation(lat, lng).catch(() => '');
                 } else {
@@ -750,9 +780,19 @@ export default function ManagerDashboardScreen() {
                   lastGeocodedCoordRef.current = { lat, lng };
                   lastGeocodedAddressRef.current = formatted;
                   setManagerAddress(formatted);
+                  storage.setItem('last_actual_address', formatted).catch(() => {});
                 }
               }
             } catch (_) {}
+
+            // 🎯 DIRECT COORDINATE STORE & CALCULATE: Feed screen GPS fixes into processLocation engine
+            if (formatted) {
+              position.coords.address = formatted;
+            }
+            position.coords.screenCaptured = true;
+            position.coords.screenMoving = isMovingRef.current;
+            position.coords.screenDistanceKm = Number((totalDistanceRef.current || 0).toFixed(3));
+            await processLocation(position).catch(() => {});
           }
         } catch (e) {
           console.log('📍 Manager Dashboard: Foreground coordinate capture error:', e.message);
@@ -763,7 +803,13 @@ export default function ManagerDashboardScreen() {
         try {
           const position = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.High,
-          });
+            maximumAge: 4000,
+          }).catch(() =>
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              maximumAge: 6000,
+            })
+          );
           if (position) {
             await handleCoordinateFix(position);
           }
@@ -772,13 +818,13 @@ export default function ManagerDashboardScreen() {
         }
       };
 
-      // Continuous OS Hardware GPS Callbacks (0 ms lag on turns and acceleration)
+      // Continuous OS Hardware GPS Callbacks (BestForNavigation + 2000ms + distanceInterval: 0)
       if (Platform.OS !== 'web') {
         Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000,
-            distanceInterval: 8,
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 2000,
+            distanceInterval: 0,
           },
           (pos) => {
             handleCoordinateFix(pos);
@@ -788,12 +834,12 @@ export default function ManagerDashboardScreen() {
           console.log('📡 Manager Dashboard: Native hardware watchPositionAsync active! ✅');
         }).catch((err) => {
           console.log('⚠️ Manager Dashboard: watchPositionAsync fallback to polling:', err.message);
-          locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
         });
         fetchLiveCoords();
+        locationIntervalRef.current = setInterval(fetchLiveCoords, 5000);
       } else {
         fetchLiveCoords();
-        locationIntervalRef.current = setInterval(fetchLiveCoords, 10000);
+        locationIntervalRef.current = setInterval(fetchLiveCoords, 5000);
       }
     } else {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);

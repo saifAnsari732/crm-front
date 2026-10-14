@@ -243,8 +243,11 @@ async function flushOfflineQueueUnlocked() {
         }
 
         if (response.data?.sessionId && (!itemSessionId || itemSessionId === 'AUTO_RECOVER_SESSION')) {
-          await storage.setItem('currentTrackingSessionId', response.data.sessionId).catch(() => {});
-          await storage.setItem('tracking_accumulated_session_id', response.data.sessionId).catch(() => {});
+          const userManuallyStopped = await storage.getItem('user_manually_punched_out');
+          if (userManuallyStopped !== 'true') {
+            await storage.setItem('currentTrackingSessionId', response.data.sessionId).catch(() => {});
+            await storage.setItem('tracking_accumulated_session_id', response.data.sessionId).catch(() => {});
+          }
         }
 
         successCount++;
