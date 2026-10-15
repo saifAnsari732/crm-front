@@ -224,8 +224,8 @@ export default function AdminTeamScreen() {
       isLive,
       isIdle,
       isPunchedIn,
-      distanceToday: (liveLoc?.totalDistance != null || liveLoc?.officialDistance != null || emp.todayKm != null)
-        ? Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || 0).toFixed(1)
+      distanceToday: (liveLoc?.officialDistance != null || liveLoc?.totalDistance != null || emp.todayKm != null || emp.totalDistanceToday != null || emp.totalDistance != null)
+        ? Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0).toFixed(1)
         : '0.0',
       currentLocation: liveLoc?.address || emp.location || (isLive ? 'Active On Field' : 'Offline / Idle'),
       punchInTime: emp.punchInTime || (liveLoc?.startTime ? new Date(liveLoc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),

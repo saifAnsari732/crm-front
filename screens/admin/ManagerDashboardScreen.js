@@ -449,7 +449,7 @@ export default function ManagerDashboardScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -458,8 +458,8 @@ export default function ManagerDashboardScreen() {
               });
               if (idx > -1) {
                 const upd = [...prev];
-                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
-                const finalDist = Math.max(existingDist, incomingDist);
+                const existingDist = Number(upd[idx].officialDistance || upd[idx].totalDistance || 0);
+                const finalDist = incomingDist > 0 ? incomingDist : existingDist;
                 upd[idx] = {
                   ...upd[idx],
                   lat: data.lat,
@@ -487,7 +487,7 @@ export default function ManagerDashboardScreen() {
               prev.map((e) => {
                 if (String(e._id) === String(data.employeeId)) {
                   const existingEmpDist = Number(e.totalDistance || e.todayKm || 0);
-                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+                  const finalEmpDist = incomingDist > 0 ? incomingDist : existingEmpDist;
                   return {
                     ...e,
                     isTracking: true,
@@ -508,7 +508,7 @@ export default function ManagerDashboardScreen() {
             // If incoming socket data belongs to this manager, update local state immediately
             if (String(data.employeeId) === String(user?._id)) {
               if (incomingDist > 0) {
-                totalDistanceRef.current = Math.max(totalDistanceRef.current, incomingDist);
+                totalDistanceRef.current = incomingDist;
                 const distStr = totalDistanceRef.current.toFixed(2);
                 setLocalKmState(distStr);
                 setManagerKm(distStr);
@@ -576,14 +576,14 @@ export default function ManagerDashboardScreen() {
             ? (response.data.sessions || []).find(s => s.sessionId === sessionId)
             : null;
 
-          const backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
+          const backendDistance = parseFloat(activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0;
           const synchronizedDistance = (typeof totalToday === 'number' && totalToday > 0)
             ? totalToday
             : backendDistance;
 
           if (synchronizedDistance > 0) {
             console.log('📍 Manager Dashboard: Synchronized distance with backend:', synchronizedDistance);
-            totalDistanceRef.current = Math.max(totalDistanceRef.current, synchronizedDistance);
+            totalDistanceRef.current = synchronizedDistance;
             const distStr = totalDistanceRef.current.toFixed(2);
             setLocalKmState(distStr);
             setManagerKm(distStr);
@@ -858,6 +858,7 @@ export default function ManagerDashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    await storage.removeItem('cache_mgr_dashboard_v1').catch(() => {});
     await fetchData(false);
     setRefreshing(false);
   };
@@ -919,7 +920,7 @@ export default function ManagerDashboardScreen() {
     const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || 0);
+    const distNum = Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0);
 
     return {
       _id: empId,
@@ -944,10 +945,10 @@ export default function ManagerDashboardScreen() {
     ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn
   ).length;
   const activeLive = liveLocations.filter((l) => l.isActive || l.isTracking || (l.speed && l.speed > 0)).length;
-  const teamTodayKm = liveLocations.reduce((sum, l) => sum + (Number(l.totalDistance || l.officialDistance) || 0), 0);
+  const teamTodayKm = liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistance) || 0), 0);
   
   const myLiveLoc = liveLocations.find((l) => String(l.employeeId?._id || l.employeeId || '') === String(user?._id || ''));
-  const myTodayKmVal = isTracking ? (Number(localKmState) || Number(myLiveLoc?.totalDistance) || 0).toFixed(2) : (Number(myLiveLoc?.totalDistance) || Number(managerKm) || 0).toFixed(2);
+  const myTodayKmVal = isTracking ? (Number(localKmState) || Number(myLiveLoc?.officialDistance) || Number(myLiveLoc?.totalDistance) || 0).toFixed(2) : (Number(myLiveLoc?.officialDistance) || Number(myLiveLoc?.totalDistance) || Number(managerKm) || 0).toFixed(2);
 
   const leaveCount = pendingLeaves.filter((l) => (l.status || '').toLowerCase() === 'pending').length;
   const expenseCount = pendingExpenses.filter((e) => (e.status || '').toLowerCase() === 'pending').length;

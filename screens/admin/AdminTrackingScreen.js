@@ -359,7 +359,7 @@ export default function AdminTrackingScreen(props = {}) {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
             const rawSpeedVal = Number(data.speed || 0);
             const isMovingNow = (data.motionState && data.motionState !== 'STATIONARY')
               ? true
@@ -375,8 +375,8 @@ export default function AdminTrackingScreen(props = {}) {
               });
               if (idx > -1) {
                 const upd = [...prev];
-                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
-                const finalDist = Math.max(existingDist, incomingDist);
+                const existingDist = Number(upd[idx].officialDistance || upd[idx].totalDistance || 0);
+                const finalDist = incomingDist > 0 ? incomingDist : existingDist;
                 upd[idx] = {
                   ...upd[idx],
                   lat: data.lat,
@@ -404,8 +404,8 @@ export default function AdminTrackingScreen(props = {}) {
               const pId = String(prev._id || prev.employeeId || '');
               const targetId = String(data.employeeId || data.sessionId || '');
               if (pId === targetId) {
-                const currentDist = Number(prev.totalDistance || 0);
-                const newDist = Math.max(currentDist, incomingDist);
+                const currentDist = Number(prev.officialDistance || prev.totalDistance || 0);
+                const newDist = incomingDist > 0 ? incomingDist : currentDist;
                 return {
                   ...prev,
                   lat: data.lat,
@@ -413,6 +413,7 @@ export default function AdminTrackingScreen(props = {}) {
                   speed: speedVal,
                   motionState: motionStateVal,
                   totalDistance: newDist,
+                  officialDistance: newDist,
                   address: data.address || prev.address,
                   updatedAt: new Date().toISOString()
                 };
@@ -483,7 +484,7 @@ export default function AdminTrackingScreen(props = {}) {
         motionState: loc.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: loc.lat || loc.latitude,
         lng: loc.lng || loc.longitude,
-        totalDistance: Number(loc.totalDistance || loc.officialDistance || empMatch?.totalDistance || empMatch?.todayKm || 0),
+        totalDistance: Number(loc.officialDistance || loc.totalDistance || empMatch?.todayKm || empMatch?.totalDistance || 0),
         address: normalizeAddress(loc.address),
         sessionId: loc.sessionId || loc._id,
         updatedAt: loc.updatedAt || new Date().toISOString(),
@@ -527,7 +528,7 @@ export default function AdminTrackingScreen(props = {}) {
         motionState: liveLoc?.motionState || (isMovingNow ? 'MOVING' : 'STATIONARY'),
         lat: liveLoc?.lat || emp.lat || null,
         lng: liveLoc?.lng || emp.lng || null,
-        totalDistance: Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.totalDistance || emp.todayKm || 0),
+        totalDistance: Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistance || 0),
         address: normalizeAddress(liveLoc?.address || emp.address),
         sessionId: liveLoc?.sessionId || emp.sessionId || null,
         updatedAt: liveLoc?.updatedAt || emp.updatedAt || null,

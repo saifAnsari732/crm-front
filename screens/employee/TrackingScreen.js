@@ -364,7 +364,7 @@ export default function ActiveShiftMapScreen() {
             await storage.removeItem('user_manually_punched_out');
           }
 
-          let backendDistance = parseFloat(activeSession?.totalDistance) || 0.0;
+          let backendDistance = parseFloat(activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0;
           let currentLocal = totalDistanceRef.current || 0.0;
 
           // 🛣️ POINT A TO POINT B ROAD GAP AUTO-RECOVERY:
@@ -379,8 +379,8 @@ export default function ActiveShiftMapScreen() {
             }
           }
 
-          // Synchronized Distance: Use maximum of local screen and backend distance (strictly non-decreasing)
-          const synchronizedDistance = Math.max(currentLocal, backendDistance);
+          // Synchronized Distance: Prioritize authoritative backend distance
+          const synchronizedDistance = backendDistance > 0 ? backendDistance : currentLocal;
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
@@ -431,9 +431,9 @@ export default function ActiveShiftMapScreen() {
         activeSocket = sock;
         activeSocket.on('employee_location', (payload) => {
           if (!payload) return;
-          const incomingKm = parseFloat(payload.sessionDistance || payload.totalDistance);
+          const incomingKm = parseFloat(payload.officialDistance ?? payload.sessionDistance ?? payload.totalDistance);
           if (!isNaN(incomingKm) && incomingKm >= 0) {
-            const newKm = Math.max(totalDistanceRef.current || 0, incomingKm);
+            const newKm = incomingKm > 0 ? incomingKm : (totalDistanceRef.current || 0);
             totalDistanceRef.current = newKm;
             setDistance(newKm.toFixed(2));
             storage.setItem('tracking_accumulated_distance', newKm.toFixed(2)).catch(() => {});

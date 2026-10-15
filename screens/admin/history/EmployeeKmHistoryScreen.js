@@ -113,7 +113,7 @@ export default function EmployeeKmHistoryScreen() {
       const id = String(getEmployeeId(employee) || session.employeeId || session._id);
       const name = employee.name || session.employeeName || 'Field Staff';
       const avatar = employee.avatar;
-      const km = normalizeKm(session.totalDistance || session.totalKm || session.distance);
+      const km = normalizeKm(session.officialDistance || session.totalDistance || session.totalKm || session.distance);
 
       if (!grouped.has(id)) {
         grouped.set(id, {

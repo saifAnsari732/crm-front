@@ -179,7 +179,7 @@ export default function AdminMonitoringScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -188,8 +188,8 @@ export default function AdminMonitoringScreen() {
               });
               if (idx > -1) {
                 const upd = [...prev];
-                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
-                const finalDist = Math.max(existingDist, incomingDist);
+                const existingDist = Number(upd[idx].officialDistance || upd[idx].totalDistance || 0);
+                const finalDist = incomingDist > 0 ? incomingDist : existingDist;
                 upd[idx] = {
                   ...upd[idx],
                   ...data,
@@ -214,7 +214,7 @@ export default function AdminMonitoringScreen() {
               prev.map((e) => {
                 if (String(e._id) === String(data.employeeId)) {
                   const existingEmpDist = Number(e.totalDistance || e.totalDistanceToday || 0);
-                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+                  const finalEmpDist = incomingDist > 0 ? incomingDist : existingEmpDist;
                   return {
                     ...e,
                     isTracking: true,
@@ -276,13 +276,14 @@ export default function AdminMonitoringScreen() {
 
       const isLive = emp.isTracking === true || emp.isOnline === true || (liveLoc && liveLoc.isActive !== false);
 
-      const todayKm = Math.round(Math.max(
-        Number(emp.totalDistance) || 0,
-        Number(emp.totalDistanceToday) || 0,
-        Number(attRec?.totalDistanceTraveled) || 0,
-        Number(liveLoc?.totalDistance) || 0,
-        Number(liveLoc?.officialDistance) || 0
-      ) * 100) / 100;
+      // Authoritative precedence: official distance -> total distance -> attendance -> emp profile
+      const authoritativeKm = Number(liveLoc?.officialDistance) ||
+        Number(liveLoc?.totalDistance) ||
+        Number(attRec?.totalDistanceTraveled) ||
+        Number(emp.totalDistanceToday) ||
+        Number(emp.totalDistance) ||
+        0;
+      const todayKm = Math.round(authoritativeKm * 100) / 100;
 
       const pingTime = liveLoc?.lastActivity || liveLoc?.updatedAt || emp.lastPing || attRec?.checkIn || emp.lastCheckIn || emp.lastSeen || emp.updatedAt;
       const currentAddr = formatAddress(liveLoc?.address || liveLoc?.currentAddress || emp.address || emp.currentAddress, isLive ? 'Active On Field' : 'Offline / Idle');

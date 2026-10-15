@@ -207,7 +207,7 @@ export default function OrgAdminDashboardScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.totalDistance || data.sessionDistance || 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -216,8 +216,8 @@ export default function OrgAdminDashboardScreen() {
               });
               if (idx > -1) {
                 const upd = [...prev];
-                const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
-                const finalDist = Math.max(existingDist, incomingDist);
+                const existingDist = Number(upd[idx].officialDistance || upd[idx].totalDistance || 0);
+                const finalDist = incomingDist > 0 ? incomingDist : existingDist;
                 upd[idx] = {
                   ...upd[idx],
                   lat: data.lat,
@@ -245,7 +245,7 @@ export default function OrgAdminDashboardScreen() {
               prev.map((e) => {
                 if (String(e._id) === String(data.employeeId)) {
                   const existingEmpDist = Number(e.totalDistance || e.todayKm || 0);
-                  const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+                  const finalEmpDist = incomingDist > 0 ? incomingDist : existingEmpDist;
                   return {
                     ...e,
                     isTracking: true,
@@ -430,7 +430,7 @@ export default function OrgAdminDashboardScreen() {
     const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.totalDistance || liveLoc?.officialDistance || emp.todayKm || 0);
+    const distNum = Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0);
 
     return {
       _id: empId,

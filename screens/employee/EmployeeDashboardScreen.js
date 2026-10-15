@@ -220,11 +220,11 @@ export default function EmployeeDashboardScreen() {
         activeSock = sock;
         activeSock.on('employee_location', (payload) => {
           if (!payload) return;
-          const incomingKm = parseFloat(payload.sessionDistance || payload.totalDistance);
+          const incomingKm = parseFloat(payload.officialDistance ?? payload.sessionDistance ?? payload.totalDistance);
           if (!isNaN(incomingKm) && incomingKm >= 0) {
             setStats((prev) => ({
               ...prev,
-              distanceToday: Math.max(parseFloat(prev?.distanceToday || 0), incomingKm).toFixed(2),
+              distanceToday: incomingKm > 0 ? incomingKm.toFixed(2) : prev?.distanceToday,
             }));
           }
         });
