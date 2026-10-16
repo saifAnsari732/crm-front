@@ -15,7 +15,7 @@
  *  6. DUPLICATE SUPPRESSION — eventId deduplication prevents replay inflation.
  */
 
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 import Constants from 'expo-constants';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
@@ -107,21 +107,21 @@ let _lastUploadedCoord = null;
 
 function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeedMps, calcSpeedKmh, accuracyM, currCoord = null) {
   const reportedSpeedKmh = (Number(reportedSpeedMps) || 0) * 3.6;
-  const stepSecs = Math.min(Math.max(secs, 1), 20);
-  const stepCalcSpeedKmh = (distM / 1000 / stepSecs) * 3600;
-  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh, stepCalcSpeedKmh);
-  const screenMoving = Boolean(currCoord?.screenMoving);
+  const stepSecs = Math.min(Math.max(secs, 1), 30);
+  // Only trust geometry-derived speed when displacement is >= 25m beyond stationary GPS drift radius
+  const stepCalcSpeedKmh = (distM >= 25.0 && stepSecs >= 3 && accuracyM <= 100) ? (distM / 1000 / stepSecs) * 3600 : 0;
+  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (distM >= 25.0 ? calcSpeedKmh : 0), stepCalcSpeedKmh);
 
-  // 🛡️ ANTI-JITTER LOCK: Only suppress true micro-jitter (< 8m with effective speed < 1.0 km/h)
-  if (distM < 8.0 && effectiveSpeedKmh < 1.0 && !screenMoving) {
-    if (distM < 6.0 && _movementCandidateBuffer.length > 0) {
+  // 🛡️ ANTI-JITTER LOCK: When stationary, suppress any indoor/parking GPS bounce < 20m unless hardware Doppler speed >= 3.0 km/h
+  if (distM < 20.0 && reportedSpeedKmh < 3.0) {
+    if (distM < 12.0 && _movementCandidateBuffer.length > 0) {
       _movementCandidateBuffer = [];
     }
     return { confirmed: false, pending: false };
   }
 
-  // Departure verification begins at >= 10m or effective speed >= 1.2 km/h (supports slow walk and pocket mode)
-  if ((effectiveSpeedKmh >= 1.2 || screenMoving || distM >= 12.0) && accuracyM <= 320) {
+  // Departure verification requires real displacement (>= 20m or hardware speed >= 3.0 km/h with >= 15m) and reasonable accuracy
+  if (((distM >= 20.0 && effectiveSpeedKmh >= 2.5) || (distM >= 15.0 && reportedSpeedKmh >= 3.0) || distM >= 28.0) && accuracyM <= 200) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
       : null;
@@ -134,8 +134,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
 
       const stepFromFirstCandidateM = distanceMeters(firstCandidate.lat, firstCandidate.lng, currLat, currLng);
 
-      // Confirmed genuine travel: moved >= 12m from anchor OR moved >= 4m from candidate 1 with speed
-      if (distM >= 12.0 || (stepFromFirstCandidateM >= 4 && effectiveSpeedKmh >= 1.2)) {
+      // Confirmed genuine travel: progressive movement away from anchor (>= 25m from anchor AND >= 8m from candidate 1)
+      if ((distM >= 25.0 && stepFromFirstCandidateM >= 8.0 && distM >= firstCandidate.distM + 4.0) || (distM >= 35.0 && effectiveSpeedKmh >= 3.0)) {
         console.log(`📍 Movement Confirmed: Road travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m, Acc:${accuracyM.toFixed(0)}m, Speed:${effectiveSpeedKmh.toFixed(1)}km/h). Transitioning to MOVING.`);
         const savedCandidateCoord = firstCandidate.coord || null;
         _movementCandidateBuffer = [];
@@ -143,16 +143,16 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
         return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: savedCandidateCoord };
       }
 
-      // If phone bounced back deep inside room (< 6m), drop candidate buffer
-      if (distM < 6.0) {
+      // If phone bounced back toward stationary spot (< 14m), drop candidate buffer
+      if (distM < 14.0) {
         _movementCandidateBuffer = [];
         return { confirmed: false, pending: false };
       }
       return { confirmed: false, pending: true };
     }
 
-    // Direct confirmation if single jump is already >= 15m with valid speed
-    if (distM >= 15.0 && (effectiveSpeedKmh >= 1.2 || distM >= 20.0)) {
+    // Direct confirmation if single displacement is >= 35m with valid speed (or >= 25m with hardware Doppler >= 3.5 km/h)
+    if ((distM >= 35.0 && effectiveSpeedKmh >= 3.0) || (distM >= 25.0 && reportedSpeedKmh >= 3.5 && accuracyM <= 65)) {
       console.log(`📍 Direct Departure: Single step ${distM.toFixed(0)}m at ${effectiveSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
       _movementCandidateBuffer = [];
       _isConfirmedMoving = true;
@@ -162,7 +162,7 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, effectiveSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
     return { confirmed: false, pending: true };
   } else {
-    if (_movementCandidateBuffer.length > 0 && distM < 8.0) {
+    if (_movementCandidateBuffer.length > 0 && distM < 14.0) {
       _movementCandidateBuffer = [];
     }
     return { confirmed: false, pending: false };
@@ -206,22 +206,20 @@ function validateSegment(prev, curr) {
   const distKm = distM / 1000;
   const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
   const reportedSpeedKmh = reportedSpeedMps * 3.6;
-  const stepCalcSpeedKmh = (stepSecs > 0 && distM >= 3.5) ? (distKm / (stepSecs / 3600)) : 0;
-  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (distM >= 3.5 && stepCalcSpeedKmh <= 160) ? stepCalcSpeedKmh : 0);
+  const stepCalcSpeedKmh = (stepSecs >= 2 && distM >= 20.0) ? (distKm / (stepSecs / 3600)) : 0;
+  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (distM >= 20.0 && stepCalcSpeedKmh <= 160) ? stepCalcSpeedKmh : 0);
 
-  // Dynamic accuracy ceiling: allow up to 300m when moving or displaced >= 25m (pocket/vehicle/cell/web GPS), 220m when stationary
-  const dynamicMaxAcc = (_isConfirmedMoving || curr.screenMoving || effectiveSpeedKmh >= 2.5 || distM >= 25) ? 300 : 220;
+  // Dynamic accuracy ceiling: allow up to 250m when moving or displaced >= 30m, 150m when stationary
+  const dynamicMaxAcc = (_isConfirmedMoving || reportedSpeedKmh >= 3.0 || distM >= 30) ? 250 : 150;
   if (reportedAccuracy > dynamicMaxAcc && stepSecs <= 1800) {
     return { valid: false, distKm: 0 };
   }
 
   // ── Gate 0: Base Digits vs Stationary Cell/Wi-Fi Deadband ─────
-  // If ALREADY confirmed moving: do NOT reject consecutive road steps (10m-60m)!
-  // Gate 0 only suppresses true indoor micro-jitter (< 7m with effective speed < 1.0 km/h) when !_isConfirmedMoving.
-  if (!_isConfirmedMoving && !curr.screenMoving) {
-    const isInsideStationarySpot = distM < 7.0 && effectiveSpeedKmh < 1.0;
+  if (!_isConfirmedMoving) {
+    const isInsideStationarySpot = distM < 20.0 && reportedSpeedKmh < 3.0;
     if (isInsideStationarySpot) {
-      if (distM < 5.0) {
+      if (distM < 12.0) {
         _movementCandidateBuffer = [];
       }
       return { valid: false, distKm: 0 };
@@ -229,11 +227,10 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 1: Minimum movement ─────────────────────────────────────────
-  // CRITICAL FIX: When _isConfirmedMoving === true, hold the moving state and anchor for up to 180s (3 minutes)
-  // across traffic lights, turns, speed breakers, or brief stops so the route NEVER breaks!
-  const minStepM = reportedAccuracy > 150 ? 10 : 4.0;
+  // Hold moving state across brief traffic stops up to 45s; after 45s without >= 8m movement, transition back to STATIONARY
+  const minStepM = reportedAccuracy > 80 ? Math.max(12.0, reportedAccuracy * 0.25) : 8.0;
   if (distM < minStepM) {
-    if (_isConfirmedMoving && rawSecs < 180) {
+    if (_isConfirmedMoving && rawSecs < 45) {
       return { valid: false, distKm: 0, keepMovingAnchor: true };
     }
     _isConfirmedMoving = false;
@@ -241,15 +238,13 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 2: Long Stationary / 30-Min Dynamic Baseline Reset (> 30 min since anchor) ──
-  // User: "Es lati , or longi ko const fix nhi store karna every 30minut per update new lati , or longi se conpare karna same are not"
   if (rawSecs > 1800) {
-    const gapSpeedKmh = (distKm / (rawSecs / 3600));
-    const stepSpeedKmh = (distKm / (Math.min(stepSecs, 60) / 3600));
-    const effectiveGapKm = distKm >= 0.300 ? Math.round(distKm * 1.12 * 1000) / 1000 : distKm;
+    const stepSpeedKmh = (distKm / (Math.min(Math.max(stepSecs, 5), 60) / 3600));
+    const effectiveGapKm = distKm;
 
     const latDelta30 = Math.abs(curr.lat - prev.lat);
     const lngDelta30 = Math.abs(curr.lng - prev.lng);
-    const isSameAt30Min = distM < 38.0 || (latDelta30 < 0.000350 && lngDelta30 < 0.000350) || reportedSpeedKmh < 2.5;
+    const isSameAt30Min = distM < 38.0 || (latDelta30 < 0.000350 && lngDelta30 < 0.000350) || (reportedSpeedKmh < 2.5 && stepSpeedKmh < 3.0);
 
     if (isSameAt30Min) {
       // ⏱️ 30-MINUTE RESET: Reset baseline anchor to current coordinate without adding distance!
@@ -258,8 +253,8 @@ function validateSegment(prev, curr) {
       return { valid: false, distKm: 0, reanchorOnly: true };
     }
 
-    // Genuine movement after 30-min stop: requires both displacement >= 38m AND hardware speed >= 2.8 km/h
-    if (distM >= 38 && (reportedSpeedKmh >= 2.8 || stepSpeedKmh >= 2.8) && reportedAccuracy <= 300) {
+    // Genuine movement after 30-min stop: requires displacement >= 38m AND speed >= 2.8 km/h
+    if (distM >= 38 && (reportedSpeedKmh >= 2.8 || stepSpeedKmh >= 3.0) && reportedAccuracy <= 250) {
       _isConfirmedMoving = true;
       console.log(`📍 [STATIONARY_WAKEUP] Genuine movement resumed after ${(rawSecs / 60).toFixed(0)}m stop: +${(effectiveGapKm * 1000).toFixed(0)}m (speed: ${Math.max(reportedSpeedKmh, stepSpeedKmh).toFixed(1)} km/h)`);
       return { valid: true, distKm: effectiveGapKm };
@@ -282,13 +277,17 @@ function validateSegment(prev, curr) {
     return { valid: false, distKm: 0, effectiveSecs: effectiveTimeSecs };
   }
 
-  // ── Gate 4: Active Moving Step Acceptance ─────────────────────────
-  // Displacements >= 5.0m while in confirmed moving state are genuine road movement!
-  let effectiveDistKm = distKm;
-  if ((reportedSpeedKmh >= 8.0 || calcSpeedKmh >= 8.0) && distM >= 20.0) {
-    effectiveDistKm = Math.round(distKm * 1.04 * 1000) / 1000;
+  // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, No Inflation Multiplier) ──
+  // If speed is below walking threshold (< 2.5 km/h) AND displacement is under stationary breakout threshold (< 35m):
+  // THIS IS STOPPED JITTER (traffic light, customer visit, sitting at desk)! Strictly 0 KM!
+  const isLowSpeedStop = (reportedSpeedKmh < 2.5 && calcSpeedKmh < 2.8);
+  if (distM < 8.0 || (isLowSpeedStop && distM < 35.0)) {
+    if (rawSecs > 45) {
+      _isConfirmedMoving = false;
+    }
+    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 45 };
   }
-  return { valid: true, distKm: effectiveDistKm };
+  return { valid: true, distKm };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -642,6 +641,18 @@ const processLocationUnlocked = async (location) => {
               const updatedLocal = (currentLocal + calculatedDistKm).toFixed(2);
               await storage.setItem('tracking_accumulated_distance', updatedLocal);
               newCoord.screenDistanceKm = Math.max(newCoord.screenDistanceKm || 0, parseFloat(updatedLocal));
+
+              // Emit immediate local real-time distance event so UI updates instantly
+              DeviceEventEmitter.emit('LiveDistanceUpdated', {
+                sessionId,
+                totalDistance: parseFloat(updatedLocal),
+                stepDistKm: calculatedDistKm,
+                speed: newCoord.speed || 0,
+                motionState: newCoord.motionState || 'MOVING',
+                lat: newCoord.lat,
+                lng: newCoord.lng,
+                address: newCoord.address || '',
+              });
             }
             await storage.setItem('last_recorded_location', JSON.stringify({
               ...newCoord,
@@ -817,6 +828,17 @@ const processLocationUnlocked = async (location) => {
           storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
           storage.setItem('tracking_accumulated_distance', finalDist),
         ]);
+
+        DeviceEventEmitter.emit('LiveDistanceUpdated', {
+          sessionId,
+          totalDistance: finalNum,
+          sessionDistance: Number(response.data.sessionDistance ?? response.data.totalDistance ?? finalNum),
+          speed: (response.data?.motionState === 'STATIONARY') ? 0 : (newCoord.speed || 0),
+          motionState: response.data?.motionState || newCoord.motionState || 'STATIONARY',
+          lat: newCoord.lat,
+          lng: newCoord.lng,
+          address: newCoord.address || '',
+        });
 
         console.log(`📍 BackgroundTask: Server synced. Day Total: ${finalDist} km`);
 

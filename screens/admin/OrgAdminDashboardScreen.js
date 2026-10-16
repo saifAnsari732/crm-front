@@ -206,8 +206,7 @@ export default function OrgAdminDashboardScreen() {
       try {
         socket = await socketService.connect();
         if (socket) {
-          socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistanceToday ?? data.todayKm ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -430,7 +429,7 @@ export default function OrgAdminDashboardScreen() {
     const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0);
+    const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
 
     return {
       _id: empId,

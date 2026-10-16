@@ -179,7 +179,7 @@ export default function AdminMonitoringScreen() {
         socket = await socketService.connect();
         if (socket) {
           socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistanceToday ?? data.todayKm ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -195,6 +195,8 @@ export default function AdminMonitoringScreen() {
                   ...data,
                   employeeId: targetEmpId,
                   totalDistance: finalDist,
+                  totalDistanceToday: finalDist,
+                  todayKm: finalDist,
                   officialDistance: finalDist,
                   updatedAt: new Date().toISOString()
                 };
@@ -204,6 +206,8 @@ export default function AdminMonitoringScreen() {
                 ...data,
                 employeeId: targetEmpId,
                 totalDistance: incomingDist,
+                totalDistanceToday: incomingDist,
+                todayKm: incomingDist,
                 officialDistance: incomingDist,
                 updatedAt: new Date().toISOString()
               }];
@@ -213,7 +217,7 @@ export default function AdminMonitoringScreen() {
             setEmployees((prev) =>
               prev.map((e) => {
                 if (String(e._id) === String(data.employeeId)) {
-                  const existingEmpDist = Number(e.totalDistance || e.totalDistanceToday || 0);
+                  const existingEmpDist = Number(e.officialDistance || e.totalDistance || e.totalDistanceToday || e.todayKm || 0);
                   const finalEmpDist = incomingDist > 0 ? incomingDist : existingEmpDist;
                   return {
                     ...e,
@@ -222,15 +226,40 @@ export default function AdminMonitoringScreen() {
                     lat: data.lat,
                     lng: data.lng,
                     speed: data.speed,
+                    motionState: data.motionState,
                     currentAddress: data.address || e.currentAddress,
                     totalDistance: finalEmpDist,
                     totalDistanceToday: finalEmpDist,
+                    todayKm: finalEmpDist.toFixed(1),
                     lastPing: new Date().toISOString(),
                   };
                 }
                 return e;
               })
             );
+
+            // Also update selectedEmp if currently viewed in detail modal
+            setSelectedEmp((cur) => {
+              if (cur && String(cur._id) === String(data.employeeId)) {
+                const existingDist = Number(cur.totalDistance || cur.totalDistanceToday || cur.todayKm || 0);
+                const finalDist = Math.max(existingDist, incomingDist);
+                return {
+                  ...cur,
+                  isTracking: true,
+                  isLive: true,
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: data.speed,
+                  motionState: data.motionState,
+                  currentAddress: data.address || cur.currentAddress,
+                  totalDistance: finalDist,
+                  totalDistanceToday: finalDist,
+                  todayKm: finalDist.toFixed(1),
+                  lastPing: new Date().toISOString(),
+                };
+              }
+              return cur;
+            });
           });
 
           socket.on('employee_tracking_started', () => fetchData(true));

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, RefreshControl, StatusBar,
-  Dimensions, Modal, Linking, Image, Alert, AppState
+  Dimensions, Modal, Linking, Image, Alert, AppState, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface } from 'react-native-paper';
@@ -448,8 +448,7 @@ export default function ManagerDashboardScreen() {
       try {
         socket = await socketService.connect();
         if (socket) {
-          socket.on('employee_location', (data) => {
-            const incomingDist = Number(data.officialDistance ?? data.totalDistance ?? data.sessionDistance ?? 0);
+            const incomingDist = Number(data.officialDistance ?? data.totalDistanceToday ?? data.todayKm ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
               const idx = prev.findIndex((l) => {
@@ -595,9 +594,30 @@ export default function ManagerDashboardScreen() {
       }
     };
 
+    let liveDistSub = null;
+
     if (isTracking) {
       loadLocalCachedDistance().then(() => {
         syncDistanceWithBackend();
+      });
+
+      liveDistSub = DeviceEventEmitter.addListener('LiveDistanceUpdated', (data) => {
+        if (!data) return;
+        const incomingKm = parseFloat(data.totalDistance);
+        if (!isNaN(incomingKm) && incomingKm >= 0) {
+          totalDistanceRef.current = incomingKm;
+          const distStr = incomingKm.toFixed(2);
+          setLocalKmState(distStr);
+          setManagerKm(distStr);
+        }
+        if (data.speed !== undefined) {
+          setManagerSpeed(String(Math.round((data.speed || 0) * 3.6)));
+        }
+        if (data.motionState) {
+          setMotionStatusLabel(data.motionState);
+          setIsMoving(data.motionState !== 'STATIONARY');
+          isMovingRef.current = data.motionState !== 'STATIONARY';
+        }
       });
 
       // 15-second polling interval for distance reconciliation
@@ -615,6 +635,7 @@ export default function ManagerDashboardScreen() {
     }
 
     return () => {
+      if (liveDistSub) liveDistSub.remove();
       if (appStateSubscription) appStateSubscription.remove();
       if (syncInterval) clearInterval(syncInterval);
     };
@@ -706,14 +727,6 @@ export default function ManagerDashboardScreen() {
                     setMotionStatusLabel('MOVING');
                     setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
 
-                    const departureDistKm = distFromAnchorM / 1000;
-                    if (departureDistKm > 0.030 && departureDistKm < 0.25) {
-                      totalDistanceRef.current += departureDistKm;
-                      const newTotalStr = totalDistanceRef.current.toFixed(2);
-                      setLocalKmState(newTotalStr);
-                      setManagerKm(newTotalStr);
-                    }
-
                     lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                     stationaryAnchorRef.current = { lat, lng };
                   }
@@ -737,15 +750,6 @@ export default function ManagerDashboardScreen() {
                   setIsMoving(true);
                   setMotionStatusLabel('MOVING');
                   setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
-
-                  // Micro-step filter: require at least 6.0m displacement between fixes to eliminate micro-jitter
-                  if (distFromLastM >= 6.0 && calculatedSpeedKmh < 160) {
-                    const addedKm = distFromLastM / 1000;
-                    totalDistanceRef.current += addedKm;
-                    const newTotalStr = totalDistanceRef.current.toFixed(2);
-                    setLocalKmState(newTotalStr);
-                    setManagerKm(newTotalStr);
-                  }
 
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                   stationaryAnchorRef.current = { lat, lng };
@@ -920,7 +924,7 @@ export default function ManagerDashboardScreen() {
     const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0);
+    const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
 
     return {
       _id: empId,

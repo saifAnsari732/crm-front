@@ -79,14 +79,45 @@ export default function useLocationTracker() {
   // Re-sync tracking state immediately whenever screen/tab gains focus
   useFocusEffect(
     useCallback(() => {
-      storage.getItem('currentTrackingSessionId').then((sid) => {
-        const active = Boolean(sid);
-        if (_globalIsTracking !== active) {
-          _globalIsTracking = active;
-          DeviceEventEmitter.emit('TrackingStateChanged', active);
-        }
-        setIsTracking(active);
-      }).catch(() => {});
+      const resolveActiveState = async () => {
+        try {
+          const sid = await storage.getItem('currentTrackingSessionId');
+          const isTrackingActive = await storage.getItem('isTrackingActive');
+          const manualOut = await storage.getItem('user_manually_punched_out');
+          
+          if (manualOut === 'true') {
+            if (_globalIsTracking) {
+              _globalIsTracking = false;
+              setIsTracking(false);
+              DeviceEventEmitter.emit('TrackingStateChanged', false);
+            }
+            return;
+          }
+
+          let active = Boolean(sid);
+          if (!active && isTrackingActive === 'true') {
+            active = true;
+          }
+
+          if (!active && Platform.OS !== 'web' && !isExpoGo) {
+            const isBgRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+            if (isBgRunning) {
+              active = true;
+            }
+          }
+
+          if (_globalIsTracking !== active) {
+            _globalIsTracking = active;
+            DeviceEventEmitter.emit('TrackingStateChanged', active);
+          }
+          setIsTracking(active);
+
+          if (active) {
+            checkActiveSession().catch(() => {});
+          }
+        } catch (_) {}
+      };
+      resolveActiveState();
     }, [])
   );
 
@@ -135,7 +166,7 @@ export default function useLocationTracker() {
       }
     });
 
-    // ─── SINGLETON IMMORTAL TRACKING WATCHDOG (Fires every 15s) ───────────
+    // ─── SINGLETON IMMORTAL TRACKING WATCHDOG (Fires every 6s) ───────────
     // Multi-screen guard: ensures only ONE global timer runs across all screens
     _watchdogSubscribers++;
     if (!_globalWatchdogInterval) {
@@ -153,14 +184,27 @@ export default function useLocationTracker() {
             if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
               console.log(`🔄 Watchdog: Tracking health state [${health}]. Triggering safe recovery...`);
               await safeRecoverLocation(health);
-            } else if (health === 'DEGRADED' && Platform.OS !== 'web' && !isExpoGo) {
-              // If OS background task hasn't delivered a fix in >30s, actively poll hardware GPS and feed to processor
-              Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, maximumAge: 5000 })
+            }
+
+            // Real-time foreground / background position feed:
+            // If more than 5s since last GPS received (or on Web/Expo Go where background task doesn't run),
+            // actively poll fresh position and feed to processLocation so KM updates live on every screen!
+            const lastGps = Number(await storage.getItem('last_gps_received_at')) || 0;
+            const gpsIdleMs = Date.now() - lastGps;
+            if (gpsIdleMs >= 5000) {
+              Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.High,
+                maximumAge: 3000
+              })
+                .catch(() => Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }))
                 .then((pos) => {
                   if (pos && pos.coords) {
                     const locationTaskModule = require('../services/locationTask');
                     if (locationTaskModule && typeof locationTaskModule.processLocation === 'function') {
-                      locationTaskModule.processLocation(pos).catch(() => {});
+                      locationTaskModule.processLocation({
+                        ...pos,
+                        coords: { ...pos.coords, screenCaptured: true }
+                      }).catch(() => {});
                     }
                   }
                 })
@@ -168,7 +212,7 @@ export default function useLocationTracker() {
             }
           }
         } catch (_) {}
-      }, 15000);
+      }, 6000);
     }
     
     return () => {
@@ -202,6 +246,10 @@ export default function useLocationTracker() {
               await storage.removeItem('trackingStartTime');
               await storage.removeItem('tracking_accumulated_distance');
               await storage.setItem('isTrackingActive', 'false');
+              if (Platform.OS !== 'web' && !isExpoGo) {
+                Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+              }
+              stopHeartbeat();
               activeSession = null;
             }
           } catch (_) {}
@@ -221,7 +269,7 @@ export default function useLocationTracker() {
       // query server to re-attach to active shift
       if (!activeSession && Platform.OS !== 'web') {
         try {
-          const userToken = await storage.getItem('userToken');
+          const userToken = await storage.getItem('userToken') || await storage.getItem('token');
           if (userToken) {
             const todayRes = await trackingApi.getTodaySessions();
             if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
@@ -250,6 +298,17 @@ export default function useLocationTracker() {
         await storage.removeItem('user_manually_punched_out');
         await storage.setItem('isTrackingActive', 'true');
         syncGlobalTrackingState(true);
+      } else if (Platform.OS !== 'web' && !isExpoGo) {
+        // If Android OS background tracking is running with active notification, adopt active state!
+        const isBgRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+        const isTrackingActive = await storage.getItem('isTrackingActive');
+        const accumulatedSid = await storage.getItem('tracking_accumulated_session_id');
+        if (isBgRunning && (isTrackingActive === 'true' || accumulatedSid)) {
+          activeSession = accumulatedSid || 'AUTO_RECOVER_SESSION';
+          await storage.setItem('currentTrackingSessionId', activeSession);
+          await storage.setItem('isTrackingActive', 'true');
+          syncGlobalTrackingState(true);
+        }
       }
 
       if (!activeSession) {

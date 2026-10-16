@@ -14,6 +14,7 @@ import {
   Calendar, Award, TrendingUp, ArrowUpRight
 } from 'lucide-react-native';
 import { adminAPI, getAvatarUrl, trackingAPI } from '../../services/api';
+import socketService from '../../services/socket';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -105,6 +106,86 @@ export default function AdminTeamScreen() {
 
   useEffect(() => {
     fetchEmployees();
+
+    let socket;
+    socketService.connect().then((sock) => {
+      if (!sock) return;
+      socket = sock;
+      socket.on('employee_location', (data) => {
+        if (!data) return;
+        const incomingDist = Number(data.totalDistanceToday ?? data.todayKm ?? data.totalDistance ?? data.sessionDistance ?? 0);
+        const targetEmpId = String(data.employeeId || '');
+
+        setLiveLocations((prev) => {
+          const idx = prev.findIndex((l) => {
+            const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
+            return (targetEmpId && lEmpId === targetEmpId) || (l.sessionId && data.sessionId && l.sessionId === data.sessionId);
+          });
+          if (idx > -1) {
+            const upd = [...prev];
+            const existingDist = Number(upd[idx].totalDistance || upd[idx].officialDistance || 0);
+            const finalDist = Math.max(existingDist, incomingDist);
+            upd[idx] = {
+              ...upd[idx],
+              lat: data.lat,
+              lng: data.lng,
+              speed: data.speed,
+              motionState: data.motionState,
+              totalDistance: finalDist,
+              totalDistanceToday: finalDist,
+              todayKm: finalDist,
+              officialDistance: finalDist,
+              address: data.address || upd[idx].address,
+              updatedAt: new Date().toISOString()
+            };
+            return upd;
+          }
+          return [...prev, {
+            ...data,
+            employeeId: targetEmpId,
+            totalDistance: incomingDist,
+            totalDistanceToday: incomingDist,
+            todayKm: incomingDist,
+            officialDistance: incomingDist,
+            updatedAt: new Date().toISOString()
+          }];
+        });
+
+        setEmployees((prev) =>
+          prev.map((e) => {
+            if (String(e._id) === targetEmpId) {
+              const existingEmpDist = Number(e.totalDistance || e.todayKm || 0);
+              const finalEmpDist = Math.max(existingEmpDist, incomingDist);
+              return {
+                ...e,
+                isTracking: true,
+                isLive: true,
+                lat: data.lat,
+                lng: data.lng,
+                speed: data.speed,
+                currentAddress: data.address || e.currentAddress,
+                totalDistance: finalEmpDist,
+                totalDistanceToday: finalEmpDist,
+                todayKm: finalEmpDist.toFixed(1),
+                lastPing: new Date().toISOString(),
+              };
+            }
+            return e;
+          })
+        );
+      });
+    }).catch(() => {});
+
+    const pollTimer = setInterval(() => {
+      fetchEmployees();
+    }, 12000);
+
+    return () => {
+      if (socket) {
+        socket.off('employee_location');
+      }
+      clearInterval(pollTimer);
+    };
   }, [fetchEmployees]);
 
   const onRefresh = async () => {
@@ -223,10 +304,16 @@ export default function AdminTeamScreen() {
       ...emp,
       isLive,
       isIdle,
-      isPunchedIn,
-      distanceToday: (liveLoc?.officialDistance != null || liveLoc?.totalDistance != null || emp.todayKm != null || emp.totalDistanceToday != null || emp.totalDistance != null)
-        ? Number(liveLoc?.officialDistance || liveLoc?.totalDistance || emp.todayKm || emp.totalDistanceToday || emp.totalDistance || 0).toFixed(1)
-        : '0.0',
+      distanceToday: Number(
+        liveLoc?.officialDistance ??
+        liveLoc?.totalDistanceToday ??
+        liveLoc?.todayKm ??
+        liveLoc?.totalDistance ??
+        emp.todayKm ??
+        emp.totalDistanceToday ??
+        emp.totalDistance ??
+        0
+      ).toFixed(1),
       currentLocation: liveLoc?.address || emp.location || (isLive ? 'Active On Field' : 'Offline / Idle'),
       punchInTime: emp.punchInTime || (liveLoc?.startTime ? new Date(liveLoc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),
       punchOutTime: emp.punchOutTime || (liveLoc?.endTime ? new Date(liveLoc.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),

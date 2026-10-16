@@ -16,7 +16,7 @@ import axios from 'axios';
 import { BASE_URL } from './api';
 import { storage } from './storage';
 import NetInfo from '@react-native-community/netinfo';
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 import Constants from 'expo-constants';
 
 export const OFFLINE_SYNC_TASK = 'OFFLINE_SYNC_TASK';
@@ -256,6 +256,13 @@ async function flushOfflineQueueUnlocked() {
           const prevCached = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
           if (serverDistance >= prevCached) {
             await storage.setItem('tracking_accumulated_distance', serverDistance.toFixed(2));
+            DeviceEventEmitter.emit('LiveDistanceUpdated', {
+              sessionId: itemSessionId,
+              totalDistance: serverDistance,
+              sessionDistance: Number(response.data?.sessionDistance ?? serverDistance),
+              speed: Number(response.data?.speed || 0),
+              motionState: response.data?.motionState || 'MOVING',
+            });
           }
         }
         delete retryCounts[item.id];

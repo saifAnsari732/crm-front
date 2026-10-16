@@ -108,7 +108,7 @@ export default function AdminHistoryScreen() {
         });
       }
       const row = grouped.get(id);
-      row.totalKm += normalizeKm(session.totalDistance) + normalizeKm(session.totalKm);
+      row.totalKm += normalizeKm(session.totalDistance ?? session.officialDistance ?? session.totalKm);
       row.sessions += 1;
       if (session.sessionId || session._id) row.sessionIds.push(session.sessionId || session._id);
       if (!row.firstStart || session.startTime < row.firstStart) row.firstStart = session.startTime;

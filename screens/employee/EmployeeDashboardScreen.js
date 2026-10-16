@@ -12,7 +12,8 @@ import {
   Modal,
   Image,
   StatusBar,
-  Linking
+  Linking,
+  DeviceEventEmitter
 } from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { Text, Surface } from "react-native-paper";
@@ -211,16 +212,29 @@ export default function EmployeeDashboardScreen() {
   useEffect(() => {
     let activeSock = null;
     let pollTimer = null;
+    let liveDistSub = null;
 
     if (isTracking) {
       syncLocalDistance();
+
+      // Listen to immediate local and synced distance events from locationTask
+      liveDistSub = DeviceEventEmitter.addListener('LiveDistanceUpdated', (data) => {
+        if (!data) return;
+        const incomingKm = parseFloat(data.totalDistance);
+        if (!isNaN(incomingKm) && incomingKm >= 0) {
+          setStats((prev) => ({
+            ...prev,
+            distanceToday: Math.max(parseFloat(prev?.distanceToday || 0), incomingKm).toFixed(2),
+          }));
+        }
+      });
 
       socketService.connect().then((sock) => {
         if (!sock) return;
         activeSock = sock;
         activeSock.on('employee_location', (payload) => {
           if (!payload) return;
-          const incomingKm = parseFloat(payload.officialDistance ?? payload.sessionDistance ?? payload.totalDistance);
+          const incomingKm = parseFloat(payload.officialDistance ?? payload.totalDistanceToday ?? payload.todayKm ?? payload.totalDistance ?? payload.sessionDistance);
           if (!isNaN(incomingKm) && incomingKm >= 0) {
             setStats((prev) => ({
               ...prev,
@@ -232,10 +246,14 @@ export default function EmployeeDashboardScreen() {
 
       pollTimer = setInterval(() => {
         syncLocalDistance();
-      }, 5000);
+        loadDashboardData();
+      }, 8000);
     }
 
     return () => {
+      if (liveDistSub) {
+        liveDistSub.remove();
+      }
       if (activeSock) {
         activeSock.off('employee_location');
       }
