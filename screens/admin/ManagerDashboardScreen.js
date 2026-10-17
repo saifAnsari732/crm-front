@@ -448,6 +448,7 @@ export default function ManagerDashboardScreen() {
       try {
         socket = await socketService.connect();
         if (socket) {
+          socket.on('employee_location', (data) => {
             const incomingDist = Number(data.officialDistance ?? data.totalDistanceToday ?? data.todayKm ?? data.totalDistance ?? data.sessionDistance ?? 0);
             setLiveLocations((prev) => {
               const targetEmpId = String(data.employeeId || '');
