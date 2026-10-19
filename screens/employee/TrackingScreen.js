@@ -245,9 +245,9 @@ export default function ActiveShiftMapScreen() {
         return;
       }
 
-      let activeSessionId = await storage.getItem('currentTrackingSessionId');
-      if (!activeSessionId) {
-        activeSessionId = 'AUTO_RECOVER_SESSION';
+      const activeSessionId = await storage.getItem('currentTrackingSessionId');
+      if (!activeSessionId || activeSessionId === 'AUTO_RECOVER_SESSION') {
+        return;
       }
 
       const batchToSend = [...screenOutboxRef.current];
@@ -261,7 +261,12 @@ export default function ActiveShiftMapScreen() {
       });
 
       if (res?.data?.success) {
-        if (res.data.sessionId && (activeSessionId === 'AUTO_RECOVER_SESSION' || res.data.sessionId !== activeSessionId)) {
+        if (res.data.sessionClosed === true) {
+          screenOutboxRef.current = [];
+          await storage.removeItem('tracking_screen_coord_outbox').catch(() => {});
+          return;
+        }
+        if (res.data.sessionId && res.data.sessionId !== activeSessionId) {
           await storage.setItem('currentTrackingSessionId', res.data.sessionId).catch(() => {});
           await storage.setItem('tracking_accumulated_session_id', res.data.sessionId).catch(() => {});
           await storage.setItem('isTrackingActive', 'true').catch(() => {});
@@ -364,7 +369,7 @@ export default function ActiveShiftMapScreen() {
             await storage.removeItem('user_manually_punched_out');
           }
 
-          let backendDistance = parseFloat(activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0;
+          let backendDistance = parseFloat(activeSession?.exactDistance ?? activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0;
           let currentLocal = totalDistanceRef.current || 0.0;
 
           // Straight Gap check without artificial multiplier:
@@ -378,14 +383,18 @@ export default function ActiveShiftMapScreen() {
             }
           }
 
-          // Synchronized Distance: Prioritize authoritative backend distance
-          const synchronizedDistance = backendDistance > 0 ? backendDistance : currentLocal;
+          // Synchronized Distance: Preserve 5-decimal precision within 25m rounding window, otherwise trust authoritative backend distance
+          let synchronizedDistance = currentLocal;
+          if (backendDistance > 0) {
+            synchronizedDistance = Math.abs(currentLocal - backendDistance) <= 0.025
+              ? Math.max(currentLocal, backendDistance)
+              : backendDistance;
+          }
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
-          const distStr = synchronizedDistance.toFixed(2);
-          setDistance(distStr);
-          await storage.setItem('tracking_accumulated_distance', distStr);
+          setDistance(synchronizedDistance.toFixed(2));
+          await storage.setItem('tracking_accumulated_distance', Number(synchronizedDistance.toFixed(5)).toString());
         }
       } catch (err) {
         console.log('📍 Tracking Screen: Failed to sync distance with backend:', err);
@@ -407,16 +416,24 @@ export default function ActiveShiftMapScreen() {
         if (!data) return;
         const incomingKm = parseFloat(data.totalDistance);
         if (!isNaN(incomingKm) && incomingKm >= 0) {
-          totalDistanceRef.current = incomingKm;
-          setDistance(incomingKm.toFixed(2));
+          totalDistanceRef.current = Math.max(totalDistanceRef.current || 0, incomingKm);
+          setDistance(totalDistanceRef.current.toFixed(2));
         }
         if (data.speed !== undefined) {
           setSpeed(String(Math.round((data.speed || 0) * 3.6)));
         }
         if (data.motionState) {
           setMotionStatusLabel(data.motionState);
-          setIsMoving(data.motionState !== 'STATIONARY');
-          isMovingRef.current = data.motionState !== 'STATIONARY';
+          const movingNow = data.isMoving !== undefined ? Boolean(data.isMoving) : (data.motionState !== 'STATIONARY');
+          setIsMoving(movingNow);
+          isMovingRef.current = movingNow;
+        }
+        if (data.stepDistKm > 0 && Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lng))) {
+          setRouteCoords((previous) => cleanTrackingRoute([...previous, {
+            latitude: Number(data.lat),
+            longitude: Number(data.lng),
+            timestamp: Date.now(),
+          }]).slice(-600));
         }
         if (data.address && !lastGeocodedAddressRef.current) {
           setAddress(data.address);
@@ -428,16 +445,21 @@ export default function ActiveShiftMapScreen() {
         if (!sock) return;
         activeSocket = sock;
         activeSocket.on('employee_location', (payload) => {
-          const incomingKm = Number.isFinite(Number(payload.officialDistance))
-            ? Number(payload.officialDistance)
-            : (Number.isFinite(Number(payload.sessionDistance))
-                ? Number(payload.sessionDistance)
-                : parseFloat(payload.totalDistance));
+          const incomingKm = Number.isFinite(Number(payload.exactTotalDistance))
+            ? Number(payload.exactTotalDistance)
+            : (Number.isFinite(Number(payload.officialDistance))
+                ? Number(payload.officialDistance)
+                : (Number.isFinite(Number(payload.sessionDistance))
+                    ? Number(payload.sessionDistance)
+                    : parseFloat(payload.totalDistance)));
           if (!isNaN(incomingKm) && incomingKm >= 0) {
-            const newKm = incomingKm > 0 ? incomingKm : (totalDistanceRef.current || 0);
+            const curLocal = totalDistanceRef.current || 0;
+            const newKm = incomingKm > 0
+              ? (Math.abs(curLocal - incomingKm) <= 0.025 ? Math.max(curLocal, incomingKm) : incomingKm)
+              : curLocal;
             totalDistanceRef.current = newKm;
             setDistance(newKm.toFixed(2));
-            storage.setItem('tracking_accumulated_distance', newKm.toFixed(2)).catch(() => {});
+            storage.setItem('tracking_accumulated_distance', Number(newKm.toFixed(5)).toString()).catch(() => {});
           }
           if (payload.speed !== undefined) {
             setSpeed(String(payload.speed));
@@ -700,8 +722,7 @@ export default function ActiveShiftMapScreen() {
 
               if (!isMovingRef.current) {
                 // 🛑 CURRENT STATE: STATIONARY (Employee is stopped at desk, home, or office)
-                // True stationary check: within 25m of anchor AND speed < 3.0 km/h:
-                const isWithinStationarySpot = distFromAnchorM < 25.0 && rawSpeedKmh < 3.0 && calculatedSpeedKmh < 3.0;
+                const isWithinStationarySpot = distFromAnchorM < 14.0 && rawSpeedKmh < 2.0 && calculatedSpeedKmh < 2.0;
 
                 if (isWithinStationarySpot) {
                   // Inside stationary spot: Zero distance added!
@@ -709,51 +730,87 @@ export default function ActiveShiftMapScreen() {
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
-                  departureBufferRef.current = [];
+                  if (distFromAnchorM < 10.0) {
+                    departureBufferRef.current = [];
+                  }
                   lastCoordRef.current = { lat, lng };
-                } else if ((distFromAnchorM >= 25.0 && (rawSpeedKmh >= 3.0 || calculatedSpeedKmh >= 3.0)) || distFromAnchorM >= 35.0) {
-                  // 🚗 DEPARTURE CONFIRMED: Employee stepped out or started riding/driving!
-                  isMovingRef.current = true;
-                  didConfirmStep = true;
-                  setIsMoving(true);
-                  setMotionStatusLabel('MOVING');
+                } else {
+                  let departureConfirmed = false;
+                  const effectiveMoveSpeed = Math.max(rawSpeedKmh, calculatedSpeedKmh);
+                  if (distFromAnchorM >= 16.0 && effectiveMoveSpeed >= 2.2 && (Number(acc) || 25) <= 85) {
+                    departureConfirmed = true;
+                  } else if (distFromAnchorM >= 14.0 && (Number(acc) || 25) <= 140) {
+                    const firstCand = departureBufferRef.current.length > 0 ? departureBufferRef.current[0] : null;
+                    if (!firstCand || (fixTsMs - firstCand.ts) > 120000) {
+                      departureBufferRef.current = [{ lat, lng, distM: distFromAnchorM, ts: fixTsMs }];
+                    } else {
+                      const stepFromCandM = haversineMeters(firstCand.lat, firstCand.lng, lat, lng);
+                      if (distFromAnchorM >= 18.0 && stepFromCandM >= 5.0 && distFromAnchorM >= firstCand.distM + 3.0) {
+                        departureConfirmed = true;
+                      } else if (distFromAnchorM < 10.0 || distFromAnchorM < firstCand.distM - 5.0) {
+                        departureBufferRef.current = [];
+                      }
+                    }
+                  }
 
-                  const travelSpeedKmh = Math.max(rawSpeedKmh, Math.round(calculatedSpeedKmh), 3);
-                  setSpeed(Math.min(travelSpeedKmh, 120).toString());
+                  if (departureConfirmed) {
+                    // 🚗 DEPARTURE CONFIRMED: Employee stepped out or started riding/driving!
+                    isMovingRef.current = true;
+                    didConfirmStep = true;
+                    setIsMoving(true);
+                    setMotionStatusLabel('MOVING');
 
-                  stationaryAnchorRef.current = { lat, lng };
-                  lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
-                  departureBufferRef.current = [];
+                    const travelSpeedKmh = Math.max(rawSpeedKmh, Math.min(Math.round(calculatedSpeedKmh), 60), 4);
+                    setSpeed(Math.min(travelSpeedKmh, 120).toString());
 
-                  setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-                    latitude: lat,
-                    longitude: lng,
-                    timestamp: fixTsMs,
-                  }]).slice(-600));
+                    // Add departure distance locally for instant, fluid UI response:
+                    const departureDistanceKm = distFromAnchorM / 1000;
+                    if (departureDistanceKm >= 0.015 && departureDistanceKm <= 10.0) {
+                      totalDistanceRef.current += departureDistanceKm;
+                      const dStr = totalDistanceRef.current.toFixed(2);
+                      setDistance(dStr);
+                      storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
+                      console.log(`📍 TrackingScreen: Movement departure confirmed! +${departureDistanceKm.toFixed(3)} km, total: ${dStr} km`);
+                    }
+
+                    stationaryAnchorRef.current = { lat, lng };
+                    lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                    departureBufferRef.current = [];
+                  }
                 }
               } else {
                 // 🚗 CURRENT STATE: MOVING ON ROAD
-                // Transition back to STATIONARY if stop >= 45s with zero movement
-                if (rawSpeedKmh < 1.5 && distFromLastM < 8.0 && timeDiffSecs >= 45.0) {
-                  isMovingRef.current = false;
-                  setIsMoving(false);
-                  setMotionStatusLabel('STATIONARY');
-                  setSpeed('0');
-                  stationaryAnchorRef.current = { lat, lng };
-                  lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
-                  departureBufferRef.current = [];
-                  baselineCoordRef.current = {
-                    lat,
-                    lng,
-                    updatedAt: fixTsMs,
-                    lastVerifiedAt: fixTsMs,
-                    isSame: true,
-                  };
-                } else if (distFromLastM >= 8.0 && distFromLastM <= 2500) {
+                // Transition back to STATIONARY if prolonged stop (>= 60s) with displacement < 6m and speed < 1.8 km/h
+                const isLowSpeedDrift = rawSpeedKmh < 1.8 && calculatedSpeedKmh < 1.8 && distFromLastM < 6.0;
+                if (isLowSpeedDrift) {
+                  if (timeDiffSecs >= 60.0) {
+                    isMovingRef.current = false;
+                    setIsMoving(false);
+                    setMotionStatusLabel('STATIONARY');
+                    setSpeed('0');
+                    stationaryAnchorRef.current = { lat, lng };
+                    lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
+                    departureBufferRef.current = [];
+                    baselineCoordRef.current = {
+                      lat,
+                      lng,
+                      updatedAt: fixTsMs,
+                      lastVerifiedAt: fixTsMs,
+                      isSame: true,
+                    };
+                  }
+                } else if (distFromLastM >= 5.0 && distFromLastM <= 2500) {
                   if (calculatedSpeedKmh <= 160.0) {
                     didConfirmStep = true;
-                    const travelSpeedKmh = Math.max(rawSpeedKmh, Math.round(calculatedSpeedKmh));
-                    setSpeed(Math.max(3, Math.round(Math.min(travelSpeedKmh, 120))).toString());
+                    const travelSpeedKmh = rawSpeedKmh >= 2.0 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);
+                    setSpeed(Math.max(2, Math.round(Math.min(travelSpeedKmh, 120))).toString());
+
+                    // Instant fluid step accumulation (Pure Haversine, 0 artificial multipliers)
+                    const addedKm = distFromLastM / 1000;
+                    totalDistanceRef.current += addedKm;
+                    const dStr = totalDistanceRef.current.toFixed(2);
+                    setDistance(dStr);
+                    storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
 
                     stationaryAnchorRef.current = { lat, lng };
                     lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
@@ -767,17 +824,17 @@ export default function ActiveShiftMapScreen() {
                 } else if (distFromLastM > 2500 && (calculatedSpeedKmh <= 160.0 || timeDiffSecs >= 90.0)) {
                   // Highway step
                   didConfirmStep = true;
-                  const travelSpeedKmh = Math.max(rawSpeedKmh, Math.round(calculatedSpeedKmh));
+                  const travelSpeedKmh = rawSpeedKmh >= 2.5 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);
                   setSpeed(Math.max(15, Math.min(travelSpeedKmh, 100)).toString());
+
+                  const addedKm = distFromLastM / 1000;
+                  totalDistanceRef.current += addedKm;
+                  const dStr = totalDistanceRef.current.toFixed(2);
+                  setDistance(dStr);
+                  storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
 
                   stationaryAnchorRef.current = { lat, lng };
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
-
-                  setRouteCoords((previous) => cleanTrackingRoute([...previous, {
-                    latitude: lat,
-                    longitude: lng,
-                    timestamp: fixTsMs,
-                  }]).slice(-600));
                 }
               }
             }
@@ -860,58 +917,49 @@ export default function ActiveShiftMapScreen() {
             // Sync GPS heartbeat timestamp so watchdog knows foreground is actively receiving fixes
             storage.setItem('last_gps_received_at', String(Date.now())).catch(() => {});
 
-            // 1. Feed screen GPS fix + Actual Address + Screen Moving state into background location processor FIRST (mutex-locked)
+            // 1. Feed screen GPS fix + Actual Address into unified locationTask processor (single source of truth, mutex-locked)
             if (resolvedActualAddress) {
               position.coords.address = resolvedActualAddress;
               storage.setItem('last_actual_address', resolvedActualAddress).catch(() => {});
             }
             position.coords.screenCaptured = true;
             position.coords.screenMoving = isMovingRef.current;
-            position.coords.screenDistanceKm = Number((totalDistanceRef.current || 0).toFixed(3));
+            position.coords.screenDistanceKm = Number((totalDistanceRef.current || 0).toFixed(5));
 
             await processLocation(position).catch(() => {});
 
-            // 2. 📡 GUARANTEED ZERO-DROP SCREEN-TO-SERVER OUTBOX RELAY (SEQUENTIAL FALLBACK):
-            // Works even if currentTrackingSessionId is missing (uses AUTO_RECOVER_SESSION) and retries via screenOutboxRef + offlineSync!
+            // 2. 📡 FALLBACK KEEP-ALIVE RELAY (Only if locationTask did not upload this eventId and 60s elapsed or initial fix):
             try {
-              const activeSessionId = (await storage.getItem('currentTrackingSessionId')) || 'AUTO_RECOVER_SESSION';
+              const activeSessionId = await storage.getItem('currentTrackingSessionId');
+              if (!activeSessionId || activeSessionId === 'AUTO_RECOVER_SESSION') return;
               const expectedEventId = `${activeSessionId}:${fixTsMs}:${rawLat.toFixed(6)}:${rawLng.toFixed(6)}`;
               const lastUploadedEventId = await storage.getItem('last_server_upload_event_id');
 
               const prevPush = lastScreenServerPushRef.current;
-              const distFromLastPushM = prevPush.lat
-                ? haversineMeters(prevPush.lat, prevPush.lng, rawLat, rawLng)
-                : 999;
-              const addressJustUpdated = Boolean(resolvedActualAddress && resolvedActualAddress !== prevPush.address);
               const elapsedSincePushMs = Date.now() - (prevPush.ts || 0);
 
               if (
                 lastUploadedEventId !== expectedEventId &&
-                (
-                  isInitialScreenFix ||
-                  didConfirmStep ||
-                  (isMovingRef.current && (distFromLastPushM >= 8.0 || elapsedSincePushMs >= 5000)) ||
-                  (addressJustUpdated && elapsedSincePushMs >= 15000) ||
-                  elapsedSincePushMs >= 60000
-                )
+                (isInitialScreenFix || elapsedSincePushMs >= 60000)
               ) {
-                const effectiveMps = isMovingRef.current ? Math.max(Number(mps) || 0, 1.4) : 0;
-                const displayLat = Number(lat.toFixed(6));
-                const displayLng = Number(lng.toFixed(6));
+                // Strictly preserve real hardware GNSS speed (never fabricate 1.4 m/s!) and raw coordinates
+                const rawMps = Number.isFinite(mps) && mps >= 0 ? mps : 0;
+                const displayLat = Number(rawLat.toFixed(6));
+                const displayLng = Number(rawLng.toFixed(6));
                 const screenCoordPayload = {
                   eventId: expectedEventId,
                   lat: displayLat,
                   lng: displayLng,
-                  speed: effectiveMps,
-                  accuracy: Math.min(Number.isFinite(acc) && acc > 0 ? acc : 15, 45),
+                  speed: rawMps,
+                  accuracy: Number.isFinite(acc) && acc > 0 ? acc : 20,
                   heading: Number(position.coords?.heading) || 0,
                   mocked: Boolean(position.mocked || position.coords?.isMocked),
                   timestamp: new Date(fixTsMs).toISOString(),
                   address: resolvedActualAddress,
-                  motionState: isMovingRef.current ? (effectiveMps >= 3.0 ? 'VEHICLE' : 'WALKING') : 'STATIONARY',
+                  motionState: isMovingRef.current ? (rawMps >= 3.0 ? 'VEHICLE' : 'WALKING') : 'STATIONARY',
                   screenCaptured: true,
                   screenMoving: isMovingRef.current,
-                  screenDistanceKm: Number((totalDistanceRef.current || 0).toFixed(3)),
+                  screenDistanceKm: Number((totalDistanceRef.current || 0).toFixed(5)),
                 };
 
                 lastScreenServerPushRef.current = {

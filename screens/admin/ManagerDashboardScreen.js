@@ -12,7 +12,7 @@ import * as Location from 'expo-location';
 import {
   Menu, Bell, MapPin, Users, UserCheck, Navigation, Clock,
   ClipboardList, UserMinus, ChevronRight, Phone, Mail, Briefcase,
-  DollarSign, X, MessageSquare, ShieldCheck, ArrowRight, Compass,
+  DollarSign, X, MessageSquare, MessageCircle, Activity, Battery, ShieldCheck, ArrowRight, Compass,
   Route, CheckCircle2, AlertCircle, Layers, RefreshCw, FileText,
   CalendarCheck, Sparkles, Building2, LayoutDashboard, Settings,
   LogOut, Shield, ChevronDown, Radio, Power, Play, Camera, Calendar,
@@ -69,6 +69,32 @@ const COLORS = {
 const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05)' }
   : { elevation: 2, shadowColor: '#64748B', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } };
+
+const formatAddress = (addr, fallback = 'Location unavailable') => {
+  if (!addr) return fallback;
+  if (typeof addr === 'string') {
+    const trimmed = addr.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.street || parsed.city || parsed.state) {
+          return [parsed.street, parsed.city, parsed.state].filter(Boolean).join(', ') || fallback;
+        }
+        return parsed.formattedAddress || parsed.address || fallback;
+      } catch (e) {
+        return trimmed || fallback;
+      }
+    }
+    const cleaned = trimmed.replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '');
+    return cleaned || fallback;
+  }
+  if (typeof addr === 'object' && addr !== null) {
+    const parts = [addr.street, addr.city, addr.state, addr.pincode].filter(Boolean);
+    if (parts.length > 0) return parts.join(', ');
+    return addr.formattedAddress || addr.address || fallback;
+  }
+  return String(addr || '').trim() || fallback;
+};
 
 // 📏 Haversine distance in meters helper for precise movement detection
 const haversineMeters = (lat1, lon1, lat2, lon2) => {
@@ -914,18 +940,35 @@ export default function ManagerDashboardScreen() {
   const orgName = orgData?.name || user?.organizationName || user?.organization?.name || 'Kisan Choice';
   const orgLogoUrl = getAvatarUrl(orgData?.logo || user?.organizationLogo);
 
-  // Directory Staff Mapping with Real Database Profile Pictures
+  // Directory Staff Mapping with Real Database Profile Pictures & Rich Telemetry
   const directoryStaff = teamMembers.map((emp) => {
     const empId = String(emp._id || emp.employeeId || '');
     const liveLoc = liveLocations.find((l) => {
       const lEmpId = String(l.employeeId?._id || l.employeeId || l.employee?._id || l.employee || l._id || '');
       return empId && lEmpId === empId;
     });
+    const attRec = attendanceRecords.find((a) => {
+      const aEmpId = String(a.employee?._id || a.employee || '');
+      return empId && aEmpId === empId;
+    });
 
     const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
     const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
+
+    const empCode = emp.employeeId || (empId.length > 8 ? 'EMP-' + empId.slice(-6).toUpperCase() : '');
+    const designation = emp.designation || emp.role || 'Field Executive';
+    const rawSpeed = Number(liveLoc?.speed ?? emp.speed ?? 0);
+    const speed = Number.isFinite(rawSpeed) ? Math.max(0, Math.round(rawSpeed)) : 0;
+    const motionState = liveLoc?.motionState || emp.motionState || (isLive ? (isIdle ? 'STATIONARY' : 'MOVING') : 'OFFLINE');
+    const currentAddress = formatAddress(liveLoc?.address || liveLoc?.currentAddress || emp.currentAddress || emp.address, isLive ? 'Active On Field' : 'Offline / Idle');
+    const punchInTime = attRec?.checkIn
+      ? new Date(attRec.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : (isLive ? 'Live On Duty' : 'Not Punched');
+    const lastPingTime = liveLoc?.updatedAt || liveLoc?.lastActivity || emp.lastPing
+      ? new Date(liveLoc?.updatedAt || liveLoc?.lastActivity || emp.lastPing).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '—';
 
     return {
       _id: empId,
@@ -934,14 +977,21 @@ export default function ManagerDashboardScreen() {
       initials: getUserInitials(emp.name),
       department: emp.department || 'Field Services',
       role: emp.role || 'Field Executive',
+      designation,
+      employeeCode: empCode,
       phone: emp.phone,
       isTracking: isLive,
       isIdle,
       status: isLive ? (isIdle ? 'IDLE' : 'ACTIVE') : 'OFFLINE',
+      speed,
+      motionState,
+      currentAddress,
+      punchInTime,
+      lastPingTime,
       lat: liveLoc?.lat || emp.lat || 26.4499,
       lng: liveLoc?.lng || emp.lng || 80.3319,
       totalDistance: distNum,
-      todayKm: distNum.toFixed(1),
+      todayKm: distNum.toFixed(2),
     };
   });
 
@@ -1471,57 +1521,195 @@ export default function ManagerDashboardScreen() {
           </View>
         </Surface>
 
-        {/* ── ALL TEAM MEMBERS DIRECTORY ── */}
-        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90 }]} elevation={1}>
+        {/* ── ALL TEAM MEMBERS DIRECTORY (UI/UX PRO MAX) ── */}
+        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90, paddingHorizontal: 14, paddingVertical: 16 }]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>All Team Members ({directoryStaff.length})</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
-              <Text style={styles.viewLinkText}>Manage Team →</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.teamHeaderIconBox}>
+                <Users size={17} color={COLORS.primary} />
+              </View>
+              <View>
+                <Text style={styles.sectionTitle}>My Team Members</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {directoryStaff.length} Field Executives Assigned
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(admin)/team')} activeOpacity={0.7} style={styles.viewLinkRow}>
+              <Text style={styles.viewLinkText}>Manage Team</Text>
+              <ArrowRight size={13} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.dutyList}>
-            {directoryStaff.map((emp, idx) => (
-              <TouchableOpacity
-                key={emp._id || String(idx)}
-                style={styles.dutyRowItem}
-                onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.dutyLeftCol}>
-                  <Text style={styles.dutyRankNum}>{idx + 1}.</Text>
-                  {emp.avatar ? (
-                    <Image
-                      source={{ uri: emp.avatar }}
-                      style={styles.dutyAvatarImg}
-                    />
-                  ) : (
-                    <View style={[styles.dutyAvatarFallback, { backgroundColor: ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777'][idx % 5] }]}>
-                      <Text style={styles.dutyAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+          {directoryStaff.length === 0 ? (
+            <View style={styles.teamEmptyBox}>
+              <Users size={36} color="#cbd5e1" />
+              <Text style={styles.teamEmptyTitle}>No Team Members Assigned</Text>
+              <Text style={styles.teamEmptySub}>Contact organization admin to assign executives</Text>
+            </View>
+          ) : (
+            <View style={styles.teamCardsList}>
+              {directoryStaff.map((emp, idx) => {
+                const isLive = emp.isTracking;
+                const isMoving = emp.status === 'ACTIVE' && (emp.speed > 1.5 || emp.motionState === 'MOVING');
+                const isStationary = isLive && !isMoving;
+                const kmDisplay = (parseFloat(emp.todayKm) || 0).toFixed(2);
+
+                return (
+                  <Surface
+                    key={emp._id || String(idx)}
+                    style={[styles.teamMemberCard, cardShadow]}
+                    elevation={1}
+                  >
+                    {/* Top Row: Avatar + Name + EmpID + Status Badge */}
+                    <View style={styles.teamMemberTopRow}>
+                      <View style={styles.teamMemberAvatarWrap}>
+                        {emp.avatar ? (
+                          <Image source={{ uri: emp.avatar }} style={styles.teamMemberAvatarImg} />
+                        ) : (
+                          <View style={[styles.teamMemberAvatarFallback, { backgroundColor: ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777'][idx % 5] }]}>
+                            <Text style={styles.teamMemberAvatarText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                          </View>
+                        )}
+                        <View style={[
+                          styles.teamMemberStatusDot,
+                          { backgroundColor: isMoving ? '#10b981' : isStationary ? '#f59e0b' : '#94a3b8' }
+                        ]} />
+                      </View>
+
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={styles.teamMemberName} numberOfLines={1}>{emp.name}</Text>
+                          {/* Live Status Pill */}
+                          {isMoving ? (
+                            <View style={styles.statusPillMoving}>
+                              <View style={styles.pulseDotGreen} />
+                              <Text style={styles.statusPillMovingText}>MOVING</Text>
+                            </View>
+                          ) : isStationary ? (
+                            <View style={styles.statusPillStationary}>
+                              <View style={styles.dotAmber} />
+                              <Text style={styles.statusPillStationaryText}>AT SPOT</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.statusPillOffline}>
+                              <Text style={styles.statusPillOfflineText}>OFFLINE</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={styles.teamMemberSubRow}>
+                          {emp.employeeCode ? (
+                            <View style={styles.empCodeBadge}>
+                              <Text style={styles.empCodeBadgeText}>{emp.employeeCode}</Text>
+                            </View>
+                          ) : null}
+                          <Text style={styles.teamMemberRoleText} numberOfLines={1}>
+                            {emp.department ? `${emp.department} • ` : ''}{emp.designation || 'Field Executive'}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  )}
-                  <Text style={styles.dutyNameText} numberOfLines={1}>{emp.name}</Text>
-                </View>
 
-                <Text style={styles.dutyKmText}>{emp.todayKm} km</Text>
+                    {/* Middle Row: Structured Metrics Strip (Distance, Punch-in, Speed) */}
+                    <View style={styles.teamMemberMetricsStrip}>
+                      {/* Metric 1: Distance */}
+                      <View style={styles.teamMetricItem}>
+                        <View style={styles.teamMetricIconBox}>
+                          <Route size={13} color="#059669" />
+                        </View>
+                        <View>
+                          <Text style={styles.teamMetricValue}>{kmDisplay} KM</Text>
+                          <Text style={styles.teamMetricLabel}>Today's Travel</Text>
+                        </View>
+                      </View>
 
-                {emp.status === 'ACTIVE' ? (
-                  <View style={styles.dutyActivePill}>
-                    <View style={styles.dutyActiveDot} />
-                    <Text style={styles.dutyActivePillText}>Active</Text>
-                  </View>
-                ) : emp.status === 'IDLE' ? (
-                  <View style={styles.dutyIdlePill}>
-                    <Text style={styles.dutyIdlePillText}>Idle</Text>
-                  </View>
-                ) : (
-                  <View style={styles.dutyOfflinePill}>
-                    <Text style={styles.dutyOfflinePillText}>Offline</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
+                      {/* Divider */}
+                      <View style={styles.teamMetricDivider} />
+
+                      {/* Metric 2: Punch-in Time */}
+                      <View style={styles.teamMetricItem}>
+                        <View style={[styles.teamMetricIconBox, { backgroundColor: '#eff6ff' }]}>
+                          <Clock size={13} color="#2563eb" />
+                        </View>
+                        <View>
+                          <Text style={styles.teamMetricValue}>{emp.punchInTime || '—'}</Text>
+                          <Text style={styles.teamMetricLabel}>Check-In</Text>
+                        </View>
+                      </View>
+
+                      {/* Divider */}
+                      <View style={styles.teamMetricDivider} />
+
+                      {/* Metric 3: Speed / Motion */}
+                      <View style={styles.teamMetricItem}>
+                        <View style={[styles.teamMetricIconBox, { backgroundColor: isMoving ? '#ecfdf5' : '#fef3c7' }]}>
+                          <Activity size={13} color={isMoving ? '#059669' : '#d97706'} />
+                        </View>
+                        <View>
+                          <Text style={styles.teamMetricValue}>
+                            {isMoving ? `${Math.round(emp.speed || 0)} km/h` : isStationary ? '0 km/h' : '—'}
+                          </Text>
+                          <Text style={styles.teamMetricLabel}>Live Speed</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Location Bar */}
+                    <View style={styles.teamMemberLocationBar}>
+                      <MapPin size={12} color="#64748b" style={{ marginTop: 2, marginRight: 5, flexShrink: 0 }} />
+                      <Text style={styles.teamMemberLocationText} numberOfLines={1}>
+                        {emp.currentAddress || 'Location pending'}
+                      </Text>
+                      {emp.lastPingTime && emp.lastPingTime !== '—' && (
+                        <Text style={styles.teamMemberPingTime}>
+                          • {emp.lastPingTime}
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* Bottom Action Row: Call, WhatsApp, Track Live */}
+                    <View style={styles.teamMemberActionsRow}>
+                      {emp.phone ? (
+                        <TouchableOpacity
+                          style={styles.teamActionBtnCall}
+                          onPress={() => Linking.openURL(`tel:${emp.phone}`)}
+                          activeOpacity={0.8}
+                        >
+                          <Phone size={13} color="#0284c7" />
+                          <Text style={styles.teamActionBtnCallText}>Call</Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      {emp.phone ? (
+                        <TouchableOpacity
+                          style={styles.teamActionBtnWhatsApp}
+                          onPress={() => {
+                            const cleanPhone = String(emp.phone).replace(/[^0-9]/g, '');
+                            Linking.openURL(`whatsapp://send?phone=${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}`);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <MessageCircle size={13} color="#16a34a" />
+                          <Text style={styles.teamActionBtnWhatsAppText}>WhatsApp</Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <TouchableOpacity
+                        style={styles.teamActionBtnTrack}
+                        onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
+                        activeOpacity={0.8}
+                      >
+                        <Navigation size={13} color="#ffffff" />
+                        <Text style={styles.teamActionBtnTrackText}>Track Route</Text>
+                        <ChevronRight size={13} color="#ffffff" />
+                      </TouchableOpacity>
+                    </View>
+                  </Surface>
+                );
+              })}
+            </View>
+          )}
         </Surface>
       </ScrollView>
 
@@ -2818,6 +3006,308 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
+
+  // ── STRUCTURED TEAM MEMBER CARDS (UI/UX PRO MAX) ──
+  teamHeaderIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#f0fdfa',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+  viewLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  teamEmptyBox: {
+    paddingVertical: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamEmptyTitle: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748b',
+    fontFamily: FONT,
+  },
+  teamEmptySub: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+    fontFamily: FONT,
+  },
+  teamCardsList: {
+    gap: 12,
+    marginTop: 10,
+  },
+  teamMemberCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
+  },
+  teamMemberTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  teamMemberAvatarWrap: {
+    position: 'relative',
+  },
+  teamMemberAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#e2e8f0',
+  },
+  teamMemberAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamMemberAvatarText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  teamMemberStatusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  teamMemberName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+    flex: 1,
+    marginRight: 8,
+  },
+  teamMemberSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+  },
+  empCodeBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  empCodeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  teamMemberRoleText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    fontFamily: FONT,
+    flex: 1,
+  },
+  statusPillMoving: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    gap: 4,
+  },
+  pulseDotGreen: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#059669',
+  },
+  statusPillMovingText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669',
+    fontFamily: FONT,
+  },
+  statusPillStationary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    gap: 4,
+  },
+  dotAmber: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#d97706',
+  },
+  statusPillStationaryText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#d97706',
+    fontFamily: FONT,
+  },
+  statusPillOffline: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  statusPillOfflineText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    fontFamily: FONT,
+  },
+  teamMemberMetricsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  teamMetricItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  teamMetricIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamMetricValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a',
+    fontFamily: FONT,
+  },
+  teamMetricLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#94a3b8',
+    fontFamily: FONT,
+    textTransform: 'uppercase',
+  },
+  teamMetricDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 4,
+  },
+  teamMemberLocationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 9,
+    paddingHorizontal: 2,
+  },
+  teamMemberLocationText: {
+    fontSize: 11,
+    color: '#475569',
+    fontFamily: FONT,
+    flex: 1,
+  },
+  teamMemberPingTime: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontFamily: FONT,
+    marginLeft: 4,
+  },
+  teamMemberActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  teamActionBtnCall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0f9ff',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  teamActionBtnCallText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284c7',
+    fontFamily: FONT,
+  },
+  teamActionBtnWhatsApp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  teamActionBtnWhatsAppText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: FONT,
+  },
+  teamActionBtnTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#0f766e',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  teamActionBtnTrackText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
     fontFamily: FONT,
   },
 

@@ -82,7 +82,6 @@ export default function useLocationTracker() {
       const resolveActiveState = async () => {
         try {
           const sid = await storage.getItem('currentTrackingSessionId');
-          const isTrackingActive = await storage.getItem('isTrackingActive');
           const manualOut = await storage.getItem('user_manually_punched_out');
           
           if (manualOut === 'true') {
@@ -94,17 +93,7 @@ export default function useLocationTracker() {
             return;
           }
 
-          let active = Boolean(sid);
-          if (!active && isTrackingActive === 'true') {
-            active = true;
-          }
-
-          if (!active && Platform.OS !== 'web' && !isExpoGo) {
-            const isBgRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
-            if (isBgRunning) {
-              active = true;
-            }
-          }
+          const active = Boolean(sid && sid !== 'AUTO_RECOVER_SESSION');
 
           if (_globalIsTracking !== active) {
             _globalIsTracking = active;
@@ -112,9 +101,7 @@ export default function useLocationTracker() {
           }
           setIsTracking(active);
 
-          if (active) {
-            checkActiveSession().catch(() => {});
-          }
+          checkActiveSession().catch(() => {});
         } catch (_) {}
       };
       resolveActiveState();
@@ -143,9 +130,13 @@ export default function useLocationTracker() {
           Location.getBackgroundPermissionsAsync().then(({ status }) => {
             if (status === 'granted') setPermissionStatus('granted');
           }).catch(() => {});
-          // Immediately capture & upload current GPS coordinate on app wakeup so any sleep/doze travel is instantly recovered!
-          storage.getItem('user_manually_punched_out').then((manualOut) => {
-            if (manualOut !== 'true') {
+          // Immediately capture & upload current GPS coordinate on app wakeup ONLY if an active session is already running!
+          Promise.all([
+            storage.getItem('currentTrackingSessionId'),
+            storage.getItem('isTrackingActive'),
+            storage.getItem('user_manually_punched_out'),
+          ]).then(([sid, isAct, manualOut]) => {
+            if (sid && sid !== 'AUTO_RECOVER_SESSION' && isAct === 'true' && manualOut !== 'true') {
               Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, maximumAge: 3000 })
                 .catch(() => Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }))
                 .then((pos) => {
@@ -154,7 +145,7 @@ export default function useLocationTracker() {
                     if (locationTaskModule && typeof locationTaskModule.processLocation === 'function') {
                       locationTaskModule.processLocation({
                         ...pos,
-                        coords: { ...pos.coords, screenCaptured: true, screenMoving: true }
+                        coords: { ...pos.coords, screenCaptured: true }
                       }).catch(() => {});
                     }
                   }
@@ -175,7 +166,7 @@ export default function useLocationTracker() {
         try {
           const sessionId = await storage.getItem('currentTrackingSessionId');
           const manualOut = await storage.getItem('user_manually_punched_out');
-          if (sessionId && manualOut !== 'true') {
+          if (sessionId && sessionId !== 'AUTO_RECOVER_SESSION' && manualOut !== 'true') {
             if (!_globalIsTracking) {
               _globalIsTracking = true;
               DeviceEventEmitter.emit('TrackingStateChanged', true);
@@ -231,6 +222,10 @@ export default function useLocationTracker() {
   const checkActiveSession = async () => {
     try {
       let activeSession = await storage.getItem('currentTrackingSessionId');
+      if (activeSession === 'AUTO_RECOVER_SESSION') {
+        await storage.removeItem('currentTrackingSessionId');
+        activeSession = null;
+      }
 
       // Stale Multi-Day Session Purge: If local session belongs to a past date, purge it
       if (activeSession) {
@@ -266,14 +261,16 @@ export default function useLocationTracker() {
 
       // ─── SELF-HEALING AUTO-START ENGINE (Crash & Reboot Recovery Only) ──────
       // If local activeSession is missing (e.g. after app crash or phone restart during active shift):
-      // query server to re-attach to active shift
+      // query server to re-attach ONLY if an explicitly active shift already exists for this user today
       if (!activeSession && Platform.OS !== 'web') {
         try {
           const userToken = await storage.getItem('userToken') || await storage.getItem('token');
           if (userToken) {
             const todayRes = await trackingApi.getTodaySessions();
             if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
-              const liveTodaySession = todayRes.data.sessions.find((s) => s.isActive === true);
+              const liveTodaySession = todayRes.data.sessions.find(
+                (s) => s.isActive === true && !s.manuallyStopped && !s.endTime
+              );
               if (liveTodaySession && liveTodaySession.sessionId) {
                 console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
                 await storage.removeItem('user_manually_punched_out');
@@ -298,17 +295,17 @@ export default function useLocationTracker() {
         await storage.removeItem('user_manually_punched_out');
         await storage.setItem('isTrackingActive', 'true');
         syncGlobalTrackingState(true);
-      } else if (Platform.OS !== 'web' && !isExpoGo) {
-        // If Android OS background tracking is running with active notification, adopt active state!
-        const isBgRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
-        const isTrackingActive = await storage.getItem('isTrackingActive');
-        const accumulatedSid = await storage.getItem('tracking_accumulated_session_id');
-        if (isBgRunning && (isTrackingActive === 'true' || accumulatedSid)) {
-          activeSession = accumulatedSid || 'AUTO_RECOVER_SESSION';
-          await storage.setItem('currentTrackingSessionId', activeSession);
-          await storage.setItem('isTrackingActive', 'true');
-          syncGlobalTrackingState(true);
+      } else {
+        // No active session exists for this user: ensure any orphan background task is stopped!
+        await storage.setItem('isTrackingActive', 'false');
+        await storage.removeItem('tracking_accumulated_session_id');
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          const isBgRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => false);
+          if (isBgRunning) {
+            Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+          }
         }
+        stopHeartbeat();
       }
 
       if (!activeSession) {
@@ -374,8 +371,8 @@ export default function useLocationTracker() {
                   const firstSeenStr = await storage.getItem('passive_motion_first_seen');
                   const firstSeen = firstSeenStr ? parseInt(firstSeenStr, 10) : null;
 
-                  if (!firstSeen) {
-                    // First movement observation: start 5-minute countdown and record start anchor
+                  if (!firstSeen || (now - firstSeen > 12 * 60 * 1000)) {
+                    // First movement observation (or stale >12m timer): start fresh 5-minute countdown and record start anchor
                     await storage.setItem('passive_motion_first_seen', String(now));
                     await storage.setItem('passive_motion_last_seen', String(now));
                     await storage.setItem(
@@ -393,7 +390,7 @@ export default function useLocationTracker() {
                     const elapsedMs = now - firstSeen;
                     await storage.setItem('passive_motion_last_seen', String(now));
 
-                    if (elapsedMs >= 5 * 60 * 1000) {
+                    if (elapsedMs >= 5 * 60 * 1000 && elapsedMs <= 12 * 60 * 1000) {
                       // 5 minutes of continuous travel confirmed!
                       console.log(
                         `🚀 [SMART_AUTO_START] 5 minutes of continuous travel confirmed (${(elapsedMs / 60000).toFixed(1)} min at ${effectiveSpeedKmh.toFixed(1)} km/h). Auto-starting duty tracking!`

@@ -242,26 +242,19 @@ async function flushOfflineQueueUnlocked() {
           continue;
         }
 
-        if (response.data?.sessionId && (!itemSessionId || itemSessionId === 'AUTO_RECOVER_SESSION')) {
-          const userManuallyStopped = await storage.getItem('user_manually_punched_out');
-          if (userManuallyStopped !== 'true') {
-            await storage.setItem('currentTrackingSessionId', response.data.sessionId).catch(() => {});
-            await storage.setItem('tracking_accumulated_session_id', response.data.sessionId).catch(() => {});
-          }
-        }
-
         successCount++;
-        const serverDistance = Number(response.data?.totalDistanceToday ?? response.data?.totalDistance);
+        const serverDistance = Number(response.data?.exactTotalDistanceToday ?? response.data?.totalDistanceToday ?? response.data?.totalDistance);
         if (Number.isFinite(serverDistance) && serverDistance > 0) {
           const prevCached = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
           if (serverDistance >= prevCached) {
-            await storage.setItem('tracking_accumulated_distance', serverDistance.toFixed(2));
+            await storage.setItem('tracking_accumulated_distance', Number(serverDistance.toFixed(5)).toString());
             DeviceEventEmitter.emit('LiveDistanceUpdated', {
               sessionId: itemSessionId,
               totalDistance: serverDistance,
               sessionDistance: Number(response.data?.sessionDistance ?? serverDistance),
-              speed: Number(response.data?.speed || 0),
-              motionState: response.data?.motionState || 'MOVING',
+              speed: 0,
+              motionState: response.data?.motionState || 'STATIONARY',
+              isMoving: response.data?.motionState ? response.data.motionState !== 'STATIONARY' : false,
             });
           }
         }

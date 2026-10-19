@@ -17,7 +17,7 @@ export default function FloatingAdminTabBar({ activeTab = 'dashboard' }) {
 
   return (
     <View style={styles.bottomTabBarContainer} pointerEvents="box-none">
-      <Surface style={styles.bottomTabBarSurface} elevation={10}>
+      <Surface style={styles.bottomTabBarSurface} elevation={20}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const IconComponent = tab.Icon;
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
-    elevation: 16,
+    elevation: 26,
   },
   bottomTabBarSurface: {
     flexDirection: 'row',
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
+    elevation: 26,
   },
   tabBarItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   tabBarIconBox: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },

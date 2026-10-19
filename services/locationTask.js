@@ -106,67 +106,75 @@ let _lastCoordUploadTs = 0;
 let _lastUploadedCoord = null;
 
 function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeedMps, calcSpeedKmh, accuracyM, currCoord = null) {
-  const reportedSpeedKmh = (Number(reportedSpeedMps) || 0) * 3.6;
+  const reportedSpeedKmh = (Number(reportedSpeedMps) > 0 ? Number(reportedSpeedMps) : 0) * 3.6;
+  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, Number.isFinite(calcSpeedKmh) ? calcSpeedKmh : 0);
   const stepSecs = Math.min(Math.max(secs, 1), 30);
-  // Only trust geometry-derived speed when displacement is >= 25m beyond stationary GPS drift radius
-  const stepCalcSpeedKmh = (distM >= 25.0 && stepSecs >= 3 && accuracyM <= 100) ? (distM / 1000 / stepSecs) * 3600 : 0;
-  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (distM >= 25.0 ? calcSpeedKmh : 0), stepCalcSpeedKmh);
 
-  // 🛡️ ANTI-JITTER LOCK: When stationary, suppress any indoor/parking GPS bounce < 20m unless hardware Doppler speed >= 3.0 km/h
-  if (distM < 20.0 && reportedSpeedKmh < 3.0) {
-    if (distM < 12.0 && _movementCandidateBuffer.length > 0) {
+  // 🛡️ ANTI-JITTER LOCK: Suppress stationary spot GPS bounce < 20m when Doppler speed < 3.0 km/h and screen not moving
+  if (distM < 20.0 && reportedSpeedKmh < 3.0 && currCoord?.screenMoving !== true) {
+    if (distM < 14.0 && _movementCandidateBuffer.length > 0) {
       _movementCandidateBuffer = [];
     }
     return { confirmed: false, pending: false };
   }
 
-  // Departure verification requires real displacement (>= 20m or hardware speed >= 3.0 km/h with >= 15m) and reasonable accuracy
-  if (((distM >= 20.0 && effectiveSpeedKmh >= 2.5) || (distM >= 15.0 && reportedSpeedKmh >= 3.0) || distM >= 28.0) && accuracyM <= 200) {
+  // Reject coarse accuracy (> 140m) from triggering departure breakout
+  if (accuracyM > 140) {
+    return { confirmed: false, pending: false };
+  }
+
+  // Direct single-step departure when hardware Doppler confirms velocity (>= 3.0 km/h) or screen moving flag, with displacement >= 20m and accuracy <= 85m
+  if (distM >= 20.0 && (reportedSpeedKmh >= 3.0 || currCoord?.screenMoving === true) && accuracyM <= 85) {
+    console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at Doppler speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
+    _movementCandidateBuffer = [];
+    _isConfirmedMoving = true;
+    return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: null };
+  }
+
+  // 2-Point Progressive Departure Verification (blocks single-spike indoor bounces while capturing 100% of real departure distance)
+  const minCandDistM = (reportedSpeedKmh >= 2.5 || currCoord?.screenMoving === true) ? 16.0 : 22.0;
+  if (distM >= minCandDistM) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
       : null;
 
     if (firstCandidate) {
-      if (Date.now() - firstCandidate.time > 180000) {
-        _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, effectiveSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
+      if (Date.now() - firstCandidate.time > 120000) {
+        _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, reportedSpeedKmh, calcSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
         return { confirmed: false, pending: true };
       }
 
       const stepFromFirstCandidateM = distanceMeters(firstCandidate.lat, firstCandidate.lng, currLat, currLng);
 
-      // Confirmed genuine travel: progressive movement away from anchor (>= 25m from anchor AND >= 8m from candidate 1)
-      if ((distM >= 25.0 && stepFromFirstCandidateM >= 8.0 && distM >= firstCandidate.distM + 4.0) || (distM >= 35.0 && effectiveSpeedKmh >= 3.0)) {
-        console.log(`📍 Movement Confirmed: Road travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m, Acc:${accuracyM.toFixed(0)}m, Speed:${effectiveSpeedKmh.toFixed(1)}km/h). Transitioning to MOVING.`);
+      // Confirmed genuine travel: progressive movement away from anchor AND away from candidate 1
+      if (
+        distM >= minCandDistM + 6.0 &&
+        stepFromFirstCandidateM >= 6.0 &&
+        distM >= firstCandidate.distM + 4.0
+      ) {
+        console.log(`📍 Movement Confirmed: Progressive travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m). Transitioning to MOVING.`);
         const savedCandidateCoord = firstCandidate.coord || null;
         _movementCandidateBuffer = [];
         _isConfirmedMoving = true;
         return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: savedCandidateCoord };
       }
 
-      // If phone bounced back toward stationary spot (< 14m), drop candidate buffer
-      if (distM < 14.0) {
+      // If phone bounced back toward stationary spot (< 14m or closer than candidate), clear candidate buffer
+      if (distM < 14.0 || distM < firstCandidate.distM - 5.0) {
         _movementCandidateBuffer = [];
         return { confirmed: false, pending: false };
       }
       return { confirmed: false, pending: true };
     }
 
-    // Direct confirmation if single displacement is >= 35m with valid speed (or >= 25m with hardware Doppler >= 3.5 km/h)
-    if ((distM >= 35.0 && effectiveSpeedKmh >= 3.0) || (distM >= 25.0 && reportedSpeedKmh >= 3.5 && accuracyM <= 65)) {
-      console.log(`📍 Direct Departure: Single step ${distM.toFixed(0)}m at ${effectiveSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
-      _movementCandidateBuffer = [];
-      _isConfirmedMoving = true;
-      return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: null };
-    }
-
-    _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, effectiveSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
+    _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, reportedSpeedKmh, calcSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
     return { confirmed: false, pending: true };
-  } else {
-    if (_movementCandidateBuffer.length > 0 && distM < 14.0) {
-      _movementCandidateBuffer = [];
-    }
-    return { confirmed: false, pending: false };
   }
+
+  if (_movementCandidateBuffer.length > 0 && distM < 14.0) {
+    _movementCandidateBuffer = [];
+  }
+  return { confirmed: false, pending: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,34 +214,34 @@ function validateSegment(prev, curr) {
   const distKm = distM / 1000;
   const reportedSpeedMps = Number.isFinite(curr.speed) ? Math.max(0, curr.speed) : 0;
   const reportedSpeedKmh = reportedSpeedMps * 3.6;
-  const stepCalcSpeedKmh = (stepSecs >= 2 && distM >= 20.0) ? (distKm / (stepSecs / 3600)) : 0;
-  const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (distM >= 20.0 && stepCalcSpeedKmh <= 160) ? stepCalcSpeedKmh : 0);
 
-  // Dynamic accuracy ceiling: allow up to 250m when moving or displaced >= 30m, 150m when stationary
-  const dynamicMaxAcc = (_isConfirmedMoving || reportedSpeedKmh >= 3.0 || distM >= 30) ? 250 : 150;
+  // Dynamic accuracy ceiling: 160m when moving, 120m otherwise
+  const dynamicMaxAcc = _isConfirmedMoving ? 160 : 120;
   if (reportedAccuracy > dynamicMaxAcc && stepSecs <= 1800) {
-    return { valid: false, distKm: 0 };
+    return { valid: false, distKm: 0, keepMovingAnchor: _isConfirmedMoving && rawSecs <= 60 };
   }
 
-  // ── Gate 0: Base Digits vs Stationary Cell/Wi-Fi Deadband ─────
+  // ── Gate 0: Stationary Spot Deadband ─────────────────────────────────
+  const effectiveMovingSpeedKmh = Math.max(reportedSpeedKmh, (distKm / Math.max(rawSecs, 1)) * 3600);
   if (!_isConfirmedMoving) {
-    const isInsideStationarySpot = distM < 20.0 && reportedSpeedKmh < 3.0;
-    if (isInsideStationarySpot) {
-      if (distM < 12.0) {
+    if (distM < 14.0 && effectiveMovingSpeedKmh < 2.0 && reportedSpeedKmh < 2.0) {
+      if (distM < 10.0) {
         _movementCandidateBuffer = [];
       }
       return { valid: false, distKm: 0 };
     }
   }
 
-  // ── Gate 1: Minimum movement ─────────────────────────────────────────
-  // Hold moving state across brief traffic stops up to 45s; after 45s without >= 8m movement, transition back to STATIONARY
-  const minStepM = reportedAccuracy > 80 ? Math.max(12.0, reportedAccuracy * 0.25) : 8.0;
+  // ── Gate 1: Minimum movement step ─────────────────────────────────────
+  // Minimum physical step: 5.0m (for walking / tight road curves). Hold anchor across pauses up to 60s
+  const minStepM = reportedAccuracy > 60 ? Math.max(7.0, reportedAccuracy * 0.12) : 5.0;
   if (distM < minStepM) {
-    if (_isConfirmedMoving && rawSecs < 45) {
+    if (_isConfirmedMoving && rawSecs <= 60) {
       return { valid: false, distKm: 0, keepMovingAnchor: true };
     }
-    _isConfirmedMoving = false;
+    if (rawSecs > 60) {
+      _isConfirmedMoving = false;
+    }
     return { valid: false, distKm: 0 };
   }
 
@@ -244,19 +252,18 @@ function validateSegment(prev, curr) {
 
     const latDelta30 = Math.abs(curr.lat - prev.lat);
     const lngDelta30 = Math.abs(curr.lng - prev.lng);
-    const isSameAt30Min = distM < 38.0 || (latDelta30 < 0.000350 && lngDelta30 < 0.000350) || (reportedSpeedKmh < 2.5 && stepSpeedKmh < 3.0);
+    const isSameAt30Min = distM < 30.0 || (latDelta30 < 0.000250 && lngDelta30 < 0.000250) || (reportedSpeedKmh < 2.0 && distM < 50.0);
 
     if (isSameAt30Min) {
-      // ⏱️ 30-MINUTE RESET: Reset baseline anchor to current coordinate without adding distance!
       _isConfirmedMoving = false;
       console.log(`⏱️ [30-MIN BASELINE RESET] Employee stationary at spot after ${(rawSecs / 60).toFixed(0)}m. Re-anchoring baseline at [${curr.lat.toFixed(6)}, ${curr.lng.toFixed(6)}]. Distance: +0.000 KM.`);
       return { valid: false, distKm: 0, reanchorOnly: true };
     }
 
-    // Genuine movement after 30-min stop: requires displacement >= 38m AND speed >= 2.8 km/h
-    if (distM >= 38 && (reportedSpeedKmh >= 2.8 || stepSpeedKmh >= 3.0) && reportedAccuracy <= 250) {
+    // Genuine movement after 30-min stop: requires displacement >= 30m AND (speed >= 2.2 km/h OR displacement >= 60m)
+    if ((distM >= 30 && (reportedSpeedKmh >= 2.2 || stepSpeedKmh >= 2.2) && reportedAccuracy <= 160) || (distM >= 60 && stepSpeedKmh <= 150 && reportedAccuracy <= 200)) {
       _isConfirmedMoving = true;
-      console.log(`📍 [STATIONARY_WAKEUP] Genuine movement resumed after ${(rawSecs / 60).toFixed(0)}m stop: +${(effectiveGapKm * 1000).toFixed(0)}m (speed: ${Math.max(reportedSpeedKmh, stepSpeedKmh).toFixed(1)} km/h)`);
+      console.log(`📍 [STATIONARY_WAKEUP] Genuine movement resumed after ${(rawSecs / 60).toFixed(0)}m stop: +${(effectiveGapKm * 1000).toFixed(0)}m`);
       return { valid: true, distKm: effectiveGapKm };
     }
 
@@ -264,7 +271,6 @@ function validateSegment(prev, curr) {
     return { valid: false, distKm: 0, reanchorOnly: true };
   }
 
-  // Use stepSecs (time since last GPS tick) when waking from stationary so calcSpeedKmh is never diluted by stationary time
   const effectiveTimeSecs = _isConfirmedMoving ? rawSecs : Math.min(rawSecs, Math.max(stepSecs, 5));
   const calcSpeedKmh = (distKm / effectiveTimeSecs) * 3600;
   if (calcSpeedKmh > MAX_SPEED_KMH && (distKm / rawSecs) * 3600 > MAX_SPEED_KMH) {
@@ -277,16 +283,16 @@ function validateSegment(prev, curr) {
     return { valid: false, distKm: 0, effectiveSecs: effectiveTimeSecs };
   }
 
-  // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, No Inflation Multiplier) ──
-  // If speed is below walking threshold (< 2.5 km/h) AND displacement is under stationary breakout threshold (< 35m):
-  // THIS IS STOPPED JITTER (traffic light, customer visit, sitting at desk)! Strictly 0 KM!
-  const isLowSpeedStop = (reportedSpeedKmh < 2.5 && calcSpeedKmh < 2.8);
-  if (distM < 8.0 || (isLowSpeedStop && distM < 35.0)) {
-    if (rawSecs > 45) {
+  // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, Zero Stationary Drift) ──
+  // When confirmed moving: only zero-displacement pause (< 5.0m with speed < 1.8 km/h) holds anchor
+  const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh);
+  if (distM < 5.0 && activeStepSpeedKmh < 1.8) {
+    if (rawSecs > 60) {
       _isConfirmedMoving = false;
     }
-    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 45 };
+    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 60 };
   }
+
   return { valid: true, distKm };
 }
 
@@ -302,12 +308,8 @@ export async function sendHeartbeatNow(force = false) {
 
     let sessionId = await storage.getItem('currentTrackingSessionId');
     const isTrackingActive = await storage.getItem('isTrackingActive');
-    if (!sessionId) {
-      if (isTrackingActive === 'true') {
-        sessionId = 'AUTO_RECOVER_SESSION';
-      } else {
-        return;
-      }
+    if (!sessionId || sessionId === 'AUTO_RECOVER_SESSION' || isTrackingActive === 'false') {
+      return;
     }
     const last = parseInt(await storage.getItem('last_heartbeat_ts'), 10) || 0;
     if (!force && Date.now() - last < HEARTBEAT_INTERVAL_MS - 10000) return;
@@ -344,29 +346,21 @@ export async function sendHeartbeatNow(force = false) {
       speed: lastLoc?.speed,
       currentAddress: cachedAddr,
     });
-    if (response.data?.success) {
-      if (response.data?.sessionId && (sessionId === 'AUTO_RECOVER_SESSION' || response.data.sessionId !== sessionId)) {
+    if (response.data?.success && !response.data?.sessionClosed) {
+      if (response.data?.sessionId && response.data.sessionId !== sessionId) {
         await storage.setItem('currentTrackingSessionId', response.data.sessionId).catch(() => {});
         await storage.setItem('tracking_accumulated_session_id', response.data.sessionId).catch(() => {});
       }
       console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
     } else if (response.data?.sessionClosed === true) {
-      const isPrevDayEnd = String(response.data?.message || '').toLowerCase().includes('previous day');
-      const manualOut = await storage.getItem('user_manually_punched_out');
-      if (manualOut === 'true') {
-        return;
+      console.log(`🛑 [HEARTBEAT_SESSION_CLOSED] Server reported session ${sessionId} closed. Halting background task.`);
+      stopHeartbeat();
+      await storage.removeItem('currentTrackingSessionId').catch(() => {});
+      await storage.setItem('isTrackingActive', 'false').catch(() => {});
+      if (Platform.OS !== 'web' && !isExpoGo) {
+        Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
       }
-      if (!isPrevDayEnd && lastLoc?.lat && lastLoc?.lng) {
-        console.log('🛡️ [HEARTBEAT_AUTO_HEAL] Server reported sessionClosed during active shift. Re-opening session...');
-        const startRes = await trackingAPI.startTracking({ lat: lastLoc.lat, lng: lastLoc.lng }).catch(() => null);
-        const newSessionId = startRes?.data?.sessionId || startRes?.data?.session?.sessionId;
-        if (startRes?.data?.success && newSessionId) {
-          await storage.setItem('currentTrackingSessionId', newSessionId);
-          await storage.setItem('tracking_accumulated_session_id', newSessionId);
-          await storage.setItem('isTrackingActive', 'true');
-          console.log('🛡️ [HEARTBEAT_AUTO_HEAL] Active shift seamlessly restored:', newSessionId);
-        }
-      }
+      DeviceEventEmitter.emit('TrackingStateChanged', false);
     }
   } catch (_) {
     // best-effort; retried on next GPS tick / interval
@@ -420,20 +414,14 @@ const processLocationUnlocked = async (location) => {
 
     let sessionId = await storage.getItem('currentTrackingSessionId');
     const isTrackingActive = await storage.getItem('isTrackingActive');
-    if (!sessionId) {
-      if (isTrackingActive === 'true' || location?.coords?.screenCaptured) {
-        sessionId = 'AUTO_RECOVER_SESSION';
-      } else {
-        return; // No active session
-      }
+    if (!sessionId || sessionId === 'AUTO_RECOVER_SESSION' || isTrackingActive === 'false') {
+      return; // No active session — never invent AUTO_RECOVER_SESSION on login!
     }
 
     const reportedAcc = Number.isFinite(accuracy) && accuracy > 0 ? accuracy : 25;
 
     // Ensure session tracking ID and last GPS received timestamp are synchronized locally
-    if (sessionId !== 'AUTO_RECOVER_SESSION') {
-      await storage.setItem('tracking_accumulated_session_id', sessionId);
-    }
+    await storage.setItem('tracking_accumulated_session_id', sessionId);
     await storage.setItem('last_gps_received_at', String(Date.now()));
 
     // ── STEP 1: IMMEDIATELY RESTORE PREVIOUS STATE (Crucial for Android Screen-Off Headless JS) ──
@@ -473,22 +461,24 @@ const processLocationUnlocked = async (location) => {
       return;
     }
 
-    // ── STEP 2: CALCULATE PHYSICAL STEP DISPLACEMENT & GEODETIC SPEED (Pocket / Screen-Off Resilient) ──
+    // ── STEP 2: CALCULATE PHYSICAL STEP DISPLACEMENT & HARDWARE DOPPLER SPEED ──
     const stepGapSecs = lastTickTsMs ? Math.max((timestamp - lastTickTsMs) / 1000, 0.5) : 1;
     const stepFromLastM = lastLocation ? distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) : 0;
-    const calcStepSpeedKmh = (stepGapSecs > 0 && stepFromLastM >= 8.0) ? (stepFromLastM / 1000 / stepGapSecs) * 3600 : 0;
-    const reportedSpeedKmh = (Number.isFinite(speed) && speed > 0) ? speed * 3.6 : 0;
-    // In pocket with screen OFF, hardware GPS speed is often 0 or null. Use max of reported and physical step speed!
-    const effectiveSpeedKmh = Math.max(reportedSpeedKmh, (stepFromLastM >= 8.0 && calcStepSpeedKmh <= 160) ? calcStepSpeedKmh : 0);
+    const rawSpeedMps = (Number.isFinite(speed) && speed >= 0) ? speed : 0;
+    const reportedSpeedKmh = rawSpeedMps * 3.6;
 
-    const maxAllowedAcc = (_isConfirmedMoving || location.coords?.screenMoving || effectiveSpeedKmh >= 2.5 || stepFromLastM >= 25) ? 300 : 250;
+    const maxAllowedAcc = (_isConfirmedMoving || reportedSpeedKmh >= 2.8) ? 200 : 150;
     if (!isInitialSeed && reportedAcc > maxAllowedAcc && stepGapSecs <= 1800) {
       return;
     }
     _lastProcessedTimestamp = timestamp;
 
-    // Update motion state classification using effective speed
-    updateMotionState(effectiveSpeedKmh / 3.6);
+    // Update motion state classification using hardware Doppler speed when stationary, or step speed when confirmed moving
+    const calcStepSpeedKmh = (_isConfirmedMoving && stepGapSecs > 0 && stepFromLastM >= 8.0)
+      ? Math.min((stepFromLastM / 1000 / stepGapSecs) * 3600, 140)
+      : 0;
+    const effectiveMovingSpeedKmh = _isConfirmedMoving ? Math.max(reportedSpeedKmh, calcStepSpeedKmh) : reportedSpeedKmh;
+    updateMotionState(effectiveMovingSpeedKmh / 3.6);
 
     // ── STEP 3: DYNAMIC 30-MINUTE BASELINE & SPOT GEOFENCE ──
     const bgNowMs = Date.now();
@@ -513,8 +503,10 @@ const processLocationUnlocked = async (location) => {
 
     const distFromBgBaseM = distanceMeters(_backgroundBaselineCoord.lat, _backgroundBaselineCoord.lng, latitude, longitude);
 
-    // If ALREADY confirmed moving or clear step displacement, baseline follows current position
-    if (_isConfirmedMoving || effectiveSpeedKmh >= 1.5 || stepFromLastM >= 15.0) {
+    // If ALREADY confirmed moving or screen/Doppler confirms motion, baseline follows current position
+    const isScreenOrDopplerMoving = Boolean(location.coords?.screenMoving) || _isConfirmedMoving || reportedSpeedKmh >= 2.2 || calcStepSpeedKmh >= 2.2;
+    if (isScreenOrDopplerMoving) {
+      _isConfirmedMoving = true;
       _backgroundBaselineCoord = {
         lat: latitude,
         lng: longitude,
@@ -523,32 +515,45 @@ const processLocationUnlocked = async (location) => {
       };
     } else {
       // 🎯 TRUE INDOOR STATIONARY GEOFENCE (Sitting at desk / home):
-      // Only suppress if within 10m of baseline, effective speed < 1.0 km/h, step < 8m, and screen not moving:
-      const isBgStationarySpot = distFromBgBaseM < 10.0 && effectiveSpeedKmh < 1.0 && stepFromLastM < 8.0 && !location?.coords?.screenMoving;
+      // Suppress only if tightly within 12m of baseline and speed < 1.8 km/h and step < 10m:
+      const isBgStationarySpot = distFromBgBaseM < 12.0 && reportedSpeedKmh < 1.8 && stepFromLastM < 10.0;
       if (isBgStationarySpot) {
         _currentMotionState = 'STATIONARY';
-        _movementCandidateBuffer = [];
+        _isConfirmedMoving = false;
+        if (distFromBgBaseM < 8.0) {
+          _movementCandidateBuffer = [];
+        }
+        const storedDistNow = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+        DeviceEventEmitter.emit('LiveDistanceUpdated', {
+          sessionId,
+          totalDistance: storedDistNow,
+          stepDistKm: 0,
+          speed: 0,
+          motionState: 'STATIONARY',
+          isMoving: false,
+          lat: latitude,
+          lng: longitude,
+        });
         sendHeartbeatNow(false).catch(() => {});
         return;
       }
     }
 
-    // ── STEP 4: BUILD COORDINATE PAYLOAD (WITH ACCURATE SCREEN-OFF MOTION STATE) ──
+    // ── STEP 4: BUILD COORDINATE PAYLOAD (STRICTLY PRESERVING RAW HARDWARE DOPPLER SPEED) ──
     const cachedActualAddress = location.coords?.address || (await storage.getItem('last_actual_address')) || '';
     const storedLocalDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-    const effectiveScreenDistKm = Math.max(Number(location.coords?.screenDistanceKm) || 0, storedLocalDist);
     const eventId = `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
 
-    let computedMotionState = _currentMotionState;
+    let computedMotionState = _isConfirmedMoving ? _currentMotionState : 'STATIONARY';
     if (_isConfirmedMoving && computedMotionState === 'STATIONARY') {
-      computedMotionState = effectiveSpeedKmh >= 15 ? 'VEHICLE' : 'WALKING';
+      computedMotionState = effectiveMovingSpeedKmh >= 15 ? 'VEHICLE' : 'WALKING';
     }
 
     const newCoord = {
       eventId,
       lat:      latitude,
       lng:      longitude,
-      speed:    effectiveSpeedKmh > 0 ? (effectiveSpeedKmh / 3.6) : (Number.isFinite(speed) ? speed : 0),
+      speed:    rawSpeedMps, // Strictly hardware GNSS Doppler speed (never overwrite with indoor drift calcSpeed!)
       accuracy: reportedAcc,
       heading:  Number.isFinite(heading) ? heading : 0,
       mocked:   location.mocked || false,
@@ -556,24 +561,23 @@ const processLocationUnlocked = async (location) => {
       motionState: computedMotionState,
       address:  cachedActualAddress,
       screenCaptured: Boolean(location.coords?.screenCaptured),
-      screenMoving: Boolean(location.coords?.screenMoving || _isConfirmedMoving || effectiveSpeedKmh >= 1.5),
-      screenDistanceKm: Number(effectiveScreenDistKm.toFixed(3)),
+      screenMoving: Boolean(_isConfirmedMoving || reportedSpeedKmh >= 3.2),
+      screenDistanceKm: Number(storedLocalDist.toFixed(5)),
     };
 
     if (lastLocation) {
       try {
         let { valid, distKm, reanchorOnly, isOutlier, effectiveSecs, keepMovingAnchor } = validateSegment(lastLocation, {
           lat: latitude, lng: longitude,
-          speed: effectiveSpeedKmh > 0 ? (effectiveSpeedKmh / 3.6) : speed,
+          speed: rawSpeedMps,
           accuracy: reportedAcc,
           timestamp: new Date(timestamp).toISOString(),
-          screenMoving: Boolean(location.coords?.screenMoving || _isConfirmedMoving || effectiveSpeedKmh >= 1.5),
+          screenMoving: Boolean(_isConfirmedMoving || reportedSpeedKmh >= 3.2),
         });
 
         if (keepMovingAnchor) {
-          // Sub-8m micro-step or brief traffic pause (< 180s since last anchor):
-          // Keep anchor lat/lng/timestamp untouched AND keep isConfirmedMoving=true so distance accumulates cleanly,
-          // while still allowing periodic/step telemetry upload below!
+          // Sub-8m micro-step or brief pause (< 35s since last anchor):
+          // Keep anchor lat/lng/timestamp untouched so distance accumulates cleanly when >= 8m is reached!
         } else if (isOutlier) {
           // 2-Point Satellite/Network Consensus Relock (supports up to 240m accuracy):
           const prevRelock = lastLocation.relockCandidate;
@@ -581,10 +585,10 @@ const processLocationUnlocked = async (location) => {
             const dRelockM = distanceMeters(prevRelock.lat, prevRelock.lng, latitude, longitude);
             const dtRelockS = Math.max((timestamp - prevRelock.ts) / 1000, 1);
             const relockSpeedKmh = (dRelockM / 1000 / dtRelockS) * 3600;
-            if (dRelockM <= 1500 && relockSpeedKmh <= 140.0) {
+            if (dRelockM >= 25 && dRelockM <= 1500 && relockSpeedKmh >= 3.5 && relockSpeedKmh <= 140.0) {
               console.log(`🛡️ [SATELLITE_RELOCK] Mobile re-anchoring onto verified consensus fix (${dRelockM.toFixed(0)}m at ${relockSpeedKmh.toFixed(1)} km/h)`);
               valid = true;
-              distKm = dRelockM >= 10 ? (dRelockM / 1000) : 0;
+              distKm = dRelockM / 1000;
               isReanchorUpload = true;
               _isConfirmedMoving = true;
             } else {
@@ -620,7 +624,7 @@ const processLocationUnlocked = async (location) => {
               longitude,
               distM,
               secs,
-              speed,
+              rawSpeedMps,
               calcSpeedKmh,
               reportedAcc,
               newCoord
@@ -636,19 +640,28 @@ const processLocationUnlocked = async (location) => {
         if (!keepMovingAnchor) {
           if (valid) {
             calculatedDistKm = distKm;
+            const anchorTsMs = lastLocation.timestamp ? new Date(lastLocation.timestamp).getTime() : (timestamp - 4000);
+            const stepSecsActual = Math.max((timestamp - anchorTsMs) / 1000, 1);
+            const stepSpeedMps = Math.min((calculatedDistKm * 1000) / stepSecsActual, 40);
+            const displaySpeedMps = rawSpeedMps >= 0.8 ? rawSpeedMps : stepSpeedMps;
+
             if (calculatedDistKm > 0) {
               const currentLocal = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-              const updatedLocal = (currentLocal + calculatedDistKm).toFixed(2);
-              await storage.setItem('tracking_accumulated_distance', updatedLocal);
-              newCoord.screenDistanceKm = Math.max(newCoord.screenDistanceKm || 0, parseFloat(updatedLocal));
+              // Store 5-decimal precision (1 cm) so sub-10m steps NEVER get distorted by .toFixed(2) rounding!
+              const updatedLocalNum = Number((currentLocal + calculatedDistKm).toFixed(5));
+              await storage.setItem('tracking_accumulated_distance', String(updatedLocalNum));
+              newCoord.screenDistanceKm = updatedLocalNum;
+              newCoord.motionState = displaySpeedMps >= 4.0 ? 'VEHICLE' : 'WALKING';
+              newCoord.screenMoving = true;
 
               // Emit immediate local real-time distance event so UI updates instantly
               DeviceEventEmitter.emit('LiveDistanceUpdated', {
                 sessionId,
-                totalDistance: parseFloat(updatedLocal),
+                totalDistance: updatedLocalNum,
                 stepDistKm: calculatedDistKm,
-                speed: newCoord.speed || 0,
-                motionState: newCoord.motionState || 'MOVING',
+                speed: displaySpeedMps,
+                motionState: newCoord.motionState,
+                isMoving: true,
                 lat: newCoord.lat,
                 lng: newCoord.lng,
                 address: newCoord.address || '',
@@ -663,6 +676,21 @@ const processLocationUnlocked = async (location) => {
               needsInitialSeedUpload: false,
             }));
           } else if (!reanchorOnly && !isRejectedOutlier) {
+            // Stationary / unconfirmed step: keep anchor at lastLocation, update status to STATIONARY if not moving
+            if (!_isConfirmedMoving) {
+              const currentLocal = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+              DeviceEventEmitter.emit('LiveDistanceUpdated', {
+                sessionId,
+                totalDistance: currentLocal,
+                stepDistKm: 0,
+                speed: 0,
+                motionState: 'STATIONARY',
+                isMoving: false,
+                lat: newCoord.lat,
+                lng: newCoord.lng,
+                address: newCoord.address || '',
+              });
+            }
             await storage.setItem('last_recorded_location', JSON.stringify({
               ...lastLocation,
               lastTickTimestamp: new Date(timestamp).toISOString(),
@@ -683,7 +711,7 @@ const processLocationUnlocked = async (location) => {
       await storage.setItem('last_recorded_location', JSON.stringify({
         lat: latitude,
         lng: longitude,
-        speed: Number.isFinite(speed) ? speed : 0,
+        speed: rawSpeedMps,
         accuracy: reportedAcc,
         timestamp: isoNow,
         lastTickTimestamp: isoNow,
@@ -697,28 +725,16 @@ const processLocationUnlocked = async (location) => {
     }
 
     // ── CONTINUOUS TRAJECTORY & LIVE TELEMETRY UPLOAD GATE ───────────────────
-    // Upload immediately on:
-    //  1. Initial seed or long-gap re-anchor
-    //  2. Any confirmed local distance step (calculatedDistKm > 0)
-    //  3. Any displacement >= 6m from the last uploaded coordinate or Doppler speed >= 0.6 m/s or screenMoving
-    //     so the server's AGTRIE-X v12 engine & DistanceLedger receive the full continuous trajectory!
-    //  4. Periodic live position ping every 35s when stationary (backend Centroid Geofence blocks stationary drift).
+    // Upload immediately ONLY on:
+    //  1. Confirmed distance step (calculatedDistKm > 0)
+    //  2. Initial seed or 30-min re-anchor (isInitialSeed || isReanchorUpload)
+    //  3. Periodic 60s stationary keepalive so admin map stays live with 0 fake KM.
+    // Do NOT upload intermediate sub-8m held-anchor ticks (`keepMovingAnchor`), so backend
+    // receives the exact verified step trajectory!
     const nowMs = Date.now();
-    const distFromLastUploadM = _lastUploadedCoord
-      ? distanceMeters(_lastUploadedCoord.lat, _lastUploadedCoord.lng, latitude, longitude)
-      : (lastLocation ? distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) : 999);
-
-    // 🎯 1-MINUTE STATIONARY DELAY GUARD:
-    // When employee is stationary at a spot:
-    // 1. Live coordinates are uploaded every 60s (1 minute) so the map/admin stays 100% updated without any tracking disconnect.
-    // 2. Indoor jitter (< 25m) with speed < 2.0 km/h will NOT trigger rapid uploads.
-    // 3. When moving on the road (_isConfirmedMoving || calculatedDistKm > 0), uploads trigger on 8m step or Doppler speed >= 0.8 m/s.
-    const isMovingOnRoad = _isConfirmedMoving || calculatedDistKm > 0;
     const elapsedSinceLastUpload = nowMs - (_lastCoordUploadTs || 0);
 
-    // When stationary at spot: upload a keepalive fix every 60 seconds (1 minute) so admin map & dashboard stay 100% live without disconnect!
-    // If < 60s and stationary with 0 KM, send lightweight heartbeat only.
-    if (!isMovingOnRoad && calculatedDistKm <= 0 && !isInitialSeed && elapsedSinceLastUpload < 60000) {
+    if (calculatedDistKm <= 0 && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 60000) {
       sendHeartbeatNow(false).catch(() => {});
       return;
     }
@@ -729,9 +745,9 @@ const processLocationUnlocked = async (location) => {
     const coordsBatch = candidateCoordToUpload ? [candidateCoordToUpload, newCoord] : [newCoord];
 
     console.log(
-      `📍 BackgroundTask: Uploading GPS telemetry (+${calculatedDistKm.toFixed(3)} km, ${coordsBatch.length} pt) ` +
+      `📍 BackgroundTask: Uploading GPS telemetry (+${calculatedDistKm.toFixed(4)} km, ${coordsBatch.length} pt) ` +
       `[${latitude.toFixed(5)}, ${longitude.toFixed(5)}] ` +
-      `Acc:${reportedAcc.toFixed(0)}m Speed:${(speed || 0).toFixed(2)}m/s`
+      `Acc:${reportedAcc.toFixed(0)}m Speed:${rawSpeedMps.toFixed(2)}m/s`
     );
 
     // ── Try uploading to server (with 1 fast retry before offline queueing) ───
@@ -758,7 +774,19 @@ const processLocationUnlocked = async (location) => {
       }
 
       if (response.data?.success) {
-        if (response.data?.sessionId && (sessionId === 'AUTO_RECOVER_SESSION' || response.data.sessionId !== sessionId)) {
+        if (response.data?.sessionClosed === true) {
+          console.log(`🛑 [SESSION_CLOSED] BackgroundTask: Server reported session ${sessionId} closed. Halting.`);
+          stopHeartbeat();
+          await storage.removeItem('currentTrackingSessionId').catch(() => {});
+          await storage.setItem('isTrackingActive', 'false').catch(() => {});
+          if (Platform.OS !== 'web' && !isExpoGo) {
+            Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+          }
+          DeviceEventEmitter.emit('TrackingStateChanged', false);
+          return;
+        }
+
+        if (response.data?.sessionId && response.data.sessionId !== sessionId) {
           sessionId = response.data.sessionId;
           const manualOut = await storage.getItem('user_manually_punched_out');
           if (manualOut !== 'true') {
@@ -767,107 +795,68 @@ const processLocationUnlocked = async (location) => {
             await storage.setItem('isTrackingActive', 'true').catch(() => {});
           }
         }
-        if (response.data?.sessionClosed === true) {
-          // Check if the server closed a session from a previous day vs an active shift that was auto-closed
-          const isPrevDayEnd = String(response.data?.message || '').toLowerCase().includes('previous day') ||
-            String(response.data?.message || '').toLowerCase().includes('ended. please punch in for today');
-          const manualOut = await storage.getItem('user_manually_punched_out');
-          if (!isPrevDayEnd && manualOut !== 'true') {
-            console.log(`🛡️ [AUTO_HEAL] Server returned sessionClosed for ${sessionId} while employee is still on shift. Re-opening session...`);
-            try {
-              const startRes = await trackingAPI.startTracking({ lat: newCoord.lat, lng: newCoord.lng });
-              const newSessionId = startRes.data?.sessionId || startRes.data?.session?.sessionId;
-              if (startRes.data?.success && newSessionId) {
-                await storage.setItem('currentTrackingSessionId', newSessionId);
-                await storage.setItem('tracking_accumulated_session_id', newSessionId);
-                await storage.setItem('isTrackingActive', 'true');
-                console.log('🛡️ [AUTO_HEAL] Seamlessly restored active session:', newSessionId);
-                await axios.post(
-                  `${BASE_URL}/tracking/update`,
-                  { sessionId: newSessionId, coordinates: coordsBatch },
-                  { headers: { Authorization: `Bearer ${token}` }, timeout: UPLOAD_TIMEOUT_MS }
-                ).catch(() => {});
-                return;
-              }
-            } catch (_) {}
-          }
 
-          if (isPrevDayEnd || manualOut === 'true') {
-            console.log(`🛑 [SESSION_CLOSED] BackgroundTask: Session ${sessionId} ended (${isPrevDayEnd ? 'date rollover' : 'manual punch-out'}). Halting.`);
-            const currentActive = await storage.getItem('currentTrackingSessionId');
-            if (currentActive === sessionId) {
-              stopHeartbeat();
-              await storage.removeItem('currentTrackingSessionId');
-              await storage.setItem('isTrackingActive', 'false');
-              if (Platform.OS !== 'web' && !isExpoGo) {
-                Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
-              }
-            }
-          }
-          return;
-        }
-
+        const serverExact = Number(response.data.exactTotalDistanceToday ?? response.data.exactTotalDistance);
         const serverToday = Number(response.data.totalDistanceToday);
         const serverDist = Number(response.data.totalDistance);
-        const authoritativeDist = Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist;
+        const authoritativeDist = Number.isFinite(serverExact) && serverExact >= 0
+          ? serverExact
+          : (Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist);
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
         const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist >= 0 ? authoritativeDist : 0;
 
-        // Monotonic non-decreasing guarantee: never overwrite a higher local screen distance with 0.00!
-        const finalNum = Math.max(validServerDist, localDist);
-        const finalDist = finalNum.toFixed(2);
+        // Preserve 5-decimal precision: if server and local are within 20m rounding window, keep the higher 5-decimal value;
+        // otherwise trust authoritative server distance when validServerDist > 0.
+        let finalNum = localDist;
+        if (validServerDist > 0) {
+          finalNum = Math.abs(localDist - validServerDist) <= 0.025
+            ? Math.max(localDist, validServerDist)
+            : validServerDist;
+        }
+        const finalDistPrecisionStr = Number(finalNum.toFixed(5)).toString();
 
         const checkpointData = {
           sessionId,
-          accumulatedDistance: finalDist,
+          accumulatedDistance: finalNum.toFixed(2),
           lastRecordedLocation: newCoord,
           updatedAt: new Date().toISOString()
         };
 
         await Promise.all([
           storage.setItem('tracking_session_checkpoint', JSON.stringify(checkpointData)),
-          storage.setItem('tracking_accumulated_distance', finalDist),
+          storage.setItem('tracking_accumulated_distance', finalDistPrecisionStr),
         ]);
+
+        const srvMotionState = response.data?.motionState || newCoord.motionState || 'STATIONARY';
+        const isCurrentlyMoving = srvMotionState !== 'STATIONARY' && _isConfirmedMoving;
 
         DeviceEventEmitter.emit('LiveDistanceUpdated', {
           sessionId,
           totalDistance: finalNum,
           sessionDistance: Number(response.data.sessionDistance ?? response.data.totalDistance ?? finalNum),
-          speed: (response.data?.motionState === 'STATIONARY') ? 0 : (newCoord.speed || 0),
-          motionState: response.data?.motionState || newCoord.motionState || 'STATIONARY',
+          speed: isCurrentlyMoving ? (newCoord.speed || 0) : 0,
+          motionState: isCurrentlyMoving ? srvMotionState : 'STATIONARY',
+          isMoving: isCurrentlyMoving,
           lat: newCoord.lat,
           lng: newCoord.lng,
           address: newCoord.address || '',
         });
 
-        console.log(`📍 BackgroundTask: Server synced. Day Total: ${finalDist} km`);
+        console.log(`📍 BackgroundTask: Server synced. Day Total: ${finalNum.toFixed(2)} km (exact: ${finalDistPrecisionStr} km)`);
 
         flushOfflineQueue().catch(() => {});
       }
     } catch (apiErr) {
       if (apiErr.response?.status === 409 || apiErr.response?.data?.sessionClosed === true) {
-        const manualOut = await storage.getItem('user_manually_punched_out');
-        if (manualOut === 'true') {
-          return;
+        console.log('🛑 [SESSION_CLOSED] Server reported 409/sessionClosed. Halting local session.');
+        stopHeartbeat();
+        await storage.removeItem('currentTrackingSessionId').catch(() => {});
+        await storage.setItem('isTrackingActive', 'false').catch(() => {});
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
         }
-        console.log('🛡️ [AUTO_HEAL] Server reported sessionClosed/409. Auto-recovering active shift...');
-        try {
-          const startRes = await trackingAPI.startTracking({ lat: newCoord.lat, lng: newCoord.lng });
-          const newSessionId = startRes.data?.sessionId || startRes.data?.session?.sessionId;
-          if (startRes.data?.success && newSessionId) {
-            await storage.setItem('currentTrackingSessionId', newSessionId);
-            await storage.setItem('tracking_accumulated_session_id', newSessionId);
-            console.log('🛡️ [AUTO_HEAL] Seamlessly adopted active session:', newSessionId);
-            await axios.post(
-              `${BASE_URL}/tracking/update`,
-              { sessionId: newSessionId, coordinates: coordsBatch },
-              { headers: { Authorization: `Bearer ${token}` }, timeout: UPLOAD_TIMEOUT_MS }
-            ).catch(() => {});
-            return;
-          }
-        } catch (healErr) {
-          console.log('⚠️ [AUTO_HEAL] Auto-recovery attempt failed:', healErr.message);
-        }
+        DeviceEventEmitter.emit('TrackingStateChanged', false);
+        return;
       }
       console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Enqueuing for offline sync...`);
       for (const c of coordsBatch) {

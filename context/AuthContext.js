@@ -1,7 +1,47 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform, DeviceEventEmitter } from 'react-native';
+import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { storage } from '../services/storage';
 import socketService from '../services/socket';
 import { setUnauthorizedCallback, setIsLoggingOutState } from '../services/api';
+import { BACKGROUND_TRACKING_TASK, stopHeartbeat } from '../services/locationTask';
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+const TRACKING_STORAGE_KEYS = [
+  'currentTrackingSessionId',
+  'tracking_accumulated_session_id',
+  'isTrackingActive',
+  'trackingStartTime',
+  'tracking_accumulated_distance',
+  'last_recorded_location',
+  'last_gps_received_at',
+  'last_heartbeat_ts',
+  'last_server_upload_event_id',
+  'passive_motion_first_seen',
+  'passive_motion_last_seen',
+  'passive_motion_start_coords',
+  'passive_last_lat',
+  'passive_last_lng',
+  'passive_last_time',
+  'tracking_screen_coord_outbox',
+  'tracking_session_checkpoint',
+  'offline_request_queue',
+  'offline_retry_counts',
+  'cache_emp_dashboard_v1',
+];
+
+async function purgeLocalTrackingState() {
+  try {
+    stopHeartbeat();
+    if (Platform.OS !== 'web' && !isExpoGo) {
+      await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+    }
+    await Promise.all(TRACKING_STORAGE_KEYS.map((k) => storage.removeItem(k).catch(() => {})));
+    DeviceEventEmitter.emit('TrackingStateChanged', false);
+  } catch (_) {}
+}
 
 const AuthContext = createContext({});
 
@@ -30,6 +70,14 @@ export const AuthProvider = ({ children }) => {
       
       if (userData && token) {
         const parsedUser = JSON.parse(userData);
+        const userId = String(parsedUser?._id || parsedUser?.id || '');
+        const ownerId = await storage.getItem('trackingOwnerUserId');
+        if (userId && ownerId && ownerId !== userId) {
+          await purgeLocalTrackingState();
+        }
+        if (userId) {
+          await storage.setItem('trackingOwnerUserId', userId);
+        }
         setUser(parsedUser);
         
         // Auto-connect socket for persistent login session
@@ -47,8 +95,16 @@ export const AuthProvider = ({ children }) => {
    * Log in user, write token/data to SecureStore, and connect live socket
    */
   const login = async (userData, token) => {
-    console.log("first")
     try {
+      const newUserId = String(userData?._id || userData?.id || '');
+      // Always purge any stale local tracking session / passive motion timers on fresh login
+      // so logging in NEVER auto-starts tracking from stale device state!
+      await purgeLocalTrackingState();
+      await storage.removeItem('user_manually_punched_out').catch(() => {});
+      if (newUserId) {
+        await storage.setItem('trackingOwnerUserId', newUserId);
+      }
+
       await storage.setItem('userToken', token);
       await storage.setItem('userData', JSON.stringify(userData));
       setUser(userData);
@@ -69,16 +125,9 @@ export const AuthProvider = ({ children }) => {
       console.log('🔐 AuthContext: Initiating logout sequence...');
       setIsLoggingOutState(true);
       
-      // Stop tracking if active before cleaning tokens
-      try {
-        const activeSession = await storage.getItem('currentTrackingSessionId');
-        if (activeSession) {
-          console.log('🔐 AuthContext: Active tracking session detected on logout. Cleaning...');
-          const { stopTracking } = require('../hooks/useLocationTracker');
-          // Non-blocking fallback to clean location tasks
-          await storage.removeItem('currentTrackingSessionId');
-        }
-      } catch {}
+      await purgeLocalTrackingState();
+      await storage.removeItem('trackingOwnerUserId').catch(() => {});
+      await storage.removeItem('user_manually_punched_out').catch(() => {});
 
       socketService.disconnect();
       await storage.removeItem('userToken');
