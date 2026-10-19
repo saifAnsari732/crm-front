@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, View, TouchableOpacity, ScrollView, 
   KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Image, Modal, LogBox 
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { authApi } from '../../services/api';
+import { storage } from '../../services/storage';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -25,6 +26,36 @@ export default function LoginScreen() {
   const [secureText, setSecureText] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [isAutoFilled, setIsAutoFilled] = useState(false);
+
+  // ── Auto-Fill Saved Credentials On Mount ────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    const loadSavedCredentials = async () => {
+      try {
+        const savedId = await storage.getItem('saved_login_identifier');
+        const savedPass = await storage.getItem('saved_login_password');
+        const savedRemember = await storage.getItem('remember_me');
+        if (!isMounted) return;
+
+        if (savedRemember !== null) {
+          setRememberMe(savedRemember === 'true');
+        }
+        if (savedId) {
+          setEmail(savedId);
+          if (savedPass) {
+            setPassword(savedPass);
+            setIsAutoFilled(true);
+          }
+        }
+      } catch (e) {
+        console.log('Failed to load saved login credentials:', e);
+      }
+    };
+    loadSavedCredentials();
+    return () => { isMounted = false; };
+  }, []);
 
   // ── Forgot Password Modal State ────────────────────────────────
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -41,12 +72,14 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     const id = (email || '').trim();
     if (!id || !password) {
-      setErrorMsg('Please enter your email or mobile number and password.');
+      setErrorMsg('Please enter your email, mobile number, or employee ID and password.');
       return;
     }
-    // If not an email, it must be a valid phone number (min 10 digits)
-    if (!id.includes('@') && id.replace(/\D/g, '').length < 10) {
-      setErrorMsg('Please enter a valid email or a 10-digit mobile number.');
+    const isEmail = id.includes('@');
+    const isPhone = id.replace(/\D/g, '').length >= 10;
+    const isEmpId = /^EMP-/i.test(id) || (id.length >= 4 && !id.includes(' '));
+    if (!isEmail && !isPhone && !isEmpId) {
+      setErrorMsg('Please enter a valid email, 10-digit mobile number, or employee ID.');
       return;
     }
 
@@ -54,11 +87,20 @@ export default function LoginScreen() {
       setLoading(true);
       setErrorMsg('');
       
-      // Backend accepts email OR phone in `identifier` (email kept for backward compatibility)
+      // Backend accepts email, phone, or employeeId in `identifier`
       const response = await authApi.login({ identifier: id, email: id, password });
       
       if (response.data?.success) {
         const { user, token } = response.data;
+        if (rememberMe) {
+          await storage.setItem('saved_login_identifier', id).catch(() => {});
+          await storage.setItem('saved_login_password', password).catch(() => {});
+          await storage.setItem('remember_me', 'true').catch(() => {});
+        } else {
+          await storage.removeItem('saved_login_identifier').catch(() => {});
+          await storage.removeItem('saved_login_password').catch(() => {});
+          await storage.setItem('remember_me', 'false').catch(() => {});
+        }
         await login(user, token);
       } else {
         setErrorMsg(response.data?.message || 'Invalid email/mobile or password.');
@@ -197,21 +239,27 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {/* Email field */}
-            <Text style={styles.inputLabel}>Email Address / Mobile</Text>
+            {/* Email / Mobile / Employee ID field */}
+            <Text style={styles.inputLabel}>Email Address / Mobile / Employee ID</Text>
             <View style={styles.inputWrapper}>
               <Mail size={20} color="#64748b" style={styles.fieldIcon} />
               <TextInput
-                placeholder="name@company.com or 98765 43210"
+                placeholder="name@company.com or 98765 43210 or EMP-..."
                 placeholderTextColor="#94a3b8"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(val) => {
+                  setEmail(val);
+                  setIsAutoFilled(false);
+                }}
                 mode="flat"
                 style={styles.inputField}
                 activeUnderlineColor="transparent"
                 underlineColor="transparent"
-                keyboardType="default"
+                keyboardType="email-address"
                 autoCapitalize="none"
+                textContentType="username"
+                autoComplete="username"
+                importantForAutofill="yes"
                 textColor="#334155"
                 theme={{ colors: { background: 'transparent' } }}
               />
@@ -231,18 +279,43 @@ export default function LoginScreen() {
                 placeholder="●●●●●●●●"
                 placeholderTextColor="#94a3b8"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(val) => {
+                  setPassword(val);
+                  setIsAutoFilled(false);
+                }}
                 mode="flat"
                 style={styles.inputField}
                 activeUnderlineColor="transparent"
                 underlineColor="transparent"
                 secureTextEntry={secureText}
+                textContentType="password"
+                autoComplete="current-password"
+                importantForAutofill="yes"
                 textColor="#334155"
                 theme={{ colors: { background: 'transparent' } }}
               />
               <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeBtn}>
                 {secureText ? <Eye size={20} color="#64748b" /> : <EyeOff size={20} color="#64748b" />}
               </TouchableOpacity>
+            </View>
+
+            {/* Remember Me & Auto-Fill Toggle */}
+            <View style={styles.rememberRow}>
+              <TouchableOpacity
+                style={styles.rememberTouch}
+                activeOpacity={0.7}
+                onPress={() => setRememberMe(!rememberMe)}
+              >
+                <View style={[styles.checkboxBox, rememberMe && styles.checkboxBoxActive]}>
+                  {rememberMe && <CheckCircle2 size={15} color="#0f766e" />}
+                </View>
+                <Text style={styles.rememberText}>Remember & auto-fill ID / Password</Text>
+              </TouchableOpacity>
+              {isAutoFilled && (
+                <View style={styles.autoFilledBadge}>
+                  <Text style={styles.autoFilledText}>Auto-filled</Text>
+                </View>
+              )}
             </View>
 
             {/* Submit Action Button */}
@@ -517,6 +590,51 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 6,
+  },
+  rememberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  rememberTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#94a3b8',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  checkboxBoxActive: {
+    borderColor: '#0f766e',
+    backgroundColor: '#f0fdfa',
+  },
+  rememberText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  autoFilledBadge: {
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  autoFilledText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#047857',
   },
   signInBtn: {
     backgroundColor: '#0a3d3c',
