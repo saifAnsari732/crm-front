@@ -353,14 +353,19 @@ export async function sendHeartbeatNow(force = false) {
       }
       console.log(`💓 Heartbeat OK. Server dist: ${(response.data?.totalDistance || 0).toFixed(2)} km`);
     } else if (response.data?.sessionClosed === true) {
-      console.log(`🛑 [HEARTBEAT_SESSION_CLOSED] Server reported session ${sessionId} closed. Halting background task.`);
-      stopHeartbeat();
-      await storage.removeItem('currentTrackingSessionId').catch(() => {});
-      await storage.setItem('isTrackingActive', 'false').catch(() => {});
-      if (Platform.OS !== 'web' && !isExpoGo) {
-        Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+      const manualOut = await storage.getItem('user_manually_punched_out');
+      if (manualOut === 'true') {
+        console.log(`🛑 [HEARTBEAT_SESSION_CLOSED] User manually punched out & server closed session ${sessionId}. Halting background task.`);
+        stopHeartbeat();
+        await storage.removeItem('currentTrackingSessionId').catch(() => {});
+        await storage.setItem('isTrackingActive', 'false').catch(() => {});
+        if (Platform.OS !== 'web' && !isExpoGo) {
+          Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+        }
+        DeviceEventEmitter.emit('TrackingStateChanged', false);
+      } else {
+        console.log(`🛡️ [HEARTBEAT_IMMORTAL_SHIELD] Server reported sessionClosed for ${sessionId}, but user NEVER manually punched out! Keeping GPS task ALIVE.`);
       }
-      DeviceEventEmitter.emit('TrackingStateChanged', false);
     }
   } catch (_) {
     // best-effort; retried on next GPS tick / interval
@@ -775,14 +780,19 @@ const processLocationUnlocked = async (location) => {
 
       if (response.data?.success) {
         if (response.data?.sessionClosed === true) {
-          console.log(`🛑 [SESSION_CLOSED] BackgroundTask: Server reported session ${sessionId} closed. Halting.`);
-          stopHeartbeat();
-          await storage.removeItem('currentTrackingSessionId').catch(() => {});
-          await storage.setItem('isTrackingActive', 'false').catch(() => {});
-          if (Platform.OS !== 'web' && !isExpoGo) {
-            Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+          const manualOut = await storage.getItem('user_manually_punched_out');
+          if (manualOut === 'true') {
+            console.log(`🛑 [SESSION_CLOSED] BackgroundTask: User manually punched out & server closed session ${sessionId}. Halting.`);
+            stopHeartbeat();
+            await storage.removeItem('currentTrackingSessionId').catch(() => {});
+            await storage.setItem('isTrackingActive', 'false').catch(() => {});
+            if (Platform.OS !== 'web' && !isExpoGo) {
+              Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+            }
+            DeviceEventEmitter.emit('TrackingStateChanged', false);
+            return;
           }
-          DeviceEventEmitter.emit('TrackingStateChanged', false);
+          console.log(`🛡️ [IMMORTAL_SHIELD] BackgroundTask ignored false sessionClosed for ${sessionId} because user did not manually punch out.`);
           return;
         }
 
@@ -848,14 +858,19 @@ const processLocationUnlocked = async (location) => {
       }
     } catch (apiErr) {
       if (apiErr.response?.status === 409 || apiErr.response?.data?.sessionClosed === true) {
-        console.log('🛑 [SESSION_CLOSED] Server reported 409/sessionClosed. Halting local session.');
-        stopHeartbeat();
-        await storage.removeItem('currentTrackingSessionId').catch(() => {});
-        await storage.setItem('isTrackingActive', 'false').catch(() => {});
-        if (Platform.OS !== 'web' && !isExpoGo) {
-          Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+        const manualOut = await storage.getItem('user_manually_punched_out');
+        if (manualOut === 'true') {
+          console.log('🛑 [SESSION_CLOSED] Server reported 409/sessionClosed after manual punch-out. Halting local session.');
+          stopHeartbeat();
+          await storage.removeItem('currentTrackingSessionId').catch(() => {});
+          await storage.setItem('isTrackingActive', 'false').catch(() => {});
+          if (Platform.OS !== 'web' && !isExpoGo) {
+            Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
+          }
+          DeviceEventEmitter.emit('TrackingStateChanged', false);
+          return;
         }
-        DeviceEventEmitter.emit('TrackingStateChanged', false);
+        console.log('🛡️ [IMMORTAL_SHIELD] Ignored 409/sessionClosed because user never manually punched out.');
         return;
       }
       console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Enqueuing for offline sync...`);

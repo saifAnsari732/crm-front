@@ -269,7 +269,7 @@ export default function useLocationTracker() {
             const todayRes = await trackingApi.getTodaySessions();
             if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
               const liveTodaySession = todayRes.data.sessions.find(
-                (s) => s.isActive === true && !s.manuallyStopped && !s.endTime
+                (s) => !s.manuallyStopped
               );
               if (liveTodaySession && liveTodaySession.sessionId) {
                 console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
