@@ -155,6 +155,8 @@ export const NotificationProvider = ({ children }) => {
   const pollForNewNotifications = useCallback(async () => {
     if (!user) return;
     try {
+      const token = await storage.getItem('userToken') || await storage.getItem('token');
+      if (!token) return;
       const res = await notificationAPI.getAll();
       const notifications = res?.data?.notifications || [];
       if (!notifications.length) return;
@@ -199,8 +201,13 @@ export const NotificationProvider = ({ children }) => {
           data: latest.data || {},
         });
       }
-    } catch {
-      // Silent fail
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        if (pollingTimerRef.current) {
+          clearInterval(pollingTimerRef.current);
+          pollingTimerRef.current = null;
+        }
+      }
     }
   }, [user, triggerSystemNotification]);
 
