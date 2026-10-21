@@ -121,7 +121,7 @@ class SocketService {
         reconnectionDelay: 3000,
         reconnectionDelayMax: 15000,
         timeout: 10000,
-        transports: ['polling', 'websocket'],
+        transports: ['websocket', 'polling'],
       });
 
       // Bind common lifecycle handlers
