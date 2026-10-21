@@ -966,12 +966,7 @@ export default function useLocationTracker() {
       const savedLastLocationStr = await storage.getItem('last_recorded_location');
       let savedLocalDist = parseFloat(savedLocalDistStr) || 0;
       
-      // Always purge current session keys immediately from local storage
-      await storage.removeItem('currentTrackingSessionId');
-      await storage.removeItem('trackingStartTime');
-      await storage.removeItem('tracking_accumulated_distance');
-      await storage.removeItem('tracking_accumulated_session_id');
-      await storage.removeItem('last_recorded_location');
+      // Defer purging session keys until final distance is submitted to backend
       
       if (!sessionId) {
         // Fallback: stop task if registered (Mobile native only)
@@ -1053,16 +1048,25 @@ export default function useLocationTracker() {
         } catch (_) {}
       }
 
-      // 3. Stop backend session via REST API
-      let totalDistance = 0;
+      // 3. Stop backend session via REST API (Pass accumulated local distance as authority)
+      let totalDistance = savedLocalDist;
       try {
-        const response = await trackingApi.stopTracking(sessionId, new Date().toISOString(), '', 0, true);
-        totalDistance = typeof response.data?.totalDistance === 'number' ? response.data.totalDistance : savedLocalDist;
+        const response = await trackingApi.stopTracking(sessionId, new Date().toISOString(), '', savedLocalDist, true);
+        const srvDist = Number(response.data?.totalDistance ?? response.data?.totalDistanceToday ?? 0);
+        // Authoritative resolution: local distance accumulated by user can NEVER decrease upon punch out!
+        totalDistance = Math.max(savedLocalDist, srvDist);
       } catch (netErr) {
         console.log('⚠️ useLocationTracker: Backend unreachable during stop, queueing stop for retry.');
         await enqueueStop(sessionId, new Date().toISOString());
         totalDistance = savedLocalDist;
       }
+
+      // Purge session storage keys after resolving final authoritative distance
+      await storage.removeItem('currentTrackingSessionId').catch(() => {});
+      await storage.removeItem('trackingStartTime').catch(() => {});
+      await storage.removeItem('tracking_accumulated_distance').catch(() => {});
+      await storage.removeItem('tracking_accumulated_session_id').catch(() => {});
+      await storage.removeItem('last_recorded_location').catch(() => {});
 
       // 4. Emit tracking_stopped event over Socket
       try {

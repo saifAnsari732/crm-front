@@ -501,11 +501,14 @@ export default function ActiveShiftMapScreen() {
           const response = await trackingApi.getTodaySessions();
           if (response?.data?.success && typeof response.data.totalDistanceToday === 'number') {
             const todayDist = response.data.totalDistanceToday;
-            totalDistanceRef.current = todayDist;
-            setDistance(todayDist.toFixed(2));
+            const finalDisplayDist = Math.max(totalDistanceRef.current || 0, todayDist);
+            totalDistanceRef.current = finalDisplayDist;
+            setDistance(finalDisplayDist.toFixed(2));
           } else {
-            totalDistanceRef.current = 0.0;
-            setDistance('0.00');
+            if (!totalDistanceRef.current || totalDistanceRef.current <= 0) {
+              totalDistanceRef.current = 0.0;
+              setDistance('0.00');
+            }
           }
         } catch {
           totalDistanceRef.current = 0.0;
@@ -722,7 +725,7 @@ export default function ActiveShiftMapScreen() {
 
               if (!isMovingRef.current) {
                 // 🛑 CURRENT STATE: STATIONARY (Employee is stopped at desk, home, or office)
-                const isWithinStationarySpot = distFromAnchorM < 14.0 && rawSpeedKmh < 2.0 && calculatedSpeedKmh < 2.0;
+                const isWithinStationarySpot = distFromAnchorM < 10.0 && rawSpeedKmh < 1.8 && calculatedSpeedKmh < 1.8;
 
                 if (isWithinStationarySpot) {
                   // Inside stationary spot: Zero distance added!
@@ -730,24 +733,24 @@ export default function ActiveShiftMapScreen() {
                   setIsMoving(false);
                   setMotionStatusLabel('STATIONARY');
                   setSpeed('0');
-                  if (distFromAnchorM < 10.0) {
+                  if (distFromAnchorM < 8.0) {
                     departureBufferRef.current = [];
                   }
                   lastCoordRef.current = { lat, lng };
                 } else {
                   let departureConfirmed = false;
                   const effectiveMoveSpeed = Math.max(rawSpeedKmh, calculatedSpeedKmh);
-                  if (distFromAnchorM >= 16.0 && effectiveMoveSpeed >= 2.2 && (Number(acc) || 25) <= 85) {
+                  if (distFromAnchorM >= 12.0 && effectiveMoveSpeed >= 2.0 && (Number(acc) || 25) <= 120) {
                     departureConfirmed = true;
-                  } else if (distFromAnchorM >= 14.0 && (Number(acc) || 25) <= 140) {
+                  } else if (distFromAnchorM >= 10.0 && (Number(acc) || 25) <= 140) {
                     const firstCand = departureBufferRef.current.length > 0 ? departureBufferRef.current[0] : null;
                     if (!firstCand || (fixTsMs - firstCand.ts) > 120000) {
                       departureBufferRef.current = [{ lat, lng, distM: distFromAnchorM, ts: fixTsMs }];
                     } else {
                       const stepFromCandM = haversineMeters(firstCand.lat, firstCand.lng, lat, lng);
-                      if (distFromAnchorM >= 18.0 && stepFromCandM >= 5.0 && distFromAnchorM >= firstCand.distM + 3.0) {
+                      if (distFromAnchorM >= 14.0 && stepFromCandM >= 4.0 && distFromAnchorM >= firstCand.distM + 3.0) {
                         departureConfirmed = true;
-                      } else if (distFromAnchorM < 10.0 || distFromAnchorM < firstCand.distM - 5.0) {
+                      } else if (distFromAnchorM < 8.0 || distFromAnchorM < firstCand.distM - 5.0) {
                         departureBufferRef.current = [];
                       }
                     }
@@ -764,8 +767,8 @@ export default function ActiveShiftMapScreen() {
                     setSpeed(Math.min(travelSpeedKmh, 120).toString());
 
                     // Add departure distance locally for instant, fluid UI response:
-                    const departureDistanceKm = distFromAnchorM / 1000;
-                    if (departureDistanceKm >= 0.015 && departureDistanceKm <= 10.0) {
+                    const departureDistanceKm = Math.max(distFromAnchorM, distFromLastM) / 1000;
+                    if (departureDistanceKm >= 0.012 && departureDistanceKm <= 10.0) {
                       totalDistanceRef.current += departureDistanceKm;
                       const dStr = totalDistanceRef.current.toFixed(2);
                       setDistance(dStr);
@@ -780,8 +783,8 @@ export default function ActiveShiftMapScreen() {
                 }
               } else {
                 // 🚗 CURRENT STATE: MOVING ON ROAD
-                // Transition back to STATIONARY if prolonged stop (>= 60s) with displacement < 6m and speed < 1.8 km/h
-                const isLowSpeedDrift = rawSpeedKmh < 1.8 && calculatedSpeedKmh < 1.8 && distFromLastM < 6.0;
+                // Transition back to STATIONARY if prolonged stop (>= 60s) with displacement < 3m and speed < 1.2 km/h
+                const isLowSpeedDrift = rawSpeedKmh < 1.2 && calculatedSpeedKmh < 1.2 && distFromLastM < 3.0;
                 if (isLowSpeedDrift) {
                   if (timeDiffSecs >= 60.0) {
                     isMovingRef.current = false;
@@ -799,7 +802,7 @@ export default function ActiveShiftMapScreen() {
                       isSame: true,
                     };
                   }
-                } else if (distFromLastM >= 5.0 && distFromLastM <= 2500) {
+                } else if (distFromLastM >= 3.0 && distFromLastM <= 2500) {
                   if (calculatedSpeedKmh <= 160.0) {
                     didConfirmStep = true;
                     const travelSpeedKmh = rawSpeedKmh >= 2.0 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);
@@ -1064,7 +1067,10 @@ export default function ActiveShiftMapScreen() {
       const executeStop = async () => {
         const res = await stopTracking();
         if (res.success) {
-          const msg = `Clock out complete. Logged ${res.totalDistance?.toFixed(2) || 0} km traveled.`;
+          const finalLoggedKm = Math.max(totalDistanceRef.current || 0, Number(res.totalDistance) || 0);
+          totalDistanceRef.current = finalLoggedKm;
+          setDistance(finalLoggedKm.toFixed(2));
+          const msg = `Clock out complete. Logged ${finalLoggedKm.toFixed(2)} km traveled.`;
           if (Platform.OS === 'web') {
             alert(`Shift Ended: ${msg}`);
           } else {

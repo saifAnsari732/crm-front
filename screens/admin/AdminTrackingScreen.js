@@ -83,7 +83,7 @@ const STATUS_META = {
   IN_TRANSIT: { label: 'Moving • In Transit', color: '#1d4ed8', bg: '#eff6ff', pin: '#3b82f6' },
   GPS_STALE: { label: 'GPS Weak / Waiting', color: '#ca8a04', bg: '#fefce8', pin: '#eab308' },
   IDLE_ONLINE: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
-  AT_LOCATION: { label: 'Online • Tracking Off', color: '#d97706', bg: '#fffbeb', pin: '#f59e0b' },
+  AT_LOCATION: { label: 'On Field • At Spot', color: '#047857', bg: '#ecfdf5', pin: '#10b981' },
   OFFLINE: { label: 'Offline', color: '#64748b', bg: '#f8fafc', pin: '#94a3b8' },
 };
 
@@ -351,8 +351,8 @@ export default function AdminTrackingScreen(props = {}) {
   }, [fetchEmployees, fetchLiveLocations]);
 
   useEffect(() => {
-    fetchLiveLocations();
-    fetchEmployees();
+    fetchLiveLocations(true);
+    fetchEmployees(true);
     let socket;
     const initSocket = async () => {
       try {
@@ -530,7 +530,7 @@ export default function AdminTrackingScreen(props = {}) {
       const liveLoc = liveLocationIndex.byEmployeeId.get(idStr)
         || liveLocationIndex.byEmployeeCode.get(String(emp.employeeId || ''))
         || liveLocationIndex.byName.get((emp.name || '').toLowerCase());
-      const tracking = !!liveLoc || emp.isTracking;
+      const tracking = !!liveLoc || Boolean(emp.isTracking) || Boolean(emp.isLive) || (emp.attendanceStatus === 'present' && !emp.checkOutTime);
       const isMovingNow = (liveLoc?.motionState && liveLoc.motionState !== 'STATIONARY')
         ? true
         : (liveLoc?.motionState === 'STATIONARY' ? false : (Number(liveLoc?.speed) >= 2.2));

@@ -43,7 +43,7 @@ function withLocationLock(fn) {
 // ALGORITHM CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 const MAX_ACCURACY_METERS    = 100;   // Reject coarse cell-tower jumps > 100m during normal tracking
-const MIN_MOVE_METERS        = 5.0;   // Minimum real physical movement to count a segment (supports walking & city traffic)
+const MIN_MOVE_METERS        = 3.0;   // Minimum real physical movement to count a segment (supports walking & city traffic)
 const MAX_SPEED_KMH          = 180;   // Teleport guard (airplane / GPS flip)
 const MIN_WALKING_SPEED_MPS  = 0.28;  // ~1.0 km/h — supports real-world slow walking
 const STATIONARY_DRIFT_LIMIT = 120;  // If stationary AND jump < 120 m → GPS drift, ignore
@@ -110,9 +110,9 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
   const effectiveSpeedKmh = Math.max(reportedSpeedKmh, Number.isFinite(calcSpeedKmh) ? calcSpeedKmh : 0);
   const stepSecs = Math.min(Math.max(secs, 1), 30);
 
-  // 🛡️ ANTI-JITTER LOCK: Suppress stationary spot GPS bounce < 20m when Doppler speed < 3.0 km/h and screen not moving
-  if (distM < 20.0 && reportedSpeedKmh < 3.0 && currCoord?.screenMoving !== true) {
-    if (distM < 14.0 && _movementCandidateBuffer.length > 0) {
+  // 🛡️ ANTI-JITTER LOCK: Suppress stationary spot GPS bounce < 14m when Doppler speed < 2.5 km/h and screen not moving
+  if (distM < 14.0 && reportedSpeedKmh < 2.5 && currCoord?.screenMoving !== true) {
+    if (distM < 10.0 && _movementCandidateBuffer.length > 0) {
       _movementCandidateBuffer = [];
     }
     return { confirmed: false, pending: false };
@@ -123,8 +123,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: false };
   }
 
-  // Direct single-step departure when hardware Doppler confirms velocity (>= 3.0 km/h) or screen moving flag, with displacement >= 20m and accuracy <= 85m
-  if (distM >= 20.0 && (reportedSpeedKmh >= 3.0 || currCoord?.screenMoving === true) && accuracyM <= 85) {
+  // Direct single-step departure when hardware Doppler confirms velocity (>= 2.5 km/h) or screen moving flag, with displacement >= 12m and accuracy <= 100m
+  if (distM >= 12.0 && (reportedSpeedKmh >= 2.5 || currCoord?.screenMoving === true) && accuracyM <= 100) {
     console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at Doppler speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
     _movementCandidateBuffer = [];
     _isConfirmedMoving = true;
@@ -132,7 +132,7 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
   }
 
   // 2-Point Progressive Departure Verification (blocks single-spike indoor bounces while capturing 100% of real departure distance)
-  const minCandDistM = (reportedSpeedKmh >= 2.5 || currCoord?.screenMoving === true) ? 16.0 : 22.0;
+  const minCandDistM = (reportedSpeedKmh >= 2.0 || currCoord?.screenMoving === true) ? 12.0 : 16.0;
   if (distM >= minCandDistM) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
@@ -148,9 +148,9 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
 
       // Confirmed genuine travel: progressive movement away from anchor AND away from candidate 1
       if (
-        distM >= minCandDistM + 6.0 &&
-        stepFromFirstCandidateM >= 6.0 &&
-        distM >= firstCandidate.distM + 4.0
+        distM >= minCandDistM + 4.0 &&
+        stepFromFirstCandidateM >= 4.0 &&
+        distM >= firstCandidate.distM + 3.0
       ) {
         console.log(`📍 Movement Confirmed: Progressive travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m). Transitioning to MOVING.`);
         const savedCandidateCoord = firstCandidate.coord || null;
@@ -233,8 +233,8 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 1: Minimum movement step ─────────────────────────────────────
-  // Minimum physical step: 5.0m (for walking / tight road curves). Hold anchor across pauses up to 60s
-  const minStepM = reportedAccuracy > 60 ? Math.max(7.0, reportedAccuracy * 0.12) : 5.0;
+  // Minimum physical step: 3.0m (for walking / tight road curves). Hold anchor across pauses up to 60s
+  const minStepM = reportedAccuracy > 60 ? Math.max(5.0, reportedAccuracy * 0.10) : 3.0;
   if (distM < minStepM) {
     if (_isConfirmedMoving && rawSecs <= 60) {
       return { valid: false, distKm: 0, keepMovingAnchor: true };
@@ -284,9 +284,9 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, Zero Stationary Drift) ──
-  // When confirmed moving: only zero-displacement pause (< 5.0m with speed < 1.8 km/h) holds anchor
+  // When confirmed moving: only zero-displacement pause (< 3.0m with speed < 1.2 km/h) holds anchor
   const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh);
-  if (distM < 5.0 && activeStepSpeedKmh < 1.8) {
+  if (distM < 3.0 && activeStepSpeedKmh < 1.2) {
     if (rawSecs > 60) {
       _isConfirmedMoving = false;
     }
@@ -474,7 +474,7 @@ const processLocationUnlocked = async (location) => {
     _lastProcessedTimestamp = timestamp;
 
     // Update motion state classification using hardware Doppler speed when stationary, or step speed when confirmed moving
-    const calcStepSpeedKmh = (_isConfirmedMoving && stepGapSecs > 0 && stepFromLastM >= 8.0)
+    const calcStepSpeedKmh = (_isConfirmedMoving && stepGapSecs > 0 && stepFromLastM >= 3.0)
       ? Math.min((stepFromLastM / 1000 / stepGapSecs) * 3600, 140)
       : 0;
     const effectiveMovingSpeedKmh = _isConfirmedMoving ? Math.max(reportedSpeedKmh, calcStepSpeedKmh) : reportedSpeedKmh;
@@ -515,8 +515,8 @@ const processLocationUnlocked = async (location) => {
       };
     } else {
       // 🎯 TRUE INDOOR STATIONARY GEOFENCE (Sitting at desk / home):
-      // Suppress only if tightly within 12m of baseline and speed < 1.8 km/h and step < 10m:
-      const isBgStationarySpot = distFromBgBaseM < 12.0 && reportedSpeedKmh < 1.8 && stepFromLastM < 10.0;
+      // Suppress only if tightly within 8m of baseline and speed < 1.5 km/h and step < 3m:
+      const isBgStationarySpot = distFromBgBaseM < 8.0 && reportedSpeedKmh < 1.5 && stepFromLastM < 3.0;
       if (isBgStationarySpot) {
         _currentMotionState = 'STATIONARY';
         _isConfirmedMoving = false;
@@ -734,7 +734,7 @@ const processLocationUnlocked = async (location) => {
     const nowMs = Date.now();
     const elapsedSinceLastUpload = nowMs - (_lastCoordUploadTs || 0);
 
-    if (calculatedDistKm <= 0 && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 60000) {
+    if (calculatedDistKm <= 0 && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 30000) {
       sendHeartbeatNow(false).catch(() => {});
       return;
     }

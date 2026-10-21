@@ -170,7 +170,7 @@ export default function AdminMonitoringScreen() {
   }, [todayStr]);
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
 
     // Socket.IO for live distance & status updates
     let socket;
