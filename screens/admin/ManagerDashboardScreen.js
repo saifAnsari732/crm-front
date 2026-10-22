@@ -952,7 +952,11 @@ export default function ManagerDashboardScreen() {
       return empId && aEmpId === empId;
     });
 
-    const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
+    const isLive = Boolean(
+      (liveLoc?.isActive === true || emp.isTracking === true) &&
+      liveLoc?.manuallyStopped !== true &&
+      liveLoc?.autoClosed !== true
+    );
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
     const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
@@ -999,7 +1003,7 @@ export default function ManagerDashboardScreen() {
   const realPresentCount = attendanceRecords.filter((r) =>
     ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn
   ).length;
-  const activeLive = liveLocations.filter((l) => l.isActive || l.isTracking || (l.speed && l.speed > 0)).length;
+  const activeLive = liveLocations.filter((l) => l.isActive === true && l.manuallyStopped !== true && l.autoClosed !== true).length;
   const teamTodayKm = liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistance) || 0), 0);
   
   const myLiveLoc = liveLocations.find((l) => String(l.employeeId?._id || l.employeeId || '') === String(user?._id || ''));

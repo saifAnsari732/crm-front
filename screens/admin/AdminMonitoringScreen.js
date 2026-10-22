@@ -303,7 +303,11 @@ export default function AdminMonitoringScreen() {
       const liveLoc = liveLocations.find(l => String(l.employeeId || l.employee?._id || l.employee || l._id) === empIdStr);
       const attRec = attendanceRecords.find(a => String(a.employee?._id || a.employee) === empIdStr);
 
-      const isLive = emp.isTracking === true || emp.isOnline === true || (liveLoc && liveLoc.isActive !== false);
+      const isLive = Boolean(
+        (liveLoc?.isActive === true || emp.isTracking === true) &&
+        liveLoc?.manuallyStopped !== true &&
+        liveLoc?.autoClosed !== true
+      );
 
       // Authoritative precedence: official distance -> total distance -> attendance -> emp profile
       const authoritativeKm = Number(liveLoc?.officialDistance) ||
