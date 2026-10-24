@@ -236,10 +236,18 @@ async function flushOfflineQueueUnlocked() {
         });
 
         if (response.data?.sessionClosed === true) {
-          console.log(`📦 OfflineSync: Session ${itemSessionId} was ended on server. Discarding remaining queued points.`);
-          if (itemSessionId) closedSessions.add(itemSessionId);
-          delete retryCounts[item.id];
-          continue;
+          const manualOut = await storage.getItem('user_manually_punched_out');
+          if (manualOut === 'true') {
+            console.log(`📦 OfflineSync: Session ${itemSessionId} was manually ended. Discarding remaining queued points.`);
+            if (itemSessionId) closedSessions.add(itemSessionId);
+            delete retryCounts[item.id];
+            continue;
+          } else {
+            console.log(`🛡️ [OFFLINE_IMMORTAL_SHIELD] Server reported sessionClosed for ${itemSessionId}, but user NEVER manually punched out! Retaining points for auto-heal.`);
+            failedItems.push(item);
+            if (itemSessionId) networkFailedSessions.add(itemSessionId);
+            continue;
+          }
         }
 
         successCount++;
@@ -268,11 +276,19 @@ async function flushOfflineQueueUnlocked() {
         }
       } catch (err) {
         if (err?.response?.data?.sessionClosed === true || err?.response?.status === 409) {
-          // Closed or invalid session: drop stale item cleanly without transferring into a new shift
-          if (itemSessionId) closedSessions.add(itemSessionId);
-          delete retryCounts[item.id];
-          console.log(`📦 OfflineSync: Dropped stale point for closed session ${itemSessionId}.`);
-          continue;
+          const manualOut = await storage.getItem('user_manually_punched_out');
+          if (manualOut === 'true') {
+            if (itemSessionId) closedSessions.add(itemSessionId);
+            delete retryCounts[item.id];
+            console.log(`📦 OfflineSync: Dropped stale point for manually closed session ${itemSessionId}.`);
+            continue;
+          } else {
+            console.log(`🛡️ [OFFLINE_IMMORTAL_SHIELD] Retaining offline batch during 409/sessionClosed because user never manually punched out.`);
+            retryCounts[item.id] = retries + 1;
+            failedItems.push(item);
+            if (itemSessionId) networkFailedSessions.add(itemSessionId);
+            continue;
+          }
         }
         // If an individual batch fails repeatedly (e.g. malformed or rejected by server 6+ times),
         // drop it cleanly so it does not block the offline queue indefinitely
