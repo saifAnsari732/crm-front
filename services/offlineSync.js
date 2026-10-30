@@ -270,7 +270,9 @@ async function flushOfflineQueueUnlocked() {
         if (item.kind === 'stop') {
           await storage.removeItem('currentTrackingSessionId');
           await storage.removeItem('trackingStartTime');
-          await storage.removeItem('tracking_accumulated_distance');
+          // Preserve daily distance: Only reset after 1 full day (at midnight)
+          const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          await storage.setItem('tracking_accumulated_date', todayStr).catch(() => {});
           await storage.removeItem('tracking_accumulated_session_id');
           await storage.removeItem('last_recorded_location');
         }

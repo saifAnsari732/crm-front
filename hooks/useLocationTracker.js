@@ -1064,7 +1064,10 @@ export default function useLocationTracker() {
       // Purge session storage keys after resolving final authoritative distance
       await storage.removeItem('currentTrackingSessionId').catch(() => {});
       await storage.removeItem('trackingStartTime').catch(() => {});
-      await storage.removeItem('tracking_accumulated_distance').catch(() => {});
+      // Preserve daily distance: Only reset after 1 full day (at midnight)
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      await storage.setItem('tracking_accumulated_date', todayStr).catch(() => {});
+      await storage.setItem('tracking_accumulated_distance', String((totalDistance || 0).toFixed(2))).catch(() => {});
       await storage.removeItem('tracking_accumulated_session_id').catch(() => {});
       await storage.removeItem('last_recorded_location').catch(() => {});
 

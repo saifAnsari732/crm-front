@@ -874,6 +874,9 @@ const processLocationUnlocked = async (location) => {
           return;
         }
         console.log('🛡️ [IMMORTAL_SHIELD] Ignored 409/sessionClosed because user never manually punched out.');
+        for (const c of coordsBatch) {
+          await enqueueCoordinate(sessionId, c, lastLocation);
+        }
         return;
       }
       console.log(`📍 BackgroundTask: Network unavailable (${apiErr.code || apiErr.message}). Enqueuing for offline sync...`);
