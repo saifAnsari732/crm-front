@@ -792,7 +792,10 @@ const processLocationUnlocked = async (location) => {
             DeviceEventEmitter.emit('TrackingStateChanged', false);
             return;
           }
-          console.log(`🛡️ [IMMORTAL_SHIELD] BackgroundTask ignored false sessionClosed for ${sessionId} because user did not manually punch out.`);
+          console.log(`🛡️ [IMMORTAL_SHIELD] BackgroundTask retained points for ${sessionId} because user did not manually punch out.`);
+          for (const c of coordsBatch) {
+            await enqueueCoordinate(sessionId, c, lastLocation);
+          }
           return;
         }
 

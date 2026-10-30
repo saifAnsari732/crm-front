@@ -530,7 +530,8 @@ export default function AdminTrackingScreen(props = {}) {
       const liveLoc = liveLocationIndex.byEmployeeId.get(idStr)
         || liveLocationIndex.byEmployeeCode.get(String(emp.employeeId || ''))
         || liveLocationIndex.byName.get((emp.name || '').toLowerCase());
-      const tracking = !!liveLoc || Boolean(emp.isTracking) || Boolean(emp.isLive) || (emp.attendanceStatus === 'present' && !emp.checkOutTime);
+      const hasTodayShift = Boolean(emp.attendanceStatus === 'present' && !emp.checkOutTime) || (Number(emp.todayKm || emp.totalDistance || 0) > 0 && !emp.checkOutTime);
+      const tracking = !!liveLoc || Boolean(emp.isTracking) || Boolean(emp.isLive) || hasTodayShift;
       const isMovingNow = (liveLoc?.motionState && liveLoc.motionState !== 'STATIONARY')
         ? true
         : (liveLoc?.motionState === 'STATIONARY' ? false : (Number(liveLoc?.speed) >= 2.2));
