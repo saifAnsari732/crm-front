@@ -110,29 +110,29 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
   const effectiveSpeedKmh = Math.max(reportedSpeedKmh, Number.isFinite(calcSpeedKmh) ? calcSpeedKmh : 0);
   const stepSecs = Math.min(Math.max(secs, 1), 30);
 
-  // 🛡️ ANTI-JITTER LOCK: Suppress stationary spot GPS bounce < 14m when Doppler speed < 2.5 km/h and screen not moving
-  if (distM < 14.0 && reportedSpeedKmh < 2.5 && currCoord?.screenMoving !== true) {
-    if (distM < 10.0 && _movementCandidateBuffer.length > 0) {
+  // 🛡️ ANTI-JITTER LOCK: Suppress stationary spot GPS bounce < 5m when Doppler speed < 1.0 km/h and screen not moving
+  if (distM < 5.0 && reportedSpeedKmh < 1.0 && currCoord?.screenMoving !== true) {
+    if (distM < 4.0 && _movementCandidateBuffer.length > 0) {
       _movementCandidateBuffer = [];
     }
     return { confirmed: false, pending: false };
   }
 
-  // Reject coarse accuracy (> 140m) from triggering departure breakout
-  if (accuracyM > 140) {
+  // Reject coarse accuracy (> 180m) from triggering departure breakout
+  if (accuracyM > 180) {
     return { confirmed: false, pending: false };
   }
 
-  // Direct single-step departure when hardware Doppler confirms velocity (>= 2.5 km/h) or screen moving flag, with displacement >= 12m and accuracy <= 100m
-  if (distM >= 12.0 && (reportedSpeedKmh >= 2.5 || currCoord?.screenMoving === true) && accuracyM <= 100) {
-    console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at Doppler speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
+  // Direct single-step departure when hardware Doppler confirms velocity (>= 1.5 km/h) or calcSpeed >= 1.5 km/h or screen moving flag, with displacement >= 8m and accuracy <= 140m
+  if (distM >= 8.0 && (reportedSpeedKmh >= 1.5 || (Number.isFinite(calcSpeedKmh) && calcSpeedKmh >= 1.5) || currCoord?.screenMoving === true) && accuracyM <= 140) {
+    console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
     _movementCandidateBuffer = [];
     _isConfirmedMoving = true;
     return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: null };
   }
 
   // 2-Point Progressive Departure Verification (blocks single-spike indoor bounces while capturing 100% of real departure distance)
-  const minCandDistM = (reportedSpeedKmh >= 2.0 || currCoord?.screenMoving === true) ? 12.0 : 16.0;
+  const minCandDistM = (reportedSpeedKmh >= 1.2 || currCoord?.screenMoving === true) ? 6.0 : 8.0;
   if (distM >= minCandDistM) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
@@ -249,8 +249,8 @@ function validateSegment(prev, curr) {
   // ── Gate 0: Stationary Spot Deadband ─────────────────────────────────
   const effectiveMovingSpeedKmh = Math.max(reportedSpeedKmh, (distKm / Math.max(rawSecs, 1)) * 3600);
   if (!_isConfirmedMoving) {
-    if (distM < 14.0 && effectiveMovingSpeedKmh < 2.0 && reportedSpeedKmh < 2.0) {
-      if (distM < 10.0) {
+    if (distM < 6.0 && effectiveMovingSpeedKmh < 1.2 && reportedSpeedKmh < 1.2) {
+      if (distM < 4.0) {
         _movementCandidateBuffer = [];
       }
       return { valid: false, distKm: 0 };
@@ -258,8 +258,8 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 1: Minimum movement step ─────────────────────────────────────
-  // Minimum physical step: 3.0m (for walking / tight road curves). Hold anchor across pauses up to 60s
-  const minStepM = reportedAccuracy > 60 ? Math.max(5.0, reportedAccuracy * 0.10) : 3.0;
+  // Minimum physical step: 2.5m (for slow walking / tight road curves). Hold anchor across pauses up to 60s
+  const minStepM = reportedAccuracy > 60 ? Math.max(4.0, reportedAccuracy * 0.08) : 2.5;
   if (distM < minStepM) {
     if (_isConfirmedMoving && rawSecs <= 60) {
       return { valid: false, distKm: 0, keepMovingAnchor: true };
@@ -764,7 +764,8 @@ const processLocationUnlocked = async (location) => {
     const nowMs = Date.now();
     const elapsedSinceLastUpload = nowMs - (_lastCoordUploadTs || 0);
 
-    if (calculatedDistKm <= 0 && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 30000) {
+    const isDisplacedStep = (lastLocation && distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) >= 8.0) || reportedSpeedKmh >= 1.5;
+    if (calculatedDistKm <= 0 && !isDisplacedStep && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 30000) {
       sendHeartbeatNow(false).catch(() => {});
       return;
     }
