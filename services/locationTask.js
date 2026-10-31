@@ -189,6 +189,31 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 // Returns a "trust weight" 0–1 based on reported accuracy
 // Lower accuracy (higher meters) → lower trust
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Road Curvature & Pocket Gap Tortuosity Compensation Engine
+// Matches straight satellite chords to real-world Indian road topography & bike odometers
+// ─────────────────────────────────────────────────────────────────────────────
+function curvatureCompensation(segmentDistKm, avgAccuracy = 15) {
+  if (segmentDistKm < 0.003) return segmentDistKm; // Sub-3m jitter: 0 compensation
+  const stepSizeM = segmentDistKm * 1000;
+  let curveFactor;
+  if (stepSizeM <= 35) {
+    curveFactor = 1.07; // +7% for continuous bike lane / micro-curves
+  } else if (stepSizeM <= 150) {
+    curveFactor = 1.10; // +10% for normal street turns & city intersections
+  } else if (stepSizeM <= 500) {
+    curveFactor = 1.16; // +16% for road curves & village bends
+  } else if (stepSizeM <= 2500) {
+    curveFactor = 1.20; // +20% for pocket sleep gaps & highway bypasses
+  } else {
+    curveFactor = 1.22; // +22% for large intercity/transit gaps
+  }
+  if (avgAccuracy > 100) {
+    curveFactor = 1 + (curveFactor - 1) * 0.75;
+  }
+  return Number((segmentDistKm * curveFactor).toFixed(6));
+}
+
 function accuracyTrustWeight(accuracyMeters) {
   // Perfect GPS (~5 m) → weight 1.0; 500 m accuracy → weight ~0.1
   return Math.max(0.1, Math.min(1.0, 50 / Math.max(accuracyMeters, 1)));
@@ -644,7 +669,7 @@ const processLocationUnlocked = async (location) => {
 
         if (!keepMovingAnchor) {
           if (valid) {
-            calculatedDistKm = distKm;
+            calculatedDistKm = curvatureCompensation(distKm, reportedAcc);
             const anchorTsMs = lastLocation.timestamp ? new Date(lastLocation.timestamp).getTime() : (timestamp - 4000);
             const stepSecsActual = Math.max((timestamp - anchorTsMs) / 1000, 1);
             const stepSpeedMps = Math.min((calculatedDistKm * 1000) / stepSecsActual, 40);
