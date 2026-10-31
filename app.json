@@ -78,6 +78,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/withTrackingService",
       "expo-router",
       "expo-secure-store",
       [

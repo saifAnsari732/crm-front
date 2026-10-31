@@ -11,7 +11,7 @@ import socketService from '../services/socket';
 import { BACKGROUND_TRACKING_TASK, startHeartbeat, stopHeartbeat, sendHeartbeatNow, detectTrackingFailure, safeRecoverLocation } from '../services/locationTask';
 import { enqueueCoordinate, enqueueStop, getQueueSize, flushOfflineQueue } from '../services/offlineSync';
 import { cancelNoMovementNotification, scheduleNoMovementNotification, sendAutoClosedNotification, sendGpsDisabledNotification } from '../services/trackingNotification';
-import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded } from '../services/batteryOptimization';
+import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded, ensureBatteryOptimizationExempt, startCpuKeepAlive, stopCpuKeepAlive } from '../services/batteryOptimization';
 
 /* =========================================================================
    NOTE FOR APK / PRODUCTION BUILD:
@@ -732,9 +732,9 @@ export default function useLocationTracker() {
         return { success: false, error: 'Permission not granted.' };
       }
 
-      // Show battery optimization reminder nudge before starting shift
-      // (only shows if user never set it — non-blocking)
-      remindBatteryOptimizationIfNeeded().catch(() => {});
+      // 🛡️ CRITICAL: Enforce battery optimization exemption and CPU WakeLock (prevents screen-off freeze)
+      await ensureBatteryOptimizationExempt().catch(() => {});
+      await startCpuKeepAlive().catch(() => {});
 
       let latitude;
       let longitude;
@@ -908,6 +908,8 @@ export default function useLocationTracker() {
 
             // Don't let Android battery optimizer pause updates
             pausesUpdatesAutomatically: false,
+            deferredUpdatesInterval: 0,
+            deferredUpdatesDistance: 0,
 
             // ── REMOVED deferredUpdates ──────────────────────────────────────────
             // Previously had deferredUpdatesInterval: 30000 and deferredUpdatesDistance: 50
@@ -957,6 +959,8 @@ export default function useLocationTracker() {
   const stopTracking = async () => {
     try {
       setLoading(true);
+      // Release CPU Partial WakeLock when shift ends
+      stopCpuKeepAlive().catch(() => {});
       
       // Lock manual punch out so auto-start/auto-heal engines never resurrect this shift
       await storage.setItem('user_manually_punched_out', 'true');

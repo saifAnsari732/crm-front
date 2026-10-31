@@ -36,7 +36,16 @@ function withLocationLock(fn) {
   const prev = _locationLock;
   let release;
   _locationLock = new Promise((resolve) => { release = resolve; });
-  return prev.then(fn).finally(release);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('LocationLock timeout after 10s')), 10000)
+  );
+  return Promise.race([prev.then(fn), timeoutPromise])
+    .catch((err) => {
+      console.warn('⚠️ withLocationLock error/timeout:', err.message);
+    })
+    .finally(() => {
+      release();
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -921,25 +930,31 @@ const processLocation = (location) => withLocationLock(() => processLocationUnlo
 // ─────────────────────────────────────────────────────────────────────────────
 // TaskManager definition — processes GPS fixes from OS in timestamp order
 // ─────────────────────────────────────────────────────────────────────────────
-TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async ({ data: { locations }, error }) => {
-  if (error) {
-    console.error('📍 BackgroundTask Error:', error.message);
-    return;
+TaskManager.defineTask(BACKGROUND_TRACKING_TASK, async (taskData) => {
+  try {
+    const error = taskData?.error;
+    const locations = taskData?.data?.locations;
+    if (error) {
+      console.error('📍 BackgroundTask Error:', error.message);
+      return;
+    }
+    if (!locations || !Array.isArray(locations) || locations.length === 0) return;
+
+    // Keep the server session alive from the OS-driven task (JS timers die in Doze).
+    sendHeartbeatNow().catch(() => {});
+
+    // Android may batch fixes (e.g., 3-4 points) when the screen is off.
+    // Process ALL in timestamp order — never skip batched fixes.
+    const ordered = [...locations].sort((a, b) => a.timestamp - b.timestamp);
+    for (const loc of ordered) {
+      await processLocation(loc);
+    }
+
+    // Auto-flush any queued points that were delayed while screen was off/network sleep
+    flushOfflineQueue().catch(() => {});
+  } catch (fatalTaskErr) {
+    console.error('📍 BackgroundTask: Fatal wrapper error caught:', fatalTaskErr.message);
   }
-  if (!locations || locations.length === 0) return;
-
-  // Keep the server session alive from the OS-driven task (JS timers die in Doze).
-  sendHeartbeatNow().catch(() => {});
-
-  // Android may batch fixes (e.g., 3-4 points) when the screen is off.
-  // Process ALL in timestamp order — never skip batched fixes.
-  const ordered = [...locations].sort((a, b) => a.timestamp - b.timestamp);
-  for (const loc of ordered) {
-    await processLocation(loc);
-  }
-
-  // Auto-flush any queued points that were delayed while screen was off/network sleep
-  flushOfflineQueue().catch(() => {});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1004,6 +1019,8 @@ export async function safeRecoverLocation(reason = 'HEALTH_CHECK_FAILED') {
       accuracy: Location.Accuracy.BestForNavigation,
       timeInterval: 4000,
       distanceInterval: 0,
+      deferredUpdatesInterval: 0,
+      deferredUpdatesDistance: 0,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
