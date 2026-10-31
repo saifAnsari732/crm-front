@@ -95,6 +95,7 @@ export default function useLocationTracker() {
 
           const active = Boolean(sid && sid !== 'AUTO_RECOVER_SESSION');
 
+          if (active) { startCpuKeepAlive().catch(() => {}); }
           if (_globalIsTracking !== active) {
             _globalIsTracking = active;
             DeviceEventEmitter.emit('TrackingStateChanged', active);
@@ -485,7 +486,10 @@ export default function useLocationTracker() {
               },
               showsBackgroundLocationIndicator: true,
               pausesUpdatesAutomatically: false,
+              deferredUpdatesInterval: 0,
+              deferredUpdatesDistance: 0,
             });
+            await startCpuKeepAlive().catch(() => {});
             console.log('🛡️ [IMMORTAL_WATCHDOG] Background GPS task resurrected successfully! ✅');
           } catch (recoverErr) {
             console.log('⚠️ [IMMORTAL_WATCHDOG] Auto-recovery of location task failed:', recoverErr.message);
