@@ -383,13 +383,8 @@ export default function ActiveShiftMapScreen() {
             }
           }
 
-          // Synchronized Distance: Preserve 5-decimal precision within 25m rounding window, otherwise trust authoritative backend distance
-          let synchronizedDistance = currentLocal;
-          if (backendDistance > 0) {
-            synchronizedDistance = Math.abs(currentLocal - backendDistance) <= 0.025
-              ? Math.max(currentLocal, backendDistance)
-              : backendDistance;
-          }
+          // Absolute Monotonic Invariant: Screen distance can NEVER decrease from backend response
+          let synchronizedDistance = Math.max(currentLocal, Number(backendDistance) || 0);
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
@@ -454,9 +449,7 @@ export default function ActiveShiftMapScreen() {
                     : parseFloat(payload.totalDistance)));
           if (!isNaN(incomingKm) && incomingKm >= 0) {
             const curLocal = totalDistanceRef.current || 0;
-            const newKm = incomingKm > 0
-              ? (Math.abs(curLocal - incomingKm) <= 0.025 ? Math.max(curLocal, incomingKm) : incomingKm)
-              : curLocal;
+            const newKm = Math.max(curLocal, Number(incomingKm) || 0);
             totalDistanceRef.current = newKm;
             setDistance(newKm.toFixed(2));
             storage.setItem('tracking_accumulated_distance', Number(newKm.toFixed(5)).toString()).catch(() => {});
