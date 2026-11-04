@@ -279,8 +279,10 @@ export default function useLocationTracker() {
                 await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
                 await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
                 await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
-                const serverDist = (Number(liveTodaySession.totalDistance) || 0).toFixed(2);
-                await storage.setItem('tracking_accumulated_distance', serverDist);
+                const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
+                const serverDistNum = Number(liveTodaySession.totalDistance) || Number(liveTodaySession.officialDistance) || 0;
+                const finalDist = Math.max(localSavedDist, serverDistNum).toFixed(2);
+                await storage.setItem('tracking_accumulated_distance', finalDist);
                 activeSession = liveTodaySession.sessionId;
                 syncGlobalTrackingState(true);
               }
@@ -822,9 +824,11 @@ export default function useLocationTracker() {
       await storage.setItem('currentTrackingSessionId', sessionId);
       await storage.setItem('tracking_accumulated_session_id', sessionId);
       await storage.setItem('trackingStartTime', anchorTs);
-      const initialDist = typeof startResponse?.data?.totalDistanceToday === 'number'
-        ? startResponse.data.totalDistanceToday.toFixed(2)
-        : '0.00';
+      const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
+      const serverDistNum = typeof startResponse?.data?.totalDistanceToday === 'number'
+        ? startResponse.data.totalDistanceToday
+        : (Number(startResponse?.data?.totalDistance) || 0);
+      const initialDist = Math.max(localSavedDist, serverDistNum).toFixed(2);
       await storage.setItem('tracking_accumulated_distance', initialDist);
       await scheduleNoMovementNotification(sessionId);
 
@@ -853,7 +857,11 @@ export default function useLocationTracker() {
           ];
           trackingApi.updateLocation(sessionId, backfillCoords).then((res) => {
             if (res.data?.success && typeof res.data.totalDistance === 'number') {
-              storage.setItem('tracking_accumulated_distance', String(res.data.totalDistance.toFixed(2)));
+              storage.getItem('tracking_accumulated_distance').then((cur) => {
+                const curNum = Number(cur) || 0;
+                const finalKm = Math.max(curNum, res.data.totalDistance).toFixed(2);
+                storage.setItem('tracking_accumulated_distance', String(finalKm));
+              }).catch(() => {});
             }
           }).catch(() => {});
         } catch (_) {}

@@ -853,14 +853,9 @@ const processLocationUnlocked = async (location) => {
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
         const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist >= 0 ? authoritativeDist : 0;
 
-        // Preserve 5-decimal precision: if server and local are within 20m rounding window, keep the higher 5-decimal value;
-        // otherwise trust authoritative server distance when validServerDist > 0.
-        let finalNum = localDist;
-        if (validServerDist > 0) {
-          finalNum = Math.abs(localDist - validServerDist) <= 0.025
-            ? Math.max(localDist, validServerDist)
-            : validServerDist;
-        }
+        // Absolute Monotonic Lattice: Local accumulated distance can NEVER decrease
+        // If server returns higher distance (e.g. road compensation), accept it; never downgrade!
+        let finalNum = Math.max(localDist, validServerDist);
         const finalDistPrecisionStr = Number(finalNum.toFixed(5)).toString();
 
         const checkpointData = {
