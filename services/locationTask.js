@@ -850,12 +850,15 @@ const processLocationUnlocked = async (location) => {
         const authoritativeDist = Number.isFinite(serverExact) && serverExact >= 0
           ? serverExact
           : (Number.isFinite(serverToday) && serverToday > 0 ? serverToday : serverDist);
+        const storedSessionId = await storage.getItem('tracking_accumulated_session_id');
+        const storedDate = await storage.getItem('tracking_accumulated_date');
+        const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         const localDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
         const validServerDist = Number.isFinite(authoritativeDist) && authoritativeDist >= 0 ? authoritativeDist : 0;
+        const isSameSessionToday = storedSessionId === sessionId && storedDate === todayKolkata;
 
-        // Absolute Monotonic Lattice: Local accumulated distance can NEVER decrease
-        // If server returns higher distance (e.g. road compensation), accept it; never downgrade!
-        let finalNum = Math.max(localDist, validServerDist);
+        // Absolute Monotonic Lattice: Local accumulated distance can NEVER decrease within the SAME session today
+        let finalNum = isSameSessionToday ? Math.max(localDist, validServerDist) : validServerDist;
         const finalDistPrecisionStr = Number(finalNum.toFixed(5)).toString();
 
         const checkpointData = {

@@ -274,14 +274,19 @@ export default function useLocationTracker() {
               );
               if (liveTodaySession && liveTodaySession.sessionId) {
                 console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
+                const prevStoredSessionId = await storage.getItem('tracking_accumulated_session_id');
+                const prevStoredDate = await storage.getItem('tracking_accumulated_date');
+                const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
                 await storage.removeItem('user_manually_punched_out');
                 await storage.setItem('isTrackingActive', 'true');
                 await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
                 await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
+                await storage.setItem('tracking_accumulated_date', todayKolkata);
                 await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
                 const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
                 const serverDistNum = Number(liveTodaySession.totalDistance) || Number(liveTodaySession.officialDistance) || 0;
-                const finalDist = Math.max(localSavedDist, serverDistNum).toFixed(2);
+                const isSameSessionToday = prevStoredSessionId === liveTodaySession.sessionId && prevStoredDate === todayKolkata;
+                const finalDist = (isSameSessionToday ? Math.max(localSavedDist, serverDistNum) : serverDistNum).toFixed(2);
                 await storage.setItem('tracking_accumulated_distance', finalDist);
                 activeSession = liveTodaySession.sessionId;
                 syncGlobalTrackingState(true);
@@ -821,14 +826,19 @@ export default function useLocationTracker() {
         lastTickTimestamp: anchorTs,
         needsInitialSeedUpload: true,
       }));
+      const prevStoredSessionId = await storage.getItem('tracking_accumulated_session_id');
+      const prevStoredDate = await storage.getItem('tracking_accumulated_date');
+      const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       await storage.setItem('currentTrackingSessionId', sessionId);
       await storage.setItem('tracking_accumulated_session_id', sessionId);
+      await storage.setItem('tracking_accumulated_date', todayKolkata);
       await storage.setItem('trackingStartTime', anchorTs);
       const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
       const serverDistNum = typeof startResponse?.data?.totalDistanceToday === 'number'
         ? startResponse.data.totalDistanceToday
         : (Number(startResponse?.data?.totalDistance) || 0);
-      const initialDist = Math.max(localSavedDist, serverDistNum).toFixed(2);
+      const isResumingSameSessionToday = prevStoredSessionId === sessionId && prevStoredDate === todayKolkata;
+      const initialDist = (isResumingSameSessionToday ? Math.max(localSavedDist, serverDistNum) : serverDistNum).toFixed(2);
       await storage.setItem('tracking_accumulated_distance', initialDist);
       await scheduleNoMovementNotification(sessionId);
 
