@@ -27,7 +27,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { openBatteryOptimizationSettings } from '../../services/batteryOptimization';
 
 const { width } = Dimensions.get('window');
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 
 export default function AdminProfileScreen() {
   const router = useRouter();
@@ -53,9 +53,9 @@ export default function AdminProfileScreen() {
     subText: isDark ? '#94a3b8' : '#64748b',
     border: isDark ? '#334155' : '#e2e8f0',
     iconColor: isDark ? '#94a3b8' : '#334155',
-    emerald: '#047857',
-    emeraldLight: '#ecfdf5',
-    emeraldBorder: '#a7f3d0',
+    emerald: '#4F46E5',
+    emeraldLight: '#EEF2FF',
+    emeraldBorder: '#E0E7FF',
   };
 
   const currentThemeLabel = theme === 'dark' 
@@ -292,14 +292,14 @@ export default function AdminProfileScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── 1. EXECUTIVE TOP CURVED HEADER ── */}
+      {/* ── 1. CLEAN MINIMAL LIGHT HEADER ── */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topNavRow}>
@@ -311,14 +311,14 @@ export default function AdminProfileScreen() {
               }}
               activeOpacity={0.7}
             >
-              <ArrowLeft size={20} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.headerTitle}>Manager Profile</Text>
               <Text style={styles.headerSub}>Executive Account & Command Center</Text>
             </View>
             <TouchableOpacity style={styles.headerBackBtn} onPress={onRefresh} activeOpacity={0.7}>
-              <RefreshCw size={18} color="#fff" />
+              <RefreshCw size={16} color="#334155" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -329,14 +329,14 @@ export default function AdminProfileScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#047857']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4F46E5']} />}
       >
         {/* ── 2. EXECUTIVE PROFILE HERO CARD ── */}
         <Surface style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={2}>
           <View style={styles.avatarWrapper}>
             {uploading ? (
-              <View style={[styles.avatarBox, { backgroundColor: '#ecfdf5', borderColor: '#047857' }]}>
-                <ActivityIndicator size="small" color="#047857" />
+              <View style={[styles.avatarBox, { backgroundColor: '#EEF2FF', borderColor: '#4F46E5' }]}>
+                <ActivityIndicator size="small" color="#4F46E5" />
               </View>
             ) : userAvatarUrl ? (
               <Avatar.Image 
@@ -348,7 +348,7 @@ export default function AdminProfileScreen() {
               <Avatar.Text 
                 size={92} 
                 label={getInitials(user?.name)} 
-                style={[styles.avatarBox, { backgroundColor: '#047857' }]} 
+                style={[styles.avatarBox, { backgroundColor: '#4F46E5' }]} 
                 labelStyle={styles.avatarLabel} 
               />
             )}
@@ -364,7 +364,7 @@ export default function AdminProfileScreen() {
           
           <View style={styles.badgeRow}>
             <View style={styles.deptBadge}>
-              <ShieldCheck size={13} color="#047857" style={{ marginRight: 4 }} />
+              <ShieldCheck size={13} color="#4F46E5" style={{ marginRight: 4 }} />
               <Text style={styles.deptBadgeText}>ROLE: {roleName}</Text>
             </View>
             <View style={styles.orgBadge}>
@@ -377,20 +377,20 @@ export default function AdminProfileScreen() {
         {/* ── 3. SIDE-BY-SIDE METRICS CARDS ── */}
         <View style={styles.metricsRow}>
           {/* Metric 1: Field Team Managed */}
-          <Surface style={[styles.metricCard, { borderLeftColor: '#047857', backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Surface style={[styles.metricCard, { borderLeftColor: '#4F46E5', backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
             <View style={styles.metricHeader}>
               <Text style={[styles.metricLabel, { color: colors.subText }]}>Team Strength</Text>
-              <Users size={18} color="#047857" />
+              <Users size={18} color="#4F46E5" />
             </View>
             <Text style={[styles.metricValue, { color: colors.text }]}>{teamStats.total}</Text>
             <Text style={styles.metricTrendGreen}>{teamStats.active} Active on Duty</Text>
           </Surface>
 
           {/* Metric 2: Field Visits & Reviews */}
-          <Surface style={[styles.metricCard, { borderLeftColor: '#0d9488', backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          <Surface style={[styles.metricCard, { borderLeftColor: '#4F46E5', backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
             <View style={styles.metricHeader}>
               <Text style={[styles.metricLabel, { color: colors.subText }]}>Client Visits</Text>
-              <BriefcaseBusiness size={18} color="#0d9488" />
+              <BriefcaseBusiness size={18} color="#4F46E5" />
             </View>
             <Text style={[styles.metricValue, { color: colors.text }]}>{visitStats.total}</Text>
             <Text style={[styles.metricTrendGrey, { color: colors.subText }]}>{visitStats.completed} Completed</Text>
@@ -411,8 +411,8 @@ export default function AdminProfileScreen() {
         <View style={styles.hubGrid}>
           {/* Hub 1: Live Tracking Radar */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#ecfdf5' }]}>
-              <Radio size={22} color="#047857" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <Radio size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Live Tracking</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Real-time Map</Text>
@@ -420,8 +420,8 @@ export default function AdminProfileScreen() {
 
           {/* Hub 2: Team Members */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/team')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#eff6ff' }]}>
-              <Users size={22} color="#2563eb" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <Users size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Team Members</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Staff Directory</Text>
@@ -429,8 +429,8 @@ export default function AdminProfileScreen() {
 
           {/* Hub 3: Client Visits */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#fef3c7' }]}>
-              <BriefcaseBusiness size={22} color="#d97706" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <BriefcaseBusiness size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Client Visits</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Meeting Logs</Text>
@@ -438,8 +438,8 @@ export default function AdminProfileScreen() {
 
           {/* Hub 4: Attendance Logs */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#f3e8ff' }]}>
-              <Calendar size={22} color="#7e22ce" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <Calendar size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Attendance</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Daily Shifts</Text>
@@ -447,8 +447,8 @@ export default function AdminProfileScreen() {
 
           {/* Hub 5: Staff Reports & Audits */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#e0f2fe' }]}>
-              <BarChart3 size={22} color="#0284c7" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <BarChart3 size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Staff Reports</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Mileage & Audits</Text>
@@ -456,8 +456,8 @@ export default function AdminProfileScreen() {
 
           {/* Hub 6: Manager Settings */}
           <TouchableOpacity style={[styles.hubItem, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => router.push('/(admin)/settings')} activeOpacity={0.8}>
-            <View style={[styles.hubIconContainer, { backgroundColor: '#fce7f3' }]}>
-              <Settings size={22} color="#db2777" />
+            <View style={[styles.hubIconContainer, { backgroundColor: '#EEF2FF' }]}>
+              <Settings size={22} color="#4F46E5" />
             </View>
             <Text style={[styles.hubLabel, { color: colors.text }]}>Settings</Text>
             <Text style={[styles.hubSub, { color: colors.subText }]}>Security & Geofence</Text>
@@ -477,7 +477,7 @@ export default function AdminProfileScreen() {
             <Switch 
               value={pushEnabled} 
               onValueChange={setPushEnabled}
-              trackColor={{ false: '#cbd5e1', true: '#047857' }}
+              trackColor={{ false: '#cbd5e1', true: '#4F46E5' }}
               thumbColor={Platform.OS === 'android' ? '#fff' : undefined}
             />
           </View>
@@ -504,130 +504,146 @@ export default function AdminProfileScreen() {
         </Surface>
 
         {/* ── 7. APP HARDWARE & OS PERMISSIONS AUDIT ── */}
-        {Platform.OS !== 'web' && (
-          <>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {language === 'en' ? '🔐 Manager Device Permissions' : '🔐 प्रबंधक डिवाइस अनुमतियाँ'}
-            </Text>
-            <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-              {/* Permission: Device GPS Hardware Services */}
-              <TouchableOpacity 
-                style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-                onPress={() => handlePermissionPress('locationForeground')}
-                activeOpacity={0.7}
-              >
-                <Shield size={20} color={permissions.gpsServices ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-                <View style={styles.settingsTextCol}>
-                  <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                    {language === 'en' ? 'Device GPS Hardware' : 'डिवाइस GPS हार्डवेयर'}
-                  </Text>
-                  <Text style={[styles.settingsSub, { color: permissions.gpsServices ? colors.subText : '#ef4444' }]}>
-                    {permissions.gpsServices
-                      ? (language === 'en' ? 'Phone GPS Services ON' : 'फोन GPS सेवाएं चालू हैं')
-                      : (language === 'en' ? '⚠️ Phone GPS is OFF! Tap to enable' : '⚠️ फोन GPS बंद है! चालू करने के लिए टैप करें')
-                    }
-                  </Text>
-                </View>
-                <View style={[styles.permBadge, { backgroundColor: permissions.gpsServices ? '#dcfce7' : '#fee2e2' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.gpsServices ? '#15803d' : '#dc2626' }}>
-                    {permissions.gpsServices ? 'ACTIVE' : 'OFF'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {language === 'en' ? '🔐 Device & App Permissions' : '🔐 डिवाइस और ऐप अनुमतियाँ'}
+        </Text>
+        <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+          {/* Permission: Device GPS Hardware Services */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+            onPress={() => handlePermissionPress('locationForeground')}
+            activeOpacity={0.7}
+          >
+            <Shield size={20} color={permissions.gpsServices ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'Device GPS Hardware' : 'डिवाइस GPS हार्डवेयर'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: permissions.gpsServices ? colors.subText : '#ef4444' }]}>
+                {permissions.gpsServices
+                  ? (language === 'en' ? 'Phone GPS Services ON' : 'फोन GPS सेवाएं चालू हैं')
+                  : (language === 'en' ? '⚠️ Phone GPS is OFF! Tap to enable' : '⚠️ फोन GPS बंद है! चालू करने के लिए टैप करें')
+                }
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: permissions.gpsServices ? '#dcfce7' : '#fee2e2' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.gpsServices ? '#15803d' : '#dc2626' }}>
+                {permissions.gpsServices ? 'ACTIVE' : 'OFF'}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-              {/* Permission: Location Foreground */}
-              <TouchableOpacity 
-                style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-                onPress={() => handlePermissionPress('locationForeground')}
-                activeOpacity={0.7}
-              >
-                <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-                <View style={styles.settingsTextCol}>
-                  <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                    {language === 'en' ? 'Foreground Location' : 'फोरग्राउंड लोकेशन'}
-                  </Text>
-                  <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                    {language === 'en' ? 'Manager shift tracking & maps' : 'प्रबंधक शिफ्ट ट्रैकिंग और मैप'}
-                  </Text>
-                </View>
-                <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
-                    {permissions.locationForeground ? 'ALLOWED' : 'DENIED'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+          {/* Permission: Location Foreground */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+            onPress={() => handlePermissionPress('locationForeground')}
+            activeOpacity={0.7}
+          >
+            <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'Foreground Location' : 'फोरग्राउंड लोकेशन'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                {language === 'en' ? 'Manager shift tracking & maps' : 'प्रबंधक शिफ्ट ट्रैकिंग और मैप'}
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
+                {permissions.locationForeground ? 'ALLOWED' : 'DENIED'}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-              {/* Permission: Background Location */}
-              <TouchableOpacity 
-                style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-                onPress={() => handlePermissionPress('locationBackground')}
-                activeOpacity={0.7}
-              >
-                <Navigation size={20} color={permissions.locationBackground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-                <View style={styles.settingsTextCol}>
-                  <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                    {language === 'en' ? 'Background Location' : 'बैकग्राउंड लोकेशन'}
-                  </Text>
-                  <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
-                    {permissions.locationBackground
-                      ? (language === 'en' ? '✅ "Allow all the time" is ACTIVE' : '✅ "हमेशा अनुमति दें" चालू है')
-                      : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" सेट करें')
-                    }
-                  </Text>
-                </View>
-                <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
-                    {permissions.locationBackground ? 'ALWAYS' : 'DENIED'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+          {/* Permission: Background Location */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+            onPress={() => handlePermissionPress('locationBackground')}
+            activeOpacity={0.7}
+          >
+            <Navigation size={20} color={permissions.locationBackground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'Background Location' : 'बैकग्राउंड लोकेशन'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
+                {permissions.locationBackground
+                  ? (language === 'en' ? '✅ "Allow all the time" is ACTIVE' : '✅ "हमेशा अनुमति दें" चालू है')
+                  : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" सेट करें')
+                }
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
+                {permissions.locationBackground ? 'ALWAYS' : 'DENIED'}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-              {/* Permission: Battery Optimization Bypass */}
-              <TouchableOpacity 
-                style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-                onPress={() => handlePermissionPress('battery')}
-                activeOpacity={0.7}
-              >
-                <BatteryCharging size={20} color="#10b981" style={{ marginRight: 14 }} />
-                <View style={styles.settingsTextCol}>
-                  <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                    {language === 'en' ? 'Battery Optimization' : 'बैटरी ऑप्टिमाइज़ेशन'}
-                  </Text>
-                  <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                    {language === 'en' ? 'Set "No restrictions" so OS never kills GPS' : 'OS GPS को बंद न करे इसके लिए अनरेस्ट्रिक्टेड रखें'}
-                  </Text>
-                </View>
-                <View style={[styles.permBadge, { backgroundColor: '#dcfce7' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803d' }}>
-                    UNRESTRICTED
-                  </Text>
-                </View>
-              </TouchableOpacity>
+          {/* Permission: Battery Optimization Bypass */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+            onPress={() => handlePermissionPress('battery')}
+            activeOpacity={0.7}
+          >
+            <BatteryCharging size={20} color="#f59e0b" style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'Battery Optimization' : 'बैटरी ऑप्टिमाइजेशन'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: '#f59e0b' }]}>
+                {language === 'en' ? 'Keep "Unrestricted" to avoid GPS sleep' : '"अनरिस्ट्रिक्टेड" रखें ताकि GPS स्लीप न हो'}
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: '#fef3c7' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400e' }}>CONFIGURE</Text>
+            </View>
+          </TouchableOpacity>
 
-              {/* Permission: Camera Access */}
-              <TouchableOpacity 
-                style={[styles.settingsRow, { borderBottomWidth: 0 }]}
-                onPress={() => handlePermissionPress('camera')}
-                activeOpacity={0.7}
-              >
-                <Camera size={20} color={permissions.camera ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-                <View style={styles.settingsTextCol}>
-                  <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                    {language === 'en' ? 'Camera & Media Access' : 'कैमरा और मीडिया एक्सेस'}
-                  </Text>
-                  <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                    {language === 'en' ? 'Required for manager visit photos' : 'विज़िट फ़ोटो और प्रोफ़ाइल के लिए ज़रूरी'}
-                  </Text>
-                </View>
-                <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.camera ? '#15803d' : '#dc2626' }}>
-                    {permissions.camera ? 'ALLOWED' : 'DENIED'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </Surface>
-          </>
-        )}
+          {/* Permission: System Notifications */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+            onPress={() => handlePermissionPress('notifications')}
+            activeOpacity={0.7}
+          >
+            <Bell size={20} color={permissions.notifications ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'System Notifications' : 'सिस्टम नोटिफिकेशन'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                {language === 'en' ? 'Required for field alerts & duty tracking' : 'फील्ड अलर्ट और ड्यूटी ट्रैकिंग के लिए आवश्यक'}
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: permissions.notifications ? '#dcfce7' : '#fee2e2' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.notifications ? '#15803d' : '#dc2626' }}>
+                {permissions.notifications ? 'ALLOWED' : 'DENIED'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Permission: Camera (Selfie Punch & Verification) */}
+          <TouchableOpacity 
+            style={[styles.settingsRow, { borderBottomWidth: 0 }]}
+            onPress={() => handlePermissionPress('camera')}
+            activeOpacity={0.7}
+          >
+            <Camera size={20} color={permissions.camera ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+            <View style={styles.settingsTextCol}>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>
+                {language === 'en' ? 'Camera' : 'कैमरा'}
+              </Text>
+              <Text style={[styles.settingsSub, { color: colors.subText }]}>
+                {language === 'en' ? 'Selfie check-in & verification' : 'सेल्फी चेक-इन और सत्यापन'}
+              </Text>
+            </View>
+            <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: permissions.camera ? '#15803d' : '#dc2626' }}>
+                {permissions.camera ? 'ALLOWED' : 'DENIED'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Surface>
 
         {/* ── 8. SIGN OUT ACTION CARD ── */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
@@ -647,13 +663,12 @@ export default function AdminProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   headerGradient: {
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    paddingTop: Platform.OS === 'android' ? 10 : 0,
+    paddingBottom: 12,
+    paddingTop: Platform.OS === 'android' ? 10 : 6,
   },
   topNavRow: {
     flexDirection: 'row',
@@ -662,25 +677,25 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   headerBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: '#E2E8F0',
   },
   headerTitle: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '800',
+    color: '#0F172A',
+    fontSize: 16.5,
+    fontWeight: '600',
     fontFamily: FONT,
   },
   headerSub: {
-    color: '#a7f3d0',
-    fontSize: 10,
-    fontWeight: '500',
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '400',
     marginTop: 1,
     fontFamily: FONT,
   },
@@ -706,19 +721,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatarBox: {
-    borderWidth: 3,
-    borderColor: '#047857',
+    borderWidth: 2,
+    borderColor: '#4F46E5',
   },
   avatarLabel: {
     color: '#ffffff',
-    fontWeight: '800',
+    fontWeight: '600',
     fontSize: 28,
   },
   editIconBtn: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#047857',
+    backgroundColor: '#4F46E5',
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -728,15 +743,15 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   profileName: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontSize: 19,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     fontFamily: FONT,
     marginBottom: 2,
   },
   profileTitle: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '400',
     fontFamily: FONT,
     marginBottom: 10,
   },
@@ -748,8 +763,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deptBadge: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
+    backgroundColor: '#EEF2FF',
+    borderColor: '#E0E7FF',
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -758,10 +773,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deptBadgeText: {
-    color: '#047857',
+    color: '#4F46E5',
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: 0.4,
     fontFamily: FONT,
   },
   orgBadge: {
@@ -777,7 +792,7 @@ const styles = StyleSheet.create({
   orgBadgeText: {
     color: '#475569',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
     fontFamily: FONT,
   },
 
@@ -802,32 +817,34 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '500',
     fontFamily: FONT,
     textTransform: 'uppercase',
   },
   metricValue: {
     fontSize: 22,
-    fontWeight: '900',
+    fontWeight: '600',
     fontFamily: FONT,
   },
   metricTrendGreen: {
-    fontSize: 10,
-    color: '#059669',
-    fontWeight: '700',
+    fontSize: 10.5,
+    color: '#4F46E5',
+    fontWeight: '500',
     marginTop: 2,
     fontFamily: FONT,
   },
   metricTrendGrey: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 10.5,
+    fontWeight: '400',
     marginTop: 2,
     fontFamily: FONT,
   },
 
   // Rank Banner
   rankBanner: {
-    backgroundColor: '#047857',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
     borderRadius: 16,
     padding: 14,
     flexDirection: 'row',
@@ -837,16 +854,16 @@ const styles = StyleSheet.create({
   },
   rankInfo: { flex: 1 },
   rankLabel: {
-    color: '#a7f3d0',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
+    color: '#64748B',
+    fontSize: 9.5,
+    fontWeight: '500',
+    letterSpacing: 0.8,
     fontFamily: FONT,
   },
   rankTitle: {
-    color: '#ffffff',
+    color: '#4F46E5',
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '600',
     marginTop: 2,
     fontFamily: FONT,
   },

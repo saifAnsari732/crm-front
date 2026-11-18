@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 const getToday = () => new Date().toISOString().slice(0, 10);
 const getYesterday = () => {
   const d = new Date();
@@ -31,7 +31,7 @@ export default function AdminAttendanceScreen() {
     text: isDark ? '#f8fafc' : '#0f172a',
     sub: isDark ? '#94a3b8' : '#64748b',
     border: isDark ? '#334155' : '#e2e8f0',
-    primary: '#2563eb',
+    primary: '#4F46E5',
   };
   const [date, setDate] = useState(getToday());
   const [search, setSearch] = useState('');
@@ -73,14 +73,14 @@ export default function AdminAttendanceScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Top Header Bar with Back Navigation & Title */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.topHeader}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topHeaderInner}>
@@ -92,7 +92,7 @@ export default function AdminAttendanceScreen() {
               }}
               activeOpacity={0.7}
             >
-              <ArrowLeft size={20} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.topTitle}>Attendance Console</Text>
@@ -103,7 +103,7 @@ export default function AdminAttendanceScreen() {
               onPress={async () => { setRefreshing(true); await fetchAttendance(); }}
               activeOpacity={0.7}
             >
-              <RefreshCw size={18} color="#fff" />
+              <RefreshCw size={16} color="#334155" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -179,9 +179,9 @@ export default function AdminAttendanceScreen() {
             </View>
 
             <View style={styles.summaryRow}>
-              <Summary icon={CheckCircle2} label="PRESENT" value={presentCount} color="#16a34a" />
-              <Summary icon={UserX} label="OTHER" value={absentCount} color="#dc2626" />
-              <Summary icon={Clock3} label="TOTAL" value={records.length} color="#2563eb" />
+              <Summary icon={CheckCircle2} label="PRESENT" value={presentCount} color="#4F46E5" />
+              <Summary icon={UserX} label="OTHER" value={absentCount} color="#64748B" />
+              <Summary icon={Clock3} label="TOTAL" value={records.length} color="#0F172A" />
             </View>
             <Text style={[styles.results, { color: C.sub }]}>{formatDate(date)} · {filteredRecords.length} record{filteredRecords.length === 1 ? '' : 's'}</Text>
           </View>
@@ -270,12 +270,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   topHeader: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    paddingTop: Platform.OS === 'android' ? 10 : 0,
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: Platform.OS === 'android' ? 10 : 6,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   topHeaderInner: {
     flexDirection: 'row',
@@ -286,7 +285,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -294,12 +295,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topTitle: { fontFamily: FONT, fontSize: 16, fontWeight: '800', color: '#ffffff' },
-  topSub: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: '#a7f3d0', marginTop: 1 },
+  topTitle: { fontFamily: FONT, fontSize: 16.5, fontWeight: '600', color: '#0F172A' },
+  topSub: { fontFamily: FONT, fontSize: 11, fontWeight: '400', color: '#64748B', marginTop: 1 },
   content: { padding: 12, paddingBottom: 60 },
   
   // Quick Presets Row
@@ -314,13 +317,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   presetChipActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
   },
   presetText: {
     fontFamily: FONT,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   presetTextActive: {
     color: '#ffffff',
@@ -329,22 +332,22 @@ const styles = StyleSheet.create({
   filterCard: { flexDirection: 'row', gap: 8, padding: 10, borderWidth: 1, borderRadius: 12 },
   dateBox: { flex: 1, height: 40, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, borderWidth: 1, borderRadius: 9 },
   dateInput: { flex: 1, fontFamily: FONT, fontSize: 12 },
-  applyButton: { height: 40, paddingHorizontal: 15, borderRadius: 9, backgroundColor: '#0284c7', alignItems: 'center', justifyContent: 'center' },
-  applyText: { color: '#fff', fontFamily: FONT, fontWeight: 'bold', fontSize: 12 },
+  applyButton: { height: 40, paddingHorizontal: 15, borderRadius: 9, backgroundColor: '#4F46E5', alignItems: 'center', justifyContent: 'center' },
+  applyText: { color: '#fff', fontFamily: FONT, fontWeight: '500', fontSize: 12 },
   searchBox: { height: 40, marginTop: 8, borderWidth: 1, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10 },
   searchInput: { flex: 1, fontFamily: FONT, fontSize: 12 },
   summaryRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   summaryCard: { flex: 1, minHeight: 62, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', marginTop: 2 },
-  summaryLabel: { color: '#64748b', fontFamily: FONT, fontSize: 8, fontWeight: 'bold', marginTop: 2 },
-  results: { fontFamily: FONT, fontSize: 10, marginVertical: 10 },
+  summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: '600', marginTop: 2 },
+  summaryLabel: { color: '#64748b', fontFamily: FONT, fontSize: 9, fontWeight: '500', marginTop: 2 },
+  results: { fontFamily: FONT, fontSize: 10.5, marginVertical: 10 },
   recordCard: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
   recordTop: { flexDirection: 'row', alignItems: 'center' },
   recordInfo: { flex: 1, marginLeft: 10 },
-  name: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold' },
-  meta: { fontFamily: FONT, fontSize: 10, marginTop: 3 },
+  name: { fontFamily: FONT, fontSize: 14, fontWeight: '500' },
+  meta: { fontFamily: FONT, fontSize: 10.5, marginTop: 3 },
   status: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
-  statusText: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' },
+  statusText: { fontFamily: FONT, fontSize: 9.5, fontWeight: '600' },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, marginTop: 10, paddingTop: 8 },
   detail: { fontFamily: FONT, fontSize: 10 },
   empty: { alignItems: 'center', paddingVertical: 48 },

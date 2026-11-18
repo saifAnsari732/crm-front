@@ -252,7 +252,7 @@ export default function MeetingsScreen() {
       case 'completed':
         return { bg: '#dcfce7', text: '#15803d', label: 'COMPLETED' };
       case 'follow-up':
-        return { bg: '#dbeafe', text: '#1d4ed8', label: 'FOLLOW-UP' };
+        return { bg: '#e0e7ff', text: '#4338ca', label: 'FOLLOW-UP' };
       default:
         return { bg: '#fef3c7', text: '#d97706', label: 'PENDING' };
     }
@@ -260,34 +260,25 @@ export default function MeetingsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Premium Unique Header (Dashboard Brand Style) */}
-      <View style={[styles.headerContainer, { borderBottomLeftRadius: 40, borderBottomRightRadius: 40, shadowColor: '#fecdd3', shadowOpacity: 0.8, shadowRadius: 20, elevation: 10, backgroundColor: '#ffffff', paddingBottom: 24, zIndex: 10 }]}>
-        
-        {/* Soft Background Blob/Gradient simulation */}
-        <View style={{ position: 'absolute', top: 0, right: 0, width: '70%', height: '100%', backgroundColor: '#fff0f3', borderBottomRightRadius: 40, borderTopLeftRadius: 150, opacity: 0.8 }} />
-
-        <View style={[styles.headerGradient, { paddingBottom: 10, paddingTop: Platform.OS === 'ios' ? 70 : 50, backgroundColor: 'transparent' }]}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={{ fontSize: 10, fontWeight: "600", color: "#f43f5e", letterSpacing: 1.5, marginBottom: 4 }}>
-                FIELD ACTIVITY
-              </Text>
-              <View style={{ width: 16, height: 2, backgroundColor: '#f43f5e', marginBottom: 8, borderRadius: 2 }} />
-              
-              <Text style={{ fontSize: 32, fontWeight: '600', color: '#1e293b', letterSpacing: -0.5 }}>Client Visits</Text>
-              <Text style={{ fontSize: 13, color: '#64748b', marginTop: 1, fontWeight: '400' }}>Your Field Meeting Logs</Text>
-            </View>
-            <View style={{ backgroundColor: '#e6fffa', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, shadowColor: '#00c6a9', shadowOpacity: 0.1, elevation: 2 }}>
-              <Text style={{ color: '#00c6a9', fontWeight: '900', fontSize: 16 }}>{meetings.length}</Text>
-              <Text style={{ color: '#00b4d8', fontSize: 9, fontWeight: 'bold' }}>LOGGED</Text>
-            </View>
+      {/* ── TOP HEADER (Clean Crisp Forest Teal Theme) ── */}
+      <View style={styles.headerContainer}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerKicker}>FIELD ACTIVITY</Text>
+            <Text style={styles.headerMainTitle}>Client Visits</Text>
+            <Text style={styles.headerSubTitle}>Your Field Meeting Logs</Text>
           </View>
-          <TouchableOpacity style={styles.headerAddButton} onPress={handleOpenAddModal} activeOpacity={0.85}>
-            <Plus size={17} color="#ffffff" strokeWidth={2.5} />
-            <Text style={styles.headerAddButtonText}>ADD MEETING</Text>
-            <ArrowRight size={16} color="#ffffff" />
-          </TouchableOpacity>
+          <View style={styles.loggedCountPill}>
+            <Text style={styles.loggedCountNum}>{meetings.length}</Text>
+            <Text style={styles.loggedCountLabel}>LOGGED</Text>
+          </View>
         </View>
+
+        <TouchableOpacity style={styles.headerAddButton} onPress={handleOpenAddModal} activeOpacity={0.88}>
+          <Plus size={18} color="#ffffff" strokeWidth={2.5} />
+          <Text style={styles.headerAddButtonText}>ADD MEETING</Text>
+          <ArrowRight size={16} color="#ffffff" />
+        </TouchableOpacity>
       </View>
 
       {/* Main List */}
@@ -330,40 +321,40 @@ export default function MeetingsScreen() {
             meetings.map((item) => {
               const badge = getStatusBadgeStyle(item.status);
               return (
-                <Surface key={item._id || item.id} style={[styles.meetingCard, { borderRadius: 24, padding: 16, backgroundColor: '#ffffff', marginBottom: 16, borderColor: '#f1f5f9', borderWidth: 1 }]} elevation={3}>
-                  <View style={[styles.cardHeader, { marginBottom: 16 }]}>
+                <Surface key={item._id || item.id} style={styles.meetingCard} elevation={1}>
+                  <View style={styles.cardHeader}>
                     <View style={styles.clientInfoBlock}>
-                      <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 12 }}>
-                        <User size={18} color="#64748b" />
+                      <View style={styles.avatarCircleBox}>
+                        <User size={16} color="#0f766e" />
                       </View>
-                      <View>
-                        <Text style={[styles.clientNameText, { fontSize: 16, fontWeight: 'bold', color: '#1e293b' }]}>{item.clientName}</Text>
-                        <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{item.mobileNumber}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.clientNameText}>{item.clientName}</Text>
+                        <Text style={styles.clientPhoneText}>{item.mobileNumber}</Text>
                       </View>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: badge.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }]}>
-                      <Text style={[styles.statusBadgeText, { color: badge.text, fontSize: 10, fontWeight: 'bold' }]}>
-                         {badge.label}
+                    <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+                      <Text style={[styles.statusBadgeText, { color: badge.text }]}>
+                        {badge.label}
                       </Text>
                     </View>
                   </View>
 
-                  <View style={[styles.metaRow, { marginBottom: 12 }]}>
-                    <MapPin size={14} color="#94a3b8" style={{ marginRight: 8, marginTop: 2 }} />
-                    <Text style={[styles.metaText, { color: '#64748b', flex: 1, fontSize: 13, lineHeight: 18 }]} numberOfLines={2}>{item.meetingAddress}</Text>
+                  <View style={styles.metaRow}>
+                    <MapPin size={13} color="#94a3b8" style={{ marginRight: 6, marginTop: 2 }} />
+                    <Text style={styles.metaText} numberOfLines={2}>{item.meetingAddress || "Location not recorded"}</Text>
                   </View>
 
                   {item.meetingNotes ? (
-                    <View style={[styles.notesBlock, { backgroundColor: '#e6fffa', padding: 12, borderRadius: 12, marginTop: 8 }]}>
-                      <Text style={[styles.notesTitle, { color: '#00c6a9', fontSize: 10, fontWeight: 'bold', marginBottom: 4 }]}>FEEDBACK NOTES</Text>
-                      <Text style={[styles.notesText, { color: '#475569', fontSize: 13 }]}>{item.meetingNotes}</Text>
+                    <View style={styles.notesBlock}>
+                      <Text style={styles.notesTitle}>FEEDBACK NOTES</Text>
+                      <Text style={styles.notesText}>{item.meetingNotes}</Text>
                     </View>
                   ) : null}
 
-                  <View style={[styles.cardFooter, { justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 16, marginTop: 16 }]}>
+                  <View style={styles.cardFooter}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Calendar size={14} color="#00b4d8" style={{ marginRight: 6 }} />
-                      <Text style={[styles.dateText, { color: '#64748b', fontSize: 12, fontWeight: '500' }]}>
+                      <Calendar size={13} color="#0f766e" style={{ marginRight: 6 }} />
+                      <Text style={styles.dateText}>
                         {new Date(item.date || item.createdAt).toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'short',
@@ -374,11 +365,12 @@ export default function MeetingsScreen() {
                       </Text>
                     </View>
                     <TouchableOpacity 
-                      style={[styles.editCardBtn, { backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }]} 
+                      style={styles.editCardBtn} 
                       onPress={() => handleEditMeeting(item)}
+                      activeOpacity={0.7}
                     >
-                      <Pencil size={12} color="#00b4d8" style={{ marginRight: 6 }} />
-                      <Text style={[styles.editCardBtnText, { color: '#00b4d8', fontSize: 12, fontWeight: 'bold' }]}>Edit</Text>
+                      <Pencil size={12} color="#0f766e" style={{ marginRight: 5 }} />
+                      <Text style={styles.editCardBtnText}>Edit</Text>
                     </TouchableOpacity>
                   </View>
                 </Surface>
@@ -592,63 +584,85 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   headerContainer: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-  },
-  headerGradient: {
-    paddingTop: Platform.OS === 'ios' ? 64 : 48,
-    paddingBottom: 24,
+    backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'ios' ? 56 : 44,
+    paddingBottom: 20,
     paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerKicker: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#0f766e',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  headerMainTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  headerSubTitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+    fontWeight: '400',
+  },
+  loggedCountPill: {
+    backgroundColor: '#f0fdfa',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loggedCountNum: {
+    color: '#0f766e',
+    fontWeight: '800',
+    fontSize: 17,
+  },
+  loggedCountLabel: {
+    color: '#0f766e',
+    fontSize: 8.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   headerAddButton: {
-    marginTop: 20,
-    minHeight: 48,
-    borderRadius: 14,
+    marginTop: 16,
+    height: 46,
+    borderRadius: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0284c7',
-    shadowColor: '#0284c7',
+    backgroundColor: '#0f766e',
+    shadowColor: '#0f766e',
     shadowOpacity: 0.25,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
   headerAddButtonText: {
     flex: 1,
     marginLeft: 10,
     color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  headerSub: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginTop: 4,
-  },
-  badgeCount: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     flex: 1,
@@ -666,7 +680,117 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 180,
+    paddingBottom: 120,
+  },
+  meetingCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  clientInfoBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  avatarCircleBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f0fdfa',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  clientNameText: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  clientPhoneText: {
+    fontSize: 11.5,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  metaText: {
+    color: '#475569',
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  notesBlock: {
+    backgroundColor: '#f0fdfa',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  notesTitle: {
+    color: '#0f766e',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  notesText: {
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 10,
+  },
+  dateText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  editCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+  },
+  editCardBtnText: {
+    color: '#0f766e',
+    fontSize: 11,
+    fontWeight: '600',
   },
   emptyCard: {
     backgroundColor: '#fff',
@@ -705,104 +829,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#0284c7',
+    backgroundColor: '#0f766e',
   },
   retryButtonText: {
     color: '#ffffff',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.5,
-  },
-  meetingCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  clientInfoBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  clientNameText: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0f172a',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statusBadgeText: {
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#475569',
-  },
-  notesBlock: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#cbd5e1',
-  },
-  notesTitle: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: '#475569',
-    marginBottom: 4,
-  },
-  notesText: {
-    fontSize: 11,
-    color: '#334155',
-    lineHeight: 16,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  dateText: {
-    fontSize: 10,
-    color: '#94a3b8',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    borderRadius: 28,
-    elevation: 8,
-    shadowColor: '#1d4ed8',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -815,7 +848,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    paddingBottom: 32,
     maxHeight: '90%',
   },
   modalHeader: {
@@ -878,8 +911,8 @@ const styles = StyleSheet.create({
     borderColor: '#10b981',
   },
   statusPillActiveFollowUp: {
-    backgroundColor: '#dbeafe',
-    borderColor: '#1d4ed8',
+    backgroundColor: '#e0e7ff',
+    borderColor: '#4f46e5',
   },
   statusPillText: {
     fontSize: 10,
@@ -893,6 +926,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     borderRadius: 12,
     overflow: 'hidden',
+    backgroundColor: '#0f766e',
   },
   submitBtnGradient: {
     height: 48,
@@ -903,19 +937,6 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: 'bold',
-  },
-  editCardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  editCardBtnText: {
-    color: '#1d4ed8',
-    fontSize: 10,
     fontWeight: 'bold',
   },
   selfieContainer: {
@@ -935,17 +956,17 @@ const styles = StyleSheet.create({
   },
   selfieBoxText: {
     fontSize: 13,
-    color: '#1d4ed8',
+    color: '#0f766e',
     fontWeight: '600',
     marginLeft: 8,
   },
   selfieImageWrapper: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f0fdfa',
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: '#ccfbf1',
   },
   retakeBtn: {
     paddingVertical: 6,

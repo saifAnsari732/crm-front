@@ -14,19 +14,20 @@ import {
   Calendar, Award, TrendingUp, ArrowUpRight
 } from 'lucide-react-native';
 import { adminAPI, getAvatarUrl, trackingAPI } from '../../services/api';
+import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import socketService from '../../services/socket';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 
 const { width, height } = Dimensions.get('window');
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 
 const COLORS = {
-  headerStart: '#047857',
-  headerEnd: '#0d9488',
-  primary: '#0f766e',
-  primaryLight: '#ccfbf1',
+  headerStart: '#FFFFFF',
+  headerEnd: '#F8FAFC',
+  primary: '#4F46E5',
+  primaryLight: '#EEF2FF',
   bg: '#F8FAFC',
   card: '#FFFFFF',
   surfaceSecondary: '#F1F5F9',
@@ -280,13 +281,8 @@ export default function AdminTeamScreen() {
     return parts[0].substring(0, 2).toUpperCase();
   };
 
-  const AVATAR_COLORS = ['#059669', '#2563EB', '#7C3AED', '#D97706', '#DB2777', '#0891B2', '#4F46E5', '#EA580C'];
-  const getAvatarColor = (name) => {
-    if (!name) return '#059669';
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-  };
+  const AVATAR_COLORS = ['#4F46E5'];
+  const getAvatarColor = () => '#4F46E5';
 
   // Map employee list with live location data
   const mappedEmployees = employees.map((emp) => {
@@ -344,13 +340,13 @@ export default function AdminTeamScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.headerStart} />
 
       {/* ── TOP HEADER (Screen 4) ── */}
       <LinearGradient
         colors={[COLORS.headerStart, COLORS.headerEnd]}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
@@ -360,7 +356,7 @@ export default function AdminTeamScreen() {
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
               activeOpacity={0.75}
             >
-              <ArrowLeft size={20} color="#ffffff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
 
             <View style={{ flex: 1, marginLeft: 12 }}>
@@ -369,7 +365,7 @@ export default function AdminTeamScreen() {
             </View>
 
             <TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
-              <Filter size={18} color="#fff" />
+              <Filter size={17} color="#334155" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -519,13 +515,13 @@ export default function AdminTeamScreen() {
             <LinearGradient
               colors={[COLORS.headerStart, COLORS.headerEnd]}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              end={{ x: 0, y: 1 }}
               style={styles.detailHeaderGradient}
             >
               <SafeAreaView edges={['top']}>
                 <View style={styles.detailHeaderRow}>
                   <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedDetailEmp(null)} activeOpacity={0.75}>
-                    <ArrowLeft size={20} color="#ffffff" />
+                    <ArrowLeft size={18} color="#334155" />
                   </TouchableOpacity>
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.detailHeaderName}>{selectedDetailEmp.name}</Text>
@@ -545,8 +541,8 @@ export default function AdminTeamScreen() {
                       style={styles.detailAvatarImg}
                     />
                   ) : (
-                    <View style={[styles.detailAvatarFallback, { backgroundColor: getAvatarColor(selectedDetailEmp.name) }]}>
-                      <Text style={styles.detailAvatarFallbackText}>{getUserInitials(selectedDetailEmp.name)}</Text>
+                    <View style={[styles.detailAvatarFallback, { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#E0E7FF' }]}>
+                      <Text style={[styles.detailAvatarFallbackText, { color: '#4F46E5' }]}>{getUserInitials(selectedDetailEmp.name)}</Text>
                     </View>
                   )}
                   <View style={{ flex: 1, marginLeft: 14 }}>
@@ -571,8 +567,8 @@ export default function AdminTeamScreen() {
                     onPress={() => handleCall(selectedDetailEmp.phone)}
                     activeOpacity={0.75}
                   >
-                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#E0F2FE' }]}>
-                      <Phone size={18} color="#0284C7" />
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#EEF2FF' }]}>
+                      <Phone size={18} color="#4F46E5" />
                     </View>
                     <Text style={styles.actionCircleLabel}>Call</Text>
                   </TouchableOpacity>
@@ -582,8 +578,8 @@ export default function AdminTeamScreen() {
                     onPress={() => handleWhatsApp(selectedDetailEmp.phone)}
                     activeOpacity={0.75}
                   >
-                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#DCFCE7' }]}>
-                      <MessageSquare size={18} color="#16A34A" />
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#EEF2FF' }]}>
+                      <MessageSquare size={18} color="#4F46E5" />
                     </View>
                     <Text style={styles.actionCircleLabel}>WhatsApp</Text>
                   </TouchableOpacity>
@@ -596,8 +592,8 @@ export default function AdminTeamScreen() {
                     }}
                     activeOpacity={0.75}
                   >
-                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#F3E8FF' }]}>
-                      <Navigation size={18} color="#9333EA" />
+                    <View style={[styles.actionCircleIconBox, { backgroundColor: '#EEF2FF' }]}>
+                      <Navigation size={18} color="#4F46E5" />
                     </View>
                     <Text style={styles.actionCircleLabel}>Track</Text>
                   </TouchableOpacity>
@@ -754,6 +750,8 @@ export default function AdminTeamScreen() {
           </Surface>
         </View>
       </Modal>
+      {/* ── UNIFIED ENTERPRISE BOTTOM NAVIGATION BAR ── */}
+      <FloatingAdminTabBar activeTab="team" />
     </View>
   );
 }
@@ -763,41 +761,47 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerGradient: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: 4,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   headerSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11.5,
+    fontWeight: '400',
+    color: '#64748B',
     fontFamily: FONT,
-    marginTop: 2,
+    marginTop: 1,
   },
   filterBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -820,13 +824,13 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
   tabTextActive: {
     color: COLORS.primary,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   searchSection: {
     paddingHorizontal: 16,
@@ -851,7 +855,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 90,
+    paddingBottom: 115,
   },
   employeeCard: {
     backgroundColor: '#ffffff',
@@ -894,8 +898,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   empNameText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
     flex: 1,
@@ -918,7 +922,7 @@ const styles = StyleSheet.create({
   },
   distanceValueText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '600',
     color: COLORS.primary,
     fontFamily: FONT,
   },
@@ -926,7 +930,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: COLORS.successLight,
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -935,24 +939,24 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.success,
+    backgroundColor: '#4F46E5',
   },
   activePillText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.success,
+    fontWeight: '500',
+    color: '#4F46E5',
     fontFamily: FONT,
   },
   idlePill: {
-    backgroundColor: COLORS.warningLight,
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   idlePillText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.warning,
+    fontWeight: '500',
+    color: '#64748B',
     fontFamily: FONT,
   },
   offlinePill: {
@@ -963,7 +967,7 @@ const styles = StyleSheet.create({
   },
   offlinePillText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
     color: COLORS.textMuted,
     fontFamily: FONT,
   },
@@ -986,7 +990,7 @@ const styles = StyleSheet.create({
   },
   floatingAddBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#ffffff',
     fontFamily: FONT,
   },
@@ -996,7 +1000,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
     marginTop: 12,
@@ -1012,10 +1016,10 @@ const styles = StyleSheet.create({
   detailRoot: { flex: 1, backgroundColor: COLORS.bg },
   detailHeaderGradient: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   detailHeaderRow: {
     flexDirection: 'row',
@@ -1023,14 +1027,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   detailHeaderName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   detailHeaderRole: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11.5,
+    color: '#64748B',
     fontFamily: FONT,
     marginTop: 2,
   },
@@ -1063,14 +1067,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailAvatarFallbackText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '800',
+    color: '#4F46E5',
+    fontSize: 18,
+    fontWeight: '600',
     fontFamily: FONT,
   },
   detailCardName: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
   },
@@ -1107,13 +1111,13 @@ const styles = StyleSheet.create({
   },
   actionCircleLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.text,
     fontFamily: FONT,
   },
   sectionHeaderTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
     marginTop: 20,
@@ -1139,8 +1143,8 @@ const styles = StyleSheet.create({
     fontFamily: FONT,
   },
   summaryColValue: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
     marginTop: 4,
@@ -1170,13 +1174,13 @@ const styles = StyleSheet.create({
   },
   detailTabBtnText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
   detailTabBtnTextActive: {
     color: COLORS.primary,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   performanceCard: {
     backgroundColor: '#ffffff',
@@ -1188,7 +1192,7 @@ const styles = StyleSheet.create({
   },
   perfTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
     marginBottom: 14,
@@ -1211,8 +1215,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gaugePercent: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.primary,
     fontFamily: FONT,
   },
@@ -1227,7 +1231,7 @@ const styles = StyleSheet.create({
   },
   weeklyTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
     marginBottom: 8,
@@ -1280,8 +1284,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
   },
@@ -1313,7 +1317,7 @@ const styles = StyleSheet.create({
   },
   cancelModalBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
@@ -1326,7 +1330,7 @@ const styles = StyleSheet.create({
   },
   saveModalBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#ffffff',
     fontFamily: FONT,
   },

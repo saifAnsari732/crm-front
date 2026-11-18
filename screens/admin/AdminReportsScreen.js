@@ -13,9 +13,10 @@ import {
   ChevronRight, ChevronDown, X, CheckCircle2, Filter
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 const { width, height } = Dimensions.get('window');
 const getEmpId = (e) => e?._id || e?.employeeId || e?.id || '';
 
@@ -236,11 +237,11 @@ export default function AdminReportsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* ── EXECUTIVE TOP HEADER ── */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.header}
       >
         <SafeAreaView edges={['top']}>
@@ -250,14 +251,14 @@ export default function AdminReportsScreen() {
               onPress={handleGoBack}
               activeOpacity={0.7}
             >
-              <ArrowLeft size={20} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.headerTitle}>Staff Activity Reports</Text>
               <Text style={styles.headerSub}>Consolidated performance & mileage analytics</Text>
             </View>
             <TouchableOpacity style={styles.headerBackBtn} onPress={onRefresh} activeOpacity={0.7}>
-              <RefreshCw size={18} color="#fff" />
+              <RefreshCw size={16} color="#334155" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -266,12 +267,12 @@ export default function AdminReportsScreen() {
       {/* ── SCROLLABLE BODY ── */}
       <ScrollView
         contentContainerStyle={styles.body}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#059669']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4F46E5']} />}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero Banner ── */}
         <Surface style={[styles.reportHero, cardShadow]} elevation={1}>
-          <UserRound size={20} color="#059669" />
+          <UserRound size={20} color="#4F46E5" />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.heroTitle}>Build Staff Performance Report</Text>
             <Text style={styles.heroSub}>Choose an employee and a date range to generate official activity analytics.</Text>
@@ -367,7 +368,7 @@ export default function AdminReportsScreen() {
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={['#074e26', '#065a29']}
+              colors={['#4F46E5', '#4338CA']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.generateBtnGradient}
@@ -505,6 +506,8 @@ export default function AdminReportsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+      {/* ── UNIFIED ENTERPRISE BOTTOM NAVIGATION BAR ── */}
+      <FloatingAdminTabBar activeTab="reports" />
     </View>
   );
 }
@@ -515,12 +518,11 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 0,
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 12) : 6,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -528,15 +530,17 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   headerBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { color: '#ffffff', fontSize: 17, fontWeight: '800', fontFamily: FONT },
-  headerSub: { color: '#a7f3d0', fontSize: 10, marginTop: 1, fontWeight: '600', fontFamily: FONT },
+  headerTitle: { color: '#0F172A', fontSize: 16.5, fontWeight: '600', fontFamily: FONT },
+  headerSub: { color: '#64748B', fontSize: 11, marginTop: 1, fontWeight: '400', fontFamily: FONT },
 
   body: { padding: 14, paddingBottom: 30 },
 
@@ -544,17 +548,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#EEF2FF',
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#E0E7FF',
     padding: 12,
     marginBottom: 14,
   },
-  heroTitle: { color: '#074e26', fontFamily: FONT, fontSize: 13, fontWeight: '800' },
-  heroSub: { color: '#047857', fontFamily: FONT, fontSize: 11, lineHeight: 15, marginTop: 2 },
-  sectionTitle: { fontFamily: FONT, fontSize: 11, fontWeight: '800', color: '#0f172a', letterSpacing: 0.5, marginBottom: 8 },
+  heroTitle: { color: '#4F46E5', fontFamily: FONT, fontSize: 13.5, fontWeight: '600' },
+  heroSub: { color: '#475569', fontFamily: FONT, fontSize: 11.5, lineHeight: 16, marginTop: 2 },
+  sectionTitle: { fontFamily: FONT, fontSize: 11, fontWeight: '600', color: '#475569', letterSpacing: 0.4, marginBottom: 8 },
 
-  cardSection: { backgroundColor: '#ffffff', borderRadius: 20, padding: 14, marginBottom: 14 },
+  cardSection: { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   
   // Dropdown Button
   dropdownBtn: {
@@ -570,62 +574,62 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   dropdownLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  dropdownAvatarFallback: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#074e26', justifyContent: 'center', alignItems: 'center' },
-  dropdownAvatarText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  dropdownValLabel: { fontSize: 9, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
-  dropdownValText: { fontSize: 14, fontWeight: '800', color: '#0f172a', marginTop: 1 },
+  dropdownAvatarFallback: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#4F46E5', justifyContent: 'center', alignItems: 'center' },
+  dropdownAvatarText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  dropdownValLabel: { fontSize: 9.5, fontWeight: '500', color: '#64748b', textTransform: 'uppercase' },
+  dropdownValText: { fontSize: 14, fontWeight: '600', color: '#0f172a', marginTop: 1 },
 
   // Date Presets
   presetRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
   presetChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f1f5f9' },
-  presetChipActive: { backgroundColor: '#074e26', borderColor: '#074e26' },
-  presetText: { fontFamily: FONT, fontSize: 10, fontWeight: '700', color: '#64748b' },
-  presetTextActive: { color: '#ffffff' },
+  presetChipActive: { backgroundColor: '#4F46E5', borderColor: '#4F46E5' },
+  presetText: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: '#64748b' },
+  presetTextActive: { color: '#ffffff', fontWeight: '600' },
 
   // Date Inputs
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   dateBox: { flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, backgroundColor: '#f8fafc', padding: 10 },
-  dateLbl: { fontFamily: FONT, fontSize: 8, fontWeight: '800', color: '#64748b', marginBottom: 3 },
-  dateInput: { fontFamily: FONT, fontSize: 12, fontWeight: '700', color: '#0f172a', padding: 0 },
+  dateLbl: { fontFamily: FONT, fontSize: 9, fontWeight: '500', color: '#64748b', marginBottom: 3 },
+  dateInput: { fontFamily: FONT, fontSize: 12.5, fontWeight: '600', color: '#0f172a', padding: 0 },
 
   generateBtn: { borderRadius: 14, overflow: 'hidden', marginTop: 4 },
   generateBtnGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
-  generateBtnText: { fontFamily: FONT, color: '#fff', fontWeight: '800', fontSize: 13 },
+  generateBtnText: { fontFamily: FONT, color: '#fff', fontWeight: '600', fontSize: 13.5 },
   selectedEmpText: { fontFamily: FONT, fontSize: 11, color: '#64748b', marginTop: 8, marginBottom: 12, textAlign: 'center' },
-  errorText: { color: '#b91c1c', backgroundColor: '#fef2f2', borderRadius: 10, padding: 10, fontFamily: FONT, fontSize: 11, marginBottom: 8, fontWeight: '600' },
+  errorText: { color: '#b91c1c', backgroundColor: '#fef2f2', borderRadius: 10, padding: 10, fontFamily: FONT, fontSize: 11, marginBottom: 8, fontWeight: '500' },
 
   resultsBlock: { marginTop: 10 },
   resultsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  pdfExportBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#059669' },
-  pdfExportBtnText: { fontFamily: FONT, fontSize: 11, fontWeight: '800', color: '#ffffff' },
-  shareBtn: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', alignItems: 'center', justifyContent: 'center' },
+  pdfExportBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#4F46E5' },
+  pdfExportBtnText: { fontFamily: FONT, fontSize: 11, fontWeight: '600', color: '#ffffff' },
+  shareBtn: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#E0E7FF', alignItems: 'center', justifyContent: 'center' },
 
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  summaryCard: { width: '31.7%', minHeight: 96, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f1f5f9', padding: 10, justifyContent: 'center' },
+  summaryCard: { width: '31.7%', minHeight: 96, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#E2E8F0', padding: 10, justifyContent: 'center' },
   summaryIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  summaryValue: { fontFamily: FONT, fontSize: 15, fontWeight: '900', color: '#0f172a' },
-  summaryLabel: { fontFamily: FONT, fontSize: 9, marginTop: 2, fontWeight: '600', color: '#64748b' },
+  summaryValue: { fontFamily: FONT, fontSize: 15, fontWeight: '600', color: '#0f172a' },
+  summaryLabel: { fontFamily: FONT, fontSize: 10, marginTop: 2, fontWeight: '500', color: '#64748b' },
   
-  detailCard: { borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f1f5f9', padding: 14, marginTop: 10 },
+  detailCard: { borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#E2E8F0', padding: 14, marginTop: 10 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  detailTitle: { fontFamily: FONT, fontSize: 12, fontWeight: '800', color: '#0f172a' },
-  detailText: { fontFamily: FONT, fontSize: 11, lineHeight: 16, color: '#64748b', marginTop: 2 },
+  detailTitle: { fontFamily: FONT, fontSize: 12.5, fontWeight: '600', color: '#0f172a' },
+  detailText: { fontFamily: FONT, fontSize: 11.5, lineHeight: 16, color: '#64748b', marginTop: 2 },
 
-  emptyReport: { alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 20, borderWidth: 1, borderColor: '#f1f5f9', padding: 32, marginTop: 10 },
-  emptyTitle: { fontFamily: FONT, fontSize: 14, fontWeight: '800', color: '#0f172a', marginTop: 10 },
-  emptySubText: { fontFamily: FONT, fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 4 },
+  emptyReport: { alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 32, marginTop: 10 },
+  emptyTitle: { fontFamily: FONT, fontSize: 14, fontWeight: '600', color: '#0f172a', marginTop: 10 },
+  emptySubText: { fontFamily: FONT, fontSize: 11.5, color: '#64748b', textAlign: 'center', marginTop: 4 },
 
   // Dropdown Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  dropdownSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 16, paddingBottom: 30 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'flex-end' },
+  dropdownSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, paddingBottom: 30 },
   sheetHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0', alignSelf: 'center', marginBottom: 12 },
   dropdownHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  dropdownHeaderTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  dropdownHeaderTitle: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 12, marginBottom: 4 },
-  dropdownItemActive: { backgroundColor: '#ecfdf5' },
+  dropdownItemActive: { backgroundColor: '#EEF2FF' },
   dropdownItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   dropdownItemAvatarFallback: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#64748b', justifyContent: 'center', alignItems: 'center' },
-  dropdownItemAvatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  dropdownItemName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  dropdownItemAvatarText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  dropdownItemName: { fontSize: 14, fontWeight: '500', color: '#0f172a' },
   dropdownItemSub: { fontSize: 11, color: '#64748b', marginTop: 1 },
 });

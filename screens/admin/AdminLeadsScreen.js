@@ -15,23 +15,23 @@ import { adminAPI, leadAPI, getAvatarUrl } from '../../services/api';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 
 const COLORS = {
-  headerStart: '#047857',
-  headerEnd: '#0d9488',
-  primary: '#0f766e',
-  primaryLight: '#ccfbf1',
+  headerStart: '#FFFFFF',
+  headerEnd: '#F8FAFC',
+  primary: '#4F46E5',
+  primaryLight: '#EEF2FF',
   bg: '#F8FAFC',
   card: '#FFFFFF',
-  text: '#1E293B',
+  text: '#0F172A',
   textSub: '#64748B',
   textMuted: '#94A3B8',
   border: '#E2E8F0',
-  success: '#059669',
-  successLight: '#ECFDF5',
-  warning: '#D97706',
-  warningLight: '#FFFBEB',
+  success: '#0D9488',
+  successLight: '#F0FDFA',
+  warning: '#64748B',
+  warningLight: '#F8FAFC',
   danger: '#DC2626',
   dangerLight: '#FEF2F2',
   indigo: '#4F46E5',
@@ -50,7 +50,7 @@ export default function AdminLeadsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const AVATAR_COLORS = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#ea580c'];
+  const AVATAR_COLORS = ['#4F46E5'];
   const getAvatarColor = (name) => {
     if (!name) return AVATAR_COLORS[0];
     let hash = 0;
@@ -180,13 +180,13 @@ export default function AdminLeadsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.headerStart} />
 
       {/* ── TOP HEADER ── */}
       <LinearGradient
         colors={[COLORS.headerStart, COLORS.headerEnd]}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
@@ -196,14 +196,14 @@ export default function AdminLeadsScreen() {
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
               activeOpacity={0.7}
             >
-              <ArrowLeft size={22} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.headerTitle}>Customer Leads</Text>
               <Text style={styles.headerSub}>Manage & Track Field Pipeline</Text>
             </View>
             <TouchableOpacity style={styles.headerAddBtn} activeOpacity={0.8}>
-              <Plus size={18} color="#fff" />
+              <Plus size={17} color="#334155" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -349,41 +349,47 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerGradient: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: 4,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   topNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontSize: 16.5,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   headerSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11.5,
+    fontWeight: '400',
+    color: '#64748B',
     fontFamily: FONT,
-    marginTop: 2,
+    marginTop: 1,
   },
   headerAddBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -406,13 +412,13 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
   tabTextActive: {
     color: COLORS.primary,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   searchWrap: {
     paddingHorizontal: 16,

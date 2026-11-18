@@ -11,6 +11,7 @@ import {
   ArrowLeft, Users, LocateFixed, RefreshCw, Route, MapPin, ChevronRight, X, Clock, Activity
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
+import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import { trackingAPI, adminAPI, getAvatarUrl } from '../../services/api';
 import { cachedFetch, clearCachePrefix } from '../../services/cache';
 import socketService from '../../services/socket';
@@ -21,9 +22,9 @@ import { useAuth } from '../../context/AuthContext';
 import { cleanTrackingRoute } from '../../utils/trackingRoute';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
-const GREEN = '#0f766e';
-const GREEN_DARK = '#064e3b';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
+const GREEN = '#4F46E5';
+const GREEN_DARK = '#4338CA';
 
 const cardShadow = Platform.OS === 'web'
   ? { boxShadow: '0px 4px 16px rgba(15, 23, 42, 0.08)' }
@@ -210,6 +211,7 @@ export default function AdminTrackingScreen(props = {}) {
   const [routeCoords, setRouteCoords] = useState([]);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [sheetFilter, setSheetFilter] = useState('ALL');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -570,6 +572,17 @@ export default function AdminTrackingScreen(props = {}) {
   }, [allEmployeesList, liveLocations, liveLocationIndex]);
 
   const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT').length;
+  const movingCount = directoryStaff.filter((s) => s.status === 'IN_TRANSIT').length;
+  const atSpotCount = directoryStaff.filter((s) => s.status === 'ON_FIELD' || s.status === 'AT_LOCATION').length;
+  const offlineCount = directoryStaff.filter((s) => !s.isTracking && s.status !== 'ON_FIELD' && s.status !== 'IN_TRANSIT').length;
+  const totalFleetKm = directoryStaff.reduce((sum, s) => sum + (Number(s.totalDistance) || 0), 0);
+
+  const filteredSheetStaff = useMemo(() => {
+    if (sheetFilter === 'MOVING') return directoryStaff.filter((s) => s.status === 'IN_TRANSIT');
+    if (sheetFilter === 'AT_SPOT') return directoryStaff.filter((s) => s.status === 'ON_FIELD' || s.status === 'AT_LOCATION');
+    if (sheetFilter === 'OFFLINE') return directoryStaff.filter((s) => !s.isTracking && s.status !== 'ON_FIELD' && s.status !== 'IN_TRANSIT');
+    return directoryStaff;
+  }, [directoryStaff, sheetFilter]);
 
   // Compute map region dynamically to fit ALL active employees on the map automatically
   const defaultRegion = useMemo(() => {
@@ -793,13 +806,13 @@ export default function AdminTrackingScreen(props = {}) {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* ── PROFESSIONAL EXECUTIVE HEADER ───────────────────────── */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
         style={styles.fullWidthHeader}
       >
         <SafeAreaView edges={['top']}>
@@ -809,18 +822,20 @@ export default function AdminTrackingScreen(props = {}) {
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
               activeOpacity={0.8}
             >
-              <ArrowLeft size={18} color="#ffffff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
 
             <View style={styles.headerTitleWrap}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.headerTitleText}>Live Map Tracking</Text>
+                <Text style={styles.headerTitleText}>Live Fleet Telemetry</Text>
                 <View style={styles.activePillBadge}>
                   <View style={styles.liveGreenDot} />
                   <Text style={styles.activePillText}>{activeCount} Active</Text>
                 </View>
               </View>
-              <Text style={styles.headerSubText}>Real-Time Field Telemetry & Trajectory</Text>
+              <Text style={styles.headerSubText}>
+                {movingCount} Moving • {atSpotCount} At Spot • {totalFleetKm.toFixed(1)} KM Logged Today
+              </Text>
             </View>
 
             <TouchableOpacity
@@ -829,7 +844,7 @@ export default function AdminTrackingScreen(props = {}) {
               disabled={refreshing}
               activeOpacity={0.8}
             >
-              {refreshing ? <ActivityIndicator size="small" color="#ffffff" /> : <RefreshCw size={16} color="#ffffff" />}
+              {refreshing ? <ActivityIndicator size="small" color="#4F46E5" /> : <RefreshCw size={16} color="#334155" />}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -872,7 +887,7 @@ export default function AdminTrackingScreen(props = {}) {
 
         {/* Sheet Header */}
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Active Team ({directoryStaff.length})</Text>
+          <Text style={styles.sheetTitle}>Field Workforce ({filteredSheetStaff.length})</Text>
           <TouchableOpacity style={styles.viewAll} onPress={() => router.push('/(admin)/team')}>
             <Text style={styles.viewAllText}>All Employees</Text>
             <ChevronRight size={13} color={GREEN} />
@@ -881,10 +896,10 @@ export default function AdminTrackingScreen(props = {}) {
 
         {panelOpen && (
           <FlatList
-            data={directoryStaff}
+            data={filteredSheetStaff}
             keyExtractor={(item, idx) => (item && item._id) ? `${String(item._id)}-${idx}` : `staff-${idx}`}
             style={styles.sheetList}
-            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16), paddingTop: 4 }}
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 74, paddingTop: 4 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
@@ -952,6 +967,7 @@ export default function AdminTrackingScreen(props = {}) {
       </View>
 
       {/* ── EMPLOYEE DETAIL MODAL (UI/UX PRO MAX) ──────────────────────────────── */}
+      <FloatingAdminTabBar activeTab="tracking" />
       <Modal visible={showEmployeeModal} transparent animationType="slide" onRequestClose={() => setShowEmployeeModal(false)}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowEmployeeModal(false)} activeOpacity={1} />
@@ -1117,12 +1133,11 @@ const styles = StyleSheet.create({
 
   fullWidthHeader: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    paddingTop: 4,
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: 6,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   headerRow: {
     flexDirection: 'row',
@@ -1132,42 +1147,46 @@ const styles = StyleSheet.create({
   headerBackBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitleWrap: { flex: 1 },
-  headerTitleText: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
-  headerSubText: { fontFamily: FONT, fontSize: 10.5, color: 'rgba(255, 255, 255, 0.8)', marginTop: 2 },
+  headerTitleText: { fontFamily: FONT, fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  headerSubText: { fontFamily: FONT, fontSize: 11, fontWeight: '400', color: '#64748B', marginTop: 2 },
 
   activePillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    backgroundColor: '#F0FDFA',
     paddingHorizontal: 9,
-    paddingVertical: 2.5,
+    paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.4)',
+    borderColor: '#CCFBF1',
   },
   activePillText: {
-    color: '#34d399',
+    color: '#0D9488',
     fontSize: 10.5,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   liveGreenDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#10b981',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0D9488',
   },
   headerRefreshBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1176,7 +1195,7 @@ const styles = StyleSheet.create({
   mapControls: { position: 'absolute', right: 12, bottom: 14, gap: 8 },
   mapCtrlBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   routeLoader: { position: 'absolute', top: 16, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  routeLoaderText: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', color: GREEN },
+  routeLoaderText: { fontFamily: FONT, fontSize: 11, fontWeight: '600', color: GREEN },
 
   // Bottom Sheet - Compact Height (42% max screen height)
   sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, maxHeight: '42%', flexShrink: 0 },
@@ -1184,7 +1203,13 @@ const styles = StyleSheet.create({
   sheetHandleWrap: { alignItems: 'center', paddingVertical: 6 },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#cbd5e1' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  sheetTitle: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', color: '#0f172a' },
+  sheetFilterRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  sheetFilterChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  sheetFilterChipActive: { backgroundColor: '#EEF2FF', borderColor: '#4F46E5' },
+  sheetFilterDot: { width: 6, height: 6, borderRadius: 3 },
+  sheetFilterChipText: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: '#64748B' },
+  sheetFilterChipTextActive: { color: '#4F46E5', fontWeight: '600' },
+  sheetTitle: { fontFamily: FONT, fontSize: 14, fontWeight: '600', color: '#0f172a' },
   viewAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   viewAllText: { fontFamily: FONT, fontSize: 11, fontWeight: '700', color: GREEN },
 

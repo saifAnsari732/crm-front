@@ -1527,7 +1527,6 @@ export default function TripPlannerScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* ── TOP HEADER ── */}
-      {/* ── TOP HEADER ── */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -1548,6 +1547,9 @@ export default function TripPlannerScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Trip Planner</Text>
+          <Text style={styles.headerSubtitle}>
+            {tripStatus === 'IN_PROGRESS' ? 'Active Trip in Progress' : 'Plan Route & Claim Allowance'}
+          </Text>
         </View>
 
         <TouchableOpacity
@@ -1555,7 +1557,7 @@ export default function TripPlannerScreen() {
           onPress={() => setActiveTab(activeTab === 'planner' ? 'history' : 'planner')}
           activeOpacity={0.7}
         >
-          <History size={14} color={activeTab === 'history' ? '#ffffff' : '#2563eb'} />
+          <History size={14} color={activeTab === 'history' ? '#ffffff' : '#0f766e'} />
           <Text
             style={[
               styles.headerTabBtnText,
@@ -1610,81 +1612,87 @@ export default function TripPlannerScreen() {
                   </View>
                 )}
 
-                <View style={styles.routeInputsStack}>
-                  {/* PICKUP / ORIGIN INPUT (Point A) */}
-                  <View style={[styles.inputBox, searchingField === 'origin' && styles.inputBoxActive]}>
-                    <View style={styles.originIconBadge}>
-                      <View style={styles.originDotInner} />
-                    </View>
-                    <TextInput
-                      style={styles.locationInput}
-                      placeholder="Where from? (Pickup point)"
-                      placeholderTextColor="#94a3b8"
-                      value={originText}
-                      onChangeText={(txt) => handleTextChange(txt, 'origin')}
-                      onFocus={() => handleFocusField('origin')}
-                    />
-                    {originText ? (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setOriginText('');
-                          setOrigin(null);
-                          setPredictions([]);
-                        }}
-                        style={styles.fieldClearBtn}
-                      >
-                        <X size={14} color="#64748b" />
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity onPress={handleUseCurrentGps} style={styles.gpsChipBtn}>
-                        <Navigation size={11} color="#059669" />
-                        <Text style={styles.gpsChipText}>GPS</Text>
-                      </TouchableOpacity>
-                    )}
+                <View style={styles.routeInputsCard}>
+                  {/* Visual connector column */}
+                  <View style={styles.routeVisualTrack}>
+                    <View style={styles.originDotVisual} />
+                    <View style={styles.verticalTrackDash} />
+                    <View style={styles.destSquareVisual} />
                   </View>
 
-                  {/* Floating Swap Divider */}
-                  <View style={styles.swapDividerRow}>
-                    <View style={styles.swapDashLine} />
-                    <TouchableOpacity
-                      style={styles.swapBtnFloat}
-                      onPress={handleSwap}
-                      activeOpacity={0.7}
-                    >
-                      <ArrowUpDown size={13} color="#2563eb" />
-                    </TouchableOpacity>
-                    <View style={styles.swapDashLine} />
-                  </View>
-
-                  {/* DESTINATION INPUT (Point B) */}
-                  <View style={[styles.inputBox, searchingField === 'dest' && styles.inputBoxActive]}>
-                    <View style={styles.destIconBadge}>
-                      <View style={styles.destSquareInner} />
+                  {/* Input Fields Stack */}
+                  <View style={styles.inputsStackRight}>
+                    {/* PICKUP / ORIGIN INPUT (Point A) */}
+                    <View style={[styles.inputBox, searchingField === 'origin' && styles.inputBoxActive]}>
+                      <TextInput
+                        style={styles.locationInput}
+                        placeholder="Where from? (Pickup point)"
+                        placeholderTextColor="#94a3b8"
+                        value={originText}
+                        onChangeText={(txt) => handleTextChange(txt, 'origin')}
+                        onFocus={() => handleFocusField('origin')}
+                      />
+                      {originText ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setOriginText('');
+                            setOrigin(null);
+                            setPredictions([]);
+                          }}
+                          style={styles.fieldClearBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <X size={14} color="#64748b" />
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity onPress={handleUseCurrentGps} style={styles.gpsChipBtn}>
+                          <Navigation size={11} color="#0f766e" />
+                          <Text style={styles.gpsChipText}>Current GPS</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                    <TextInput
-                      style={styles.locationInput}
-                      placeholder="Where to? (Destination / Meeting point)"
-                      placeholderTextColor="#94a3b8"
-                      value={destText}
-                      onChangeText={(txt) => handleTextChange(txt, 'dest')}
-                      onFocus={() => handleFocusField('dest')}
-                    />
-                    {destText ? (
+
+                    {/* Subtle Divider with embedded Swap button */}
+                    <View style={styles.inputInnerDivider}>
+                      <View style={styles.inputDividerLine} />
                       <TouchableOpacity
-                        onPress={() => {
-                          setDestText('');
-                          setDestination(null);
-                          setRouteData(null);
-                          setPredictions([]);
-                          storage.removeItem('active_trip_planner_destination').catch(() => {});
-                          storage.removeItem('active_trip_planner_route').catch(() => {});
-                          storage.removeItem('active_trip_planner_is_active').catch(() => {});
-                        }}
-                        style={styles.fieldClearBtn}
+                        style={styles.swapBtnFloat}
+                        onPress={handleSwap}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
-                        <X size={14} color="#64748b" />
+                        <ArrowUpDown size={12} color="#0f766e" />
                       </TouchableOpacity>
-                    ) : null}
+                    </View>
+
+                    {/* DESTINATION INPUT (Point B) */}
+                    <View style={[styles.inputBox, searchingField === 'dest' && styles.inputBoxActive]}>
+                      <TextInput
+                        style={styles.locationInput}
+                        placeholder="Where to? (Destination / Meeting point)"
+                        placeholderTextColor="#94a3b8"
+                        value={destText}
+                        onChangeText={(txt) => handleTextChange(txt, 'dest')}
+                        onFocus={() => handleFocusField('dest')}
+                      />
+                      {destText ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setDestText('');
+                            setDestination(null);
+                            setRouteData(null);
+                            setPredictions([]);
+                            storage.removeItem('active_trip_planner_destination').catch(() => {});
+                            storage.removeItem('active_trip_planner_route').catch(() => {});
+                            storage.removeItem('active_trip_planner_is_active').catch(() => {});
+                          }}
+                          style={styles.fieldClearBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <X size={14} color="#64748b" />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
 
@@ -1695,13 +1703,13 @@ export default function TripPlannerScreen() {
                     onPress={handleUseCurrentGps}
                     activeOpacity={0.7}
                   >
-                    <Navigation size={12} color="#059669" />
+                    <Navigation size={12} color="#0f766e" />
                     <Text style={styles.reAnchorText}>Use My Current GPS Position</Text>
                   </TouchableOpacity>
                   {isRouting && (
                     <View style={styles.routingBadge}>
-                      <ActivityIndicator size="small" color="#2563eb" />
-                      <Text style={styles.routingBadgeText}>Calculating driving route...</Text>
+                      <ActivityIndicator size="small" color="#0f766e" />
+                      <Text style={styles.routingBadgeText}>Calculating route...</Text>
                     </View>
                   )}
                 </View>
@@ -1711,7 +1719,7 @@ export default function TripPlannerScreen() {
                   <View style={styles.predictionsDropdown}>
                     {isSearching ? (
                       <View style={styles.predictionLoadingRow}>
-                        <ActivityIndicator size="small" color="#2563eb" />
+                        <ActivityIndicator size="small" color="#0f766e" />
                         <Text style={styles.predictionLoadingText}>Searching addresses...</Text>
                       </View>
                     ) : (
@@ -1728,7 +1736,7 @@ export default function TripPlannerScreen() {
                             activeOpacity={0.7}
                           >
                             <View style={styles.predictionIconBadge}>
-                              <MapPin size={15} color="#2563eb" />
+                              <MapPin size={15} color="#0f766e" />
                             </View>
                             <View style={styles.predictionTextCol}>
                               <Text style={styles.predictionTitle} numberOfLines={1}>
@@ -1770,11 +1778,10 @@ export default function TripPlannerScreen() {
                 {/* 1. Distance */}
                 <View style={styles.metricCol}>
                   <View style={styles.metricValRow}>
-                    <Car size={15} color="#2563eb" />
+                    <Car size={15} color="#0f766e" />
                     <Text style={styles.metricVal}>{routeData.distanceKm}</Text>
                     <Text style={styles.metricUnit}>KM</Text>
                   </View>
-                 
                 </View>
 
                 <View style={styles.metricDivider} />
@@ -1786,7 +1793,6 @@ export default function TripPlannerScreen() {
                     <Text style={styles.metricVal}>{routeData.durationMins}</Text>
                     <Text style={styles.metricUnit}>min</Text>
                   </View>
-               
                 </View>
 
                 <View style={styles.metricDivider} />
@@ -1799,7 +1805,6 @@ export default function TripPlannerScreen() {
                       ₹{routeData.reimbursementAmount}
                     </Text>
                   </View>
-                 
                 </View>
               </View>
 
@@ -1817,7 +1822,7 @@ export default function TripPlannerScreen() {
                     >
                       <Users
                         size={14}
-                        color={selectedPurpose === 'Client Meeting' ? '#2563eb' : '#64748b'}
+                        color={selectedPurpose === 'Client Meeting' ? '#0f766e' : '#64748b'}
                       />
                       <Text
                         style={[
@@ -1839,7 +1844,7 @@ export default function TripPlannerScreen() {
                     >
                       <ClipboardCheck
                         size={14}
-                        color={selectedPurpose === 'Inspection' ? '#2563eb' : '#64748b'}
+                        color={selectedPurpose === 'Inspection' ? '#0f766e' : '#64748b'}
                       />
                       <Text
                         style={[
@@ -1890,7 +1895,7 @@ export default function TripPlannerScreen() {
                       activeOpacity={0.85}
                     >
                       <LinearGradient
-                        colors={isTracking ? ['#94a3b8', '#64748b'] : ['#2563eb', '#1d4ed8']}
+                        colors={isTracking ? ['#94a3b8', '#64748b'] : ['#0f766e', '#115e59']}
                         style={styles.confirmGradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
@@ -1947,7 +1952,7 @@ export default function TripPlannerScreen() {
                           ? ['#94a3b8', '#64748b']
                           : hasCompletedFullJourney
                           ? ['#059669', '#047857']
-                          : ['#2563eb', '#1d4ed8']
+                          : ['#0f766e', '#115e59']
                       }
                       style={styles.confirmGradient}
                       start={{ x: 0, y: 0 }}
@@ -1973,7 +1978,7 @@ export default function TripPlannerScreen() {
           ) : (
             <Surface style={styles.promptSheetCard} elevation={3}>
               <View style={styles.promptIconCircle}>
-                <Car size={22} color="#2563eb" />
+                <Car size={20} color="#0f766e" />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.promptSheetTitle}>Where are you heading?</Text>
@@ -1996,7 +2001,7 @@ export default function TripPlannerScreen() {
                 setHistoryRefreshing(true);
                 fetchHistory();
               }}
-              tintColor="#2563eb"
+              tintColor="#0f766e"
             />
           }
         >
@@ -2008,7 +2013,7 @@ export default function TripPlannerScreen() {
             </Surface>
             <Surface style={styles.historyKpiCard} elevation={1}>
               <Text style={styles.historyKpiLabel}>TOTAL ROAD KM</Text>
-              <Text style={[styles.historyKpiValue, { color: '#2563eb' }]}>
+              <Text style={[styles.historyKpiValue, { color: '#0f766e' }]}>
                 {historySummary.totalKm} km
               </Text>
             </Surface>
@@ -2025,7 +2030,7 @@ export default function TripPlannerScreen() {
 
           {loadingHistory && !historyRefreshing ? (
             <View style={styles.historyLoader}>
-              <ActivityIndicator size="large" color="#2563eb" />
+              <ActivityIndicator size="large" color="#0f766e" />
               <Text style={styles.historyLoaderText}>Loading claimed trips...</Text>
             </View>
           ) : tripsHistory.length === 0 ? (
@@ -2080,7 +2085,7 @@ export default function TripPlannerScreen() {
                 {/* Footer details: KM, Amount, Purpose */}
                 <View style={styles.tripCardFooter}>
                   <View style={styles.tripKmBadge}>
-                    <Car size={13} color="#2563eb" />
+                    <Car size={13} color="#0f766e" />
                     <Text style={styles.tripKmText}>{trip.distanceKm} KM</Text>
                   </View>
                   <View style={styles.tripPurposeBadge}>
@@ -2127,7 +2132,7 @@ export default function TripPlannerScreen() {
               <View style={styles.successMetricDivider} />
               <View style={styles.successMetricCol}>
                 <Text style={styles.successMetricLabel}>TODAY'S TOTAL</Text>
-                <Text style={[styles.successMetricVal, { color: '#2563eb' }]}>
+                <Text style={[styles.successMetricVal, { color: '#0f766e' }]}>
                   {successModal.todayTotalKm} KM
                 </Text>
               </View>
@@ -2326,7 +2331,7 @@ export default function TripPlannerScreen() {
               </View>
               <View style={styles.earlyClaimRow}>
                 <Text style={styles.earlyClaimLabel}>Actual Moved Distance:</Text>
-                <Text style={[styles.earlyClaimVal, { color: '#2563eb' }]}>{formattedMovedDistance}</Text>
+                <Text style={[styles.earlyClaimVal, { color: '#0f766e' }]}>{formattedMovedDistance}</Text>
               </View>
               <View style={styles.earlyClaimRow}>
                 <Text style={styles.earlyClaimLabel}>Reimbursement Amount:</Text>
@@ -2370,7 +2375,7 @@ export default function TripPlannerScreen() {
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={hasCompletedFullJourney ? ['#059669', '#047857'] : ['#2563eb', '#1d4ed8']}
+                  colors={hasCompletedFullJourney ? ['#059669', '#047857'] : ['#0f766e', '#115e59']}
                   style={styles.earlyClaimConfirmGrad}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -2468,22 +2473,22 @@ const styles = StyleSheet.create({
   headerTabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 11,
+    backgroundColor: '#f0fdfa',
+    paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#dbeafe',
+    borderColor: '#ccfbf1',
     gap: 5,
   },
   headerTabBtnActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: '#0f766e',
+    borderColor: '#0f766e',
   },
   headerTabBtnText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#2563eb',
+    fontWeight: '600',
+    color: '#0f766e',
   },
   headerTabBtnTextActive: {
     color: '#ffffff',
@@ -2501,19 +2506,19 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 30,
     backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 10,
+    borderRadius: 20,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
     elevation: 6,
   },
   routeCardCompact: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 14,
   },
   inProgressCompactCard: {
@@ -2531,12 +2536,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10b981',
+    backgroundColor: '#0f766e',
     marginRight: 6,
   },
   inProgressTextOrigin: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0f172a',
     maxWidth: '38%',
   },
@@ -2544,12 +2549,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 2,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#ea580c',
     marginRight: 6,
   },
   inProgressTextDest: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0f172a',
     maxWidth: '38%',
   },
@@ -2563,7 +2568,7 @@ const styles = StyleSheet.create({
   },
   compactCancelText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#dc2626',
   },
   trackingActiveBanner: {
@@ -2578,7 +2583,7 @@ const styles = StyleSheet.create({
   },
   trackingActiveBannerTitle: {
     fontSize: 11.5,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#b45309',
   },
   trackingActiveBannerSub: {
@@ -2587,109 +2592,131 @@ const styles = StyleSheet.create({
     marginTop: 1,
     lineHeight: 13,
   },
-  routeInputsStack: {
-    position: 'relative',
+  routeInputsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  routeVisualTrack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 22,
+    marginRight: 6,
+  },
+  originDotVisual: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#0f766e',
+    borderWidth: 2,
+    borderColor: '#ccfbf1',
+  },
+  verticalTrackDash: {
+    width: 2,
+    height: 28,
+    backgroundColor: '#cbd5e1',
+    marginVertical: 3,
+    borderRadius: 1,
+  },
+  destSquareVisual: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: '#ea580c',
+    borderWidth: 2,
+    borderColor: '#ffedd5',
+  },
+  inputsStackRight: {
+    flex: 1,
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     paddingHorizontal: 10,
     height: 38,
   },
   inputBoxActive: {
-    borderColor: '#2563eb',
+    borderColor: '#0f766e',
     backgroundColor: '#ffffff',
+    shadowColor: '#0f766e',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
   },
-  originIconBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#d1fae5',
+  inputInnerDivider: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    height: 16,
+    marginVertical: 1,
+    position: 'relative',
   },
-  originDotInner: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#059669',
-  },
-  destIconBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    backgroundColor: '#fee2e2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  destSquareInner: {
-    width: 7,
-    height: 7,
-    borderRadius: 2,
-    backgroundColor: '#dc2626',
+  inputDividerLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#f1f5f9',
   },
   locationInput: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontWeight: '500',
     color: '#0f172a',
     paddingVertical: 0,
   },
   fieldClearBtn: {
     padding: 4,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
   },
   gpsChipBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#f0fdfa',
     paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#ccfbf1',
     gap: 3,
   },
   gpsChipText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  swapDividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 2,
-    position: 'relative',
-    height: 14,
-  },
-  swapDashLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#f1f5f9',
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#0f766e',
   },
   swapBtnFloat: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    marginHorizontal: 10,
+    borderColor: '#ccfbf1',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 2,
   },
   subStatusBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 6,
-    paddingTop: 6,
+    marginTop: 8,
+    paddingTop: 7,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
   },
@@ -2700,8 +2727,8 @@ const styles = StyleSheet.create({
   },
   reAnchorText: {
     fontSize: 11.5,
-    fontWeight: '600',
-    color: '#059669',
+    fontWeight: '500',
+    color: '#0f766e',
   },
   routingBadge: {
     flexDirection: 'row',
@@ -2709,9 +2736,9 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   routingBadgeText: {
-    fontSize: 11.5,
-    color: '#2563eb',
-    fontWeight: '600',
+    fontSize: 11,
+    color: '#0f766e',
+    fontWeight: '500',
   },
   predictionsDropdown: {
     marginTop: 10,
@@ -2727,7 +2754,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   predictionLoadingText: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: '#64748b',
   },
   predictionsList: {
@@ -2736,32 +2763,31 @@ const styles = StyleSheet.create({
   predictionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: '#f8fafc',
   },
-  predictionIcon: {
-    marginRight: 10,
-  },
   predictionIconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#eff6ff',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f0fdfa',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
   },
   predictionTextCol: {
     flex: 1,
   },
   predictionTitle: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '600',
     color: '#0f172a',
   },
   predictionSubtitle: {
-    fontSize: 11.5,
+    fontSize: 11,
     color: '#64748b',
     marginTop: 1,
   },
@@ -2796,7 +2822,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#f8fafc',
     borderRadius: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: '#f1f5f9',
@@ -2813,12 +2839,12 @@ const styles = StyleSheet.create({
   },
   metricVal: {
     fontSize: 14.5,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#0f172a',
   },
   metricUnit: {
     fontSize: 10.5,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#64748b',
   },
   metricSub: {
@@ -2852,17 +2878,17 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   purposeTabActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#2563eb',
+    backgroundColor: '#f0fdfa',
+    borderColor: '#0f766e',
   },
   purposeTabText: {
     fontSize: 11.5,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#64748b',
   },
   purposeTabTextActive: {
-    color: '#2563eb',
-    fontWeight: '700',
+    color: '#0f766e',
+    fontWeight: '600',
   },
   clientInputRow: {
     flexDirection: 'row',
@@ -3193,7 +3219,7 @@ const styles = StyleSheet.create({
   },
   emptyPlanBtn: {
     marginTop: 18,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#0f766e',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
@@ -3201,7 +3227,7 @@ const styles = StyleSheet.create({
   emptyPlanBtnText: {
     color: '#ffffff',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   tripHistoryCard: {
     backgroundColor: '#ffffff',

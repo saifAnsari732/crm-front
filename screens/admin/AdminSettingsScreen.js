@@ -16,48 +16,49 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import { useAuth } from '../../context/AuthContext';
 import { stopHeartbeat } from '../../services/locationTask';
 import { adminAPI, uploadAPI, getAvatarUrl, authAPI } from '../../services/api';
 
 // ── UI/UX Pro Max Design Tokens (No Black Colors) ──
 const COLORS = {
-  primary: '#2563EB',
-  primaryDark: '#1D4ED8',
-  primaryLight: '#DBEAFE',
-  primaryMuted: '#EFF6FF',
-  secondary: '#3B82F6',
-  accent: '#EA580C',
+  primary: '#4F46E5',
+  primaryDark: '#4338CA',
+  primaryLight: '#E0E7FF',
+  primaryMuted: '#EEF2FF',
+  secondary: '#4F46E5',
+  accent: '#4F46E5',
   background: '#F8FAFC',
   card: '#FFFFFF',
   surface: '#F1F5F9',
   border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  text: '#1E293B',
+  text: '#0F172A',
   textSecondary: '#475569',
   textMuted: '#94A3B8',
-  success: '#059669',
-  successLight: '#ECFDF5',
-  successBorder: '#A7F3D0',
+  success: '#0D9488',
+  successLight: '#F0FDFA',
+  successBorder: '#CCFBF1',
   danger: '#DC2626',
   dangerLight: '#FEF2F2',
   dangerBorder: '#FECACA',
-  warning: '#D97706',
-  warningLight: '#FFFBEB',
-  purple: '#7C3AED',
-  purpleLight: '#F5F3FF',
+  warning: '#64748B',
+  warningLight: '#F8FAFC',
+  purple: '#4F46E5',
+  purpleLight: '#EEF2FF',
   indigo: '#4F46E5',
   indigoLight: '#EEF2FF',
-  rose: '#E11D48',
-  roseLight: '#FFF1F2',
-  amber: '#D97706',
-  amberLight: '#FFFBEB',
+  rose: '#4F46E5',
+  roseLight: '#EEF2FF',
+  amber: '#4F46E5',
+  amberLight: '#EEF2FF',
   white: '#FFFFFF',
-  headerGradientStart: '#047857',
-  headerGradientEnd: '#0d9488',
+  headerGradientStart: '#FFFFFF',
+  headerGradientEnd: '#F8FAFC',
 };
 
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const cardShadow = Platform.OS === 'web'
@@ -296,19 +297,19 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* Vibrant Emerald Gradient Top Bar */}
+      {/* Clean Minimal Light Header */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
       >
         <SafeAreaView edges={['top', 'left', 'right']}>
           <View style={styles.topNavRow}>
             <TouchableOpacity style={styles.headerBtn} onPress={handleGoBack} activeOpacity={0.7}>
-              <ArrowLeft size={20} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.brandTitle}>Manager Settings</Text>
@@ -574,7 +575,9 @@ function ManagerSettingsConsole({ user, authOrg, logout, router }) {
           <LogOut size={18} color={COLORS.danger} />
           <Text style={styles.logoutBtnText}>Logout from Manager Console</Text>
         </TouchableOpacity>
+        <View style={{ height: 70 }} />
       </ScrollView>
+      <FloatingAdminTabBar activeTab="settings" />
     </View>
   );
 }
@@ -776,19 +779,19 @@ export default function AdminSettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* Vibrant Emerald Gradient Top Bar */}
+      {/* Clean Minimal Light Header */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
       >
         <SafeAreaView edges={['top', 'left', 'right']}>
           <View style={styles.topNavRow}>
             <TouchableOpacity style={styles.headerBtn} onPress={handleGoBack} activeOpacity={0.7}>
-              <ArrowLeft size={20} color="#fff" />
+              <ArrowLeft size={18} color="#334155" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.brandTitle}>Organization Settings</Text>
@@ -800,7 +803,7 @@ export default function AdminSettingsScreen() {
               activeOpacity={0.7}
               disabled={saving}
             >
-              {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={18} color="#fff" />}
+              {saving ? <ActivityIndicator size="small" color="#4F46E5" /> : <Save size={17} color="#334155" />}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -968,9 +971,11 @@ export default function AdminSettingsScreen() {
               <LogOut size={16} color={COLORS.danger} />
               <Text style={styles.logoutFullBtnText}>Logout from Account</Text>
             </TouchableOpacity>
+            <View style={{ height: 70 }} />
           </>
         )}
       </ScrollView>
+      <FloatingAdminTabBar activeTab="settings" />
     </View>
   );
 }
@@ -981,13 +986,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   headerGradient: {
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    paddingTop: Platform.OS === 'android' ? 14 : 10,
+    paddingBottom: 14,
+    paddingTop: Platform.OS === 'android' ? 12 : 8,
   },
   topNavRow: {
     flexDirection: 'row',
@@ -996,25 +1000,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: '#E2E8F0',
   },
   brandTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    color: '#0F172A',
+    fontSize: 16.5,
+    fontWeight: '600',
     fontFamily: FONT,
   },
   brandSub: {
-    color: 'rgba(255, 255, 255, 0.78)',
+    color: '#64748B',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '400',
     fontFamily: FONT,
   },
 

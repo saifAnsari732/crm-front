@@ -16,6 +16,7 @@ import {
   Car
 } from 'lucide-react-native';
 import MapViewComponent from '../../components/MapViewComponent';
+import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import { adminAPI, trackingAPI, meetingAPI, getAvatarUrl, stopHeartbeat, expenseAPI } from '../../services/api';
 import { storage } from '../../services/storage';
 import socketService from '../../services/socket';
@@ -23,39 +24,39 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 
 const COLORS = {
-  headerStart: '#047857',
-  headerEnd: '#0d9488',
-  primary: '#0f766e',
-  primaryDark: '#064e3b',
-  primaryLight: '#ccfbf1',
-  primaryMuted: '#f0fdfa',
-  secondary: '#059669',
-  accent: '#d97706',
+  headerStart: '#FFFFFF',
+  headerEnd: '#F8FAFC',
+  primary: '#4F46E5',
+  primaryDark: '#4338CA',
+  primaryLight: '#E0E7FF',
+  primaryMuted: '#EEF2FF',
+  secondary: '#0D9488',
+  accent: '#4F46E5',
   background: '#F8FAFC',
   card: '#FFFFFF',
   surface: '#F1F5F9',
   border: '#E2E8F0',
-  text: '#1E293B',
-  textSecondary: '#475569',
+  text: '#0F172A',
+  textSecondary: '#334155',
   textMuted: '#94A3B8',
   textSub: '#64748B',
-  success: '#059669',
-  successLight: '#ECFDF5',
+  success: '#0D9488',
+  successLight: '#F0FDFA',
   warning: '#D97706',
   warningLight: '#FFFBEB',
   danger: '#DC2626',
   dangerLight: '#FEF2F2',
-  purple: '#7C3AED',
-  purpleLight: '#F5F3FF',
-  pinkLight: '#FFF1F2',
+  purple: '#4F46E5',
+  purpleLight: '#EEF2FF',
+  pinkLight: '#F8FAFC',
   lavenderLight: '#EEF2FF',
   skyLight: '#F0F9FF',
-  mintLight: '#ECFDF5',
-  blue: '#2563EB',
-  blueLight: '#DBEAFE',
+  mintLight: '#F0FDFA',
+  blue: '#4F46E5',
+  blueLight: '#E0E7FF',
 };
 
 const cardShadow = Platform.OS === 'web'
@@ -537,36 +538,40 @@ export default function OrgAdminDashboardScreen() {
       color: idx === 0 ? '#D97706' : idx === 1 ? '#2563EB' : idx === 2 ? '#DB2777' : idx === 3 ? '#EA580C' : '#059669',
     }));
 
-  const presentPercentage = Math.round((presentStaffCount / totalStaffCount) * 100);
-  const absentPercentage = Math.round((absentStaffCount / totalStaffCount) * 100);
-  const latePercentage = Math.max(100 - presentPercentage - absentPercentage, 5);
+  const totalTeamDistanceToday = directoryStaff.reduce((sum, emp) => sum + (Number(emp.totalDistance) || 0), 0);
+  const safeTotalStaff = Math.max(1, totalStaffCount);
+  const presentPercentage = totalStaffCount > 0 ? Math.min(100, Math.round((presentStaffCount / safeTotalStaff) * 100)) : 0;
+  const absentPercentage = totalStaffCount > 0 ? Math.min(100 - presentPercentage, Math.round((absentStaffCount / safeTotalStaff) * 100)) : 100;
+  const latePercentage = Math.max(0, 100 - presentPercentage - absentPercentage);
+  const hourNow = new Date().getHours();
+  const timeGreeting = hourNow < 12 ? 'Good Morning' : hourNow < 17 ? 'Good Afternoon' : 'Good Evening';
 
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: COLORS.background }]}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={{ marginTop: 12, color: COLORS.textSecondary, fontFamily: FONT }}>Loading Organization Console…</Text>
+        <Text style={{ marginTop: 12, color: COLORS.textSecondary, fontFamily: FONT }}>Loading Console…</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.headerStart} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── TOP HEADER SECTION (Curved Emerald Header with Real Profile Picture) ── */}
+      {/* ── CLEAN MINIMAL LIGHT HEADER (Notion / Stripe / iOS Style) ── */}
       <LinearGradient
-        colors={[COLORS.headerStart, COLORS.headerEnd]}
+        colors={['#FFFFFF', '#F8FAFC']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
         style={styles.headerGradient}
       >
         <SafeAreaView edges={['top']}>
-          {/* Row 1: Menu, Brand Title, Sync, Bell, Real Admin Profile Picture */}
+          {/* Top Bar: Menu, Brand Title, Bell, Profile Picture */}
           <View style={styles.topNavRow}>
             <TouchableOpacity style={styles.menuBtn} onPress={() => setSideMenuVisible(true)} activeOpacity={0.7}>
-              <Menu size={20} color="#fff" />
+              <Menu size={20} color="#334155" />
             </TouchableOpacity>
 
             <View style={styles.brandBox}>
@@ -577,23 +582,15 @@ export default function OrgAdminDashboardScreen() {
                   resizeMode="contain"
                 />
               </View>
-              <View>
-                <Text style={styles.brandTitle} numberOfLines={1}>{orgName}</Text>
-                <Text style={styles.brandSub}>Organization Console</Text>
-              </View>
+              <Text style={styles.brandTitle} numberOfLines={1}>{orgName}</Text>
             </View>
 
             <View style={styles.topNavRight}>
-              <TouchableOpacity style={styles.syncBtn} onPress={onRefresh} activeOpacity={0.7}>
-                <RefreshCw size={14} color="#fff" />
-              </TouchableOpacity>
-
               <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.7}>
-                <Bell size={18} color="#fff" />
+                <Bell size={18} color="#334155" />
                 <View style={styles.notifDot} />
               </TouchableOpacity>
 
-              {/* REAL PROFILE PICTURE ICON */}
               <TouchableOpacity style={styles.adminAvatarBtn} onPress={() => router.push('/(admin)/profile')} activeOpacity={0.8}>
                 {userAvatarUrl ? (
                   <Image source={{ uri: userAvatarUrl }} style={styles.adminAvatarRealImg} />
@@ -606,13 +603,13 @@ export default function OrgAdminDashboardScreen() {
             </View>
           </View>
 
-          {/* Row 2: Greeting & Date */}
+          {/* Compact Greeting Row */}
           <View style={styles.greetingBox}>
-            <Text style={styles.greetingTitle}>Good Morning, Admin </Text>
+            <Text style={styles.greetingTitle} numberOfLines={1}>
+              {timeGreeting}, {user?.name ? user.name.split(' ')[0] : 'Admin'}
+            </Text>
             <Text style={styles.greetingDate}>{todayDateFormatted}</Text>
           </View>
-
-         
         </SafeAreaView>
       </LinearGradient>
 
@@ -623,208 +620,226 @@ export default function OrgAdminDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {/* ── 1. OVERALL PERFORMANCE HERO CARD ── */}
-        <Surface style={[styles.heroPerfCard, cardShadow]} elevation={2}>
-          <Text style={styles.cardHeaderTitle}>Overall Performance</Text>
-          <View style={styles.heroPerfBody}>
-            {/* Left Circular Gauge */}
-            <View style={styles.gaugeContainer}>
-              <View style={styles.gaugeCircle}>
-                <Text style={styles.gaugeScore}>{presentPercentage}%</Text>
-                <Text style={styles.gaugeSub}>Attendance</Text>
-                <Text style={styles.gaugeTrend}>Live Rate</Text>
-              </View>
-            </View>
-
-            {/* Right 2x2 Stats Grid */}
-            <View style={styles.stats2x2Grid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statBoxLabel}>Total Staff</Text>
-                <Text style={styles.statBoxValue}>{totalStaffCount}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statBoxLabel}>Present</Text>
-                <Text style={[styles.statBoxValue, { color: COLORS.success }]}>{presentStaffCount}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statBoxLabel}>On Field</Text>
-                <Text style={[styles.statBoxValue, { color: COLORS.primary }]}>{onFieldStaffCount}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statBoxLabel}>Pending</Text>
-                <Text style={[styles.statBoxValue, { color: COLORS.warning }]}>{pendingStaffCount}</Text>
-              </View>
-            </View>
-          </View>
-        </Surface>
-
-        {/* ── 2. TODAY'S ATTENDANCE SEGMENTED BAR CARD ── */}
-        <Surface style={[styles.attendanceBarCard, cardShadow]} elevation={1}>
-          <View style={styles.attendanceBarHeader}>
-            <Text style={styles.cardHeaderTitle}>Today's Attendance</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/attendance')}>
-              <Text style={styles.viewAllLink}>View All &gt;</Text>
+        {/* ── 1. ATTENDANCE & WORKFORCE OVERVIEW CARD ── */}
+        <Surface style={[styles.heroPerfCard, cardShadow]} elevation={1}>
+          <View style={styles.heroCardTopBar}>
+            <Text style={[styles.cardHeaderTitle, { flex: 1 }]}>Attendance Overview</Text>
+            <TouchableOpacity style={styles.viewAllPillBtn} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.75}>
+              <Text style={styles.viewAllLink}>View Logs</Text>
+              <ChevronRight size={13} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.attendanceCountBig}>{presentStaffCount}/{totalStaffCount}</Text>
+          <View style={styles.heroPerfBody}>
+            {/* Left Circular Gauge */}
+            <View style={styles.gaugeContainer}>
+              <View style={styles.gaugeOuterRing}>
+                <View style={styles.gaugeCircle}>
+                  <Text style={styles.gaugeScore}>{presentPercentage}%</Text>
+                  <Text style={styles.gaugeSub}>PRESENT</Text>
+                  <View style={styles.gaugeLiveTag}>
+                    <Text style={styles.gaugeTrend}>{presentStaffCount}/{totalStaffCount}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
 
-          {/* Segmented Multi-Color Bar */}
-          <View style={styles.segmentedBarTrack}>
-            <View style={[styles.segmentedBarPart, { width: `${presentPercentage}%`, backgroundColor: COLORS.success }]} />
-            <View style={[styles.segmentedBarPart, { width: `${absentPercentage}%`, backgroundColor: COLORS.danger }]} />
-            <View style={[styles.segmentedBarPart, { width: `${latePercentage}%`, backgroundColor: COLORS.warning }]} />
+            {/* Right 2x2 Clean Slate KPI Grid */}
+            <View style={styles.stats2x2Grid}>
+              <TouchableOpacity
+                style={[styles.statBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                onPress={() => router.push('/(admin)/team')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.statBoxLabel}>Total Staff</Text>
+                <Text style={styles.statBoxValue}>{totalStaffCount}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                onPress={() => router.push('/(admin)/attendance')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.statBoxLabel}>Present</Text>
+                <Text style={[styles.statBoxValue, { color: '#4F46E5' }]}>{presentStaffCount}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                onPress={() => router.push('/(admin)/tracking')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.statBoxLabel}>On Field</Text>
+                <Text style={[styles.statBoxValue, { color: '#4F46E5' }]}>{onFieldStaffCount}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                onPress={() => router.push('/(admin)/attendance')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.statBoxLabel}>Not In</Text>
+                <Text style={[styles.statBoxValue, { color: '#475569' }]}>{pendingStaffCount}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Legend Items */}
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
-              <Text style={styles.legendText}>Present {presentStaffCount}</Text>
+          {/* Integrated Attendance Segmented Bar & Legend */}
+          <View style={styles.integratedAttendanceWrap}>
+            <View style={styles.segmentedBarTrack}>
+              {presentPercentage > 0 && (
+                <View style={[styles.segmentedBarPart, { width: `${presentPercentage}%`, backgroundColor: '#4F46E5' }]} />
+              )}
+              {latePercentage > 0 && (
+                <View style={[styles.segmentedBarPart, { width: `${latePercentage}%`, backgroundColor: '#94A3B8' }]} />
+              )}
+              {absentPercentage > 0 && (
+                <View style={[styles.segmentedBarPart, { width: `${absentPercentage}%`, backgroundColor: '#E2E8F0' }]} />
+              )}
             </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.danger }]} />
-              <Text style={styles.legendText}>Absent {absentStaffCount}</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.warning }]} />
-              <Text style={styles.legendText}>Late {lateStaffCount}</Text>
-            </View>
-          </View>
 
-          {/* Not Punched In Warning Pill */}
-          <View style={styles.warningAlertPill}>
-            <AlertCircle size={14} color="#DC2626" />
-            <Text style={styles.warningAlertText}>{notPunchedCount} employees not punched in yet</Text>
+            <View style={styles.legendRow}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#4F46E5' }]} />
+                <Text style={styles.legendText}>Present ({presentStaffCount})</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#CBD5E1' }]} />
+                <Text style={styles.legendText}>Absent ({absentStaffCount})</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#94A3B8' }]} />
+                <Text style={styles.legendText}>Late ({lateStaffCount})</Text>
+              </View>
+            </View>
           </View>
         </Surface>
 
-        {/* ── 3. QUICK ACTIONS (6 Grid Cards: 2x3 Layout) ── */}
+        {/* ── 2. PENDING APPROVALS STRIP (Unified Slate & Indigo Palette) ── */}
+        <View style={styles.action4SectionWrap}>
+          <View style={styles.sectionSubHeaderRow}>
+            <Text style={styles.cardHeaderTitle}>Pending Approvals</Text>
+          </View>
+          <View style={styles.action4Container}>
+            {/* Card 1: Leave Approvals */}
+            <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
+              <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+                <View style={[styles.action4IconWrap, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                  <Calendar size={18} color="#4F46E5" />
+                  <View style={[styles.action4Badge, { backgroundColor: leaveApprovalsCount > 0 ? '#4F46E5' : '#64748B' }]}>
+                    <Text style={styles.action4BadgeText}>{leaveApprovalsCount}</Text>
+                  </View>
+                </View>
+                <Text style={styles.action4Label} numberOfLines={2}>
+                  Leave{'\n'}Approvals
+                </Text>
+              </TouchableOpacity>
+            </Surface>
+
+            {/* Card 2: Expenses */}
+            <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
+              <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
+                <View style={[styles.action4IconWrap, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                  <Wallet size={18} color="#4F46E5" />
+                  <View style={[styles.action4Badge, { backgroundColor: expenseApprovalsCount > 0 ? '#4F46E5' : '#64748B' }]}>
+                    <Text style={styles.action4BadgeText}>{expenseApprovalsCount}</Text>
+                  </View>
+                </View>
+                <Text style={styles.action4Label} numberOfLines={2}>
+                  Expense{'\n'}Claims
+                </Text>
+              </TouchableOpacity>
+            </Surface>
+
+            {/* Card 3: Late Punch-ins */}
+            <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
+              <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.75}>
+                <View style={[styles.action4IconWrap, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                  <Clock size={18} color="#4F46E5" />
+                  <View style={[styles.action4Badge, { backgroundColor: latePunchinsCount > 0 ? '#4F46E5' : '#64748B' }]}>
+                    <Text style={styles.action4BadgeText}>{latePunchinsCount}</Text>
+                  </View>
+                </View>
+                <Text style={styles.action4Label} numberOfLines={2}>
+                  Late Punch{'\n'}Ins
+                </Text>
+              </TouchableOpacity>
+            </Surface>
+
+            {/* Card 4: Inactive Devices */}
+            <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
+              <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
+                <View style={[styles.action4IconWrap, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                  <AlertTriangle size={18} color="#4F46E5" />
+                  <View style={[styles.action4Badge, { backgroundColor: inactiveDevicesCount > 0 ? '#4F46E5' : '#64748B' }]}>
+                    <Text style={styles.action4BadgeText}>{inactiveDevicesCount}</Text>
+                  </View>
+                </View>
+                <Text style={styles.action4Label} numberOfLines={2}>
+                  Offline{'\n'}Devices
+                </Text>
+              </TouchableOpacity>
+            </Surface>
+          </View>
+        </View>
+
+        {/* ── 3. QUICK OPERATIONS (Unified Slate & Indigo 3x2 Grid) ── */}
         <View style={styles.quickActionsSection}>
-          <Text style={styles.cardHeaderTitle}>Quick Actions</Text>
+          <View style={styles.sectionSubHeaderRow}>
+            <Text style={styles.cardHeaderTitle}>Quick Operations</Text>
+          </View>
           <View style={styles.quick6Grid}>
             {/* 1. Visit Records */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
-                <Briefcase size={20} color={COLORS.success} />
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                <Briefcase size={20} color="#4F46E5" />
               </View>
               <Text style={styles.quick6Label}>Visit Records</Text>
             </TouchableOpacity>
 
             {/* 2. My Team */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.lavenderLight }]}>
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
                 <Users size={20} color="#4F46E5" />
               </View>
               <Text style={styles.quick6Label}>My Team</Text>
             </TouchableOpacity>
 
             {/* 3. Live Tracking */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.skyLight }]}>
-                <Compass size={20} color="#0284C7" />
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                <Compass size={20} color="#4F46E5" />
               </View>
               <Text style={styles.quick6Label}>Live Tracking</Text>
             </TouchableOpacity>
 
             {/* 4. Generate Report */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.purpleLight }]}>
-                <FileText size={20} color={COLORS.purple} />
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                <FileText size={20} color="#4F46E5" />
               </View>
-              <Text style={styles.quick6Label}>Generate Report</Text>
+              <Text style={styles.quick6Label}>Reports</Text>
             </TouchableOpacity>
 
             {/* 5. Approvals */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.pinkLight }]}>
-                <CheckCircle2 size={20} color="#E11D48" />
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                <CheckCircle2 size={20} color="#4F46E5" />
               </View>
               <Text style={styles.quick6Label}>Approvals</Text>
             </TouchableOpacity>
 
             {/* 6. Add Employee */}
-            <TouchableOpacity style={styles.quick6Card} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: COLORS.mintLight }]}>
-                <UserPlus size={20} color={COLORS.primary} />
+            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.75}>
+              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
+                <UserPlus size={20} color="#4F46E5" />
               </View>
-              <Text style={styles.quick6Label}>Add Employee</Text>
+              <Text style={styles.quick6Label}>Add Staff</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── 4. TODAY'S ATTENDANCE ACTION 4-CARD GRID (COMPACT WITH ICON BADGES) ── */}
-        <View style={styles.action4Container}>
-          {/* Card 1: Leave Approvals */}
-          <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
-            <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.action4IconWrap, { backgroundColor: '#FFF1F2' }]}>
-                <Calendar size={18} color="#E11D48" />
-                {leaveApprovalsCount > 0 && (
-                  <View style={[styles.action4Badge, { backgroundColor: '#E11D48' }]}>
-                    <Text style={styles.action4BadgeText}>{leaveApprovalsCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.action4Label} numberOfLines={2}>
-                Leave{'\n'}Approvals
-              </Text>
-            </TouchableOpacity>
-          </Surface>
-
-          {/* Card 2: Expenses */}
-          <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
-            <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
-              <View style={[styles.action4IconWrap, { backgroundColor: '#ECFDF5' }]}>
-                <CheckSquare size={18} color={COLORS.success} />
-                {expenseApprovalsCount > 0 && (
-                  <View style={[styles.action4Badge, { backgroundColor: COLORS.success }]}>
-                    <Text style={styles.action4BadgeText}>{expenseApprovalsCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.action4Label} numberOfLines={2}>
-                Expenses{'\n'}Claims
-              </Text>
-            </TouchableOpacity>
-          </Surface>
-
-          {/* Card 3: Late Punch-ins */}
-          <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
-            <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/attendance')} activeOpacity={0.75}>
-              <View style={[styles.action4IconWrap, { backgroundColor: '#EEF2FF' }]}>
-                <Clock size={18} color="#4F46E5" />
-                {latePunchinsCount > 0 && (
-                  <View style={[styles.action4Badge, { backgroundColor: '#4F46E5' }]}>
-                    <Text style={styles.action4BadgeText}>{latePunchinsCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.action4Label} numberOfLines={2}>
-                Late Punch{'\n'}Ins
-              </Text>
-            </TouchableOpacity>
-          </Surface>
-
-          {/* Card 4: Inactive Devices */}
-          <Surface style={[styles.action4Card, cardShadow]} elevation={1}>
-            <TouchableOpacity style={styles.action4Touch} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.action4IconWrap, { backgroundColor: '#FFFBEB' }]}>
-                <AlertTriangle size={18} color={COLORS.warning} />
-                {inactiveDevicesCount > 0 && (
-                  <View style={[styles.action4Badge, { backgroundColor: COLORS.warning }]}>
-                    <Text style={styles.action4BadgeText}>{inactiveDevicesCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.action4Label} numberOfLines={2}>
-                Inactive{'\n'}Devices
-              </Text>
-            </TouchableOpacity>
-          </Surface>
-        </View>
-
-        {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (ORG ADMIN VIEW) ── */}
+        {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (CLEAN PROFESSIONAL BANNER) ── */}
         <Surface style={[styles.tripClaimsBannerCard, cardShadow]} elevation={1}>
           <TouchableOpacity
             style={styles.tripClaimsBannerTouch}
@@ -832,40 +847,32 @@ export default function OrgAdminDashboardScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.tripClaimsBannerLeft}>
-              <View style={styles.tripClaimsBannerIconBox}>
-                <Car size={22} color={COLORS.primary} />
+              <View style={[styles.tripClaimsBannerIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
+                <Car size={20} color="#4F46E5" />
               </View>
               <View style={styles.tripClaimsBannerTextCol}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.tripClaimsBannerTitle}>Trip Route Claims</Text>
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
-                </View>
+                <Text style={styles.tripClaimsBannerTitle}>Trip Route Claims</Text>
                 <Text style={styles.tripClaimsBannerSub}>
-                  View employee planned routes, road KM, map path & payouts
+                  Planned routes, road KM & payouts
                 </Text>
               </View>
             </View>
             <View style={styles.tripClaimsArrowCircle}>
-              <ChevronRight size={18} color={COLORS.primary} />
+              <ChevronRight size={16} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
         </Surface>
 
-        {/* ── 5. TOP MANAGERS (SMOOTH HORIZONTALLY SCROLLABLE LEFT-TO-RIGHT) ── */}
+        {/* ── 5. TOP MANAGERS (CLEAN EXECUTIVE CARDS) ── */}
         <Surface style={[styles.topManagersCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Award size={18} color={COLORS.primary} />
-              <Text style={styles.cardHeaderTitle}>Top Managers</Text>
-            </View>
-            <TouchableOpacity onPress={() => router.push('/(admin)/team')}>
-              <Text style={styles.viewAllLink}>View All &gt;</Text>
+            <Text style={[styles.cardHeaderTitle, { flex: 1 }]}>Top Managers</Text>
+            <TouchableOpacity style={styles.viewAllPillBtn} onPress={() => router.push('/(admin)/team')}>
+              <Text style={styles.viewAllLink}>View All</Text>
+              <ChevronRight size={13} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
-          {/* Smooth Horizontal ScrollView */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -876,24 +883,23 @@ export default function OrgAdminDashboardScreen() {
                 key={emp._id || idx}
                 style={styles.managerScrollCard}
                 onPress={() => router.push('/(admin)/team')}
-                activeOpacity={0.75}
+                activeOpacity={0.78}
               >
                 <View style={styles.managerAvatarWrap}>
                   {emp.avatar ? (
                     <Image source={{ uri: emp.avatar }} style={styles.managerAvatarImg} />
                   ) : (
-                    <View style={[styles.managerAvatarFallback, { backgroundColor: ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777', '#0891b2'][idx % 6] }]}>
-                      <Text style={styles.managerAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                    <View style={[styles.managerAvatarFallback, { backgroundColor: '#EEF2FF' }]}>
+                      <Text style={[styles.managerAvatarFallbackText, { color: '#4F46E5' }]}>{emp.initials || getUserInitials(emp.name)}</Text>
                     </View>
                   )}
-                  <View style={[styles.managerRankBadge, { backgroundColor: idx === 0 ? '#D97706' : idx === 1 ? '#2563EB' : idx === 2 ? '#E11D48' : COLORS.primary }]}>
+                  <View style={[styles.managerRankBadge, { backgroundColor: '#4F46E5' }]}>
                     <Text style={styles.managerRankText}>{idx + 1}</Text>
                   </View>
                 </View>
                 <Text style={styles.managerItemName} numberOfLines={1}>{emp.name}</Text>
                 <Text style={styles.managerItemRegion} numberOfLines={1}>{emp.region}</Text>
                 <View style={styles.managerScoreTag}>
-                  <TrendingUp size={11} color={COLORS.success} />
                   <Text style={styles.managerScoreText}>{emp.score}</Text>
                 </View>
               </TouchableOpacity>
@@ -901,99 +907,146 @@ export default function OrgAdminDashboardScreen() {
           </ScrollView>
         </Surface>
 
-        {/* ── 6. WEEKLY TREND (Attendance Bar Chart) ── */}
+        {/* ── 6. WEEKLY TREND (CLEAN SLATE & BLUE ANALYTICS CHART) ── */}
         <Surface style={[styles.weeklyTrendCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.cardHeaderTitle}>Weekly Attendance Trend</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/attendance')}>
-              <Text style={styles.viewLinkText}>Details →</Text>
+            <Text style={[styles.cardHeaderTitle, { flex: 1 }]}>Weekly Attendance</Text>
+            <TouchableOpacity style={styles.viewAllPillBtn} onPress={() => router.push('/(admin)/attendance')}>
+              <Text style={styles.viewLinkText}>Details</Text>
+              <ChevronRight size={13} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.weeklySubLabel}>Attendance</Text>
-          <View style={styles.chartBarsRow}>
-            {weeklyAttendanceData.map((item, idx) => (
-              <View key={idx} style={styles.chartCol}>
-                <View style={styles.chartTrack}>
-                  <View
-                    style={[
-                      styles.chartFill,
-                      {
-                        height: `${item.val}%`,
-                        backgroundColor: item.isToday ? '#06B6D4' : '#2563EB',
-                      }
-                    ]}
-                  />
+          <View style={styles.chartContainerBox}>
+            <View style={styles.chartBarsRow}>
+              {weeklyAttendanceData.map((item, idx) => (
+                <View key={idx} style={styles.chartCol}>
+                  <Text style={[styles.chartCountLabel, item.isToday && { color: '#4F46E5', fontWeight: '600' }]}>
+                    {item.count}
+                  </Text>
+                  <View style={[styles.chartTrack, item.isToday && styles.chartTrackToday]}>
+                    <View
+                      style={[
+                        styles.chartFill,
+                        {
+                          height: `${Math.max(16, item.val)}%`,
+                          backgroundColor: item.isToday ? '#4F46E5' : '#94A3B8',
+                        }
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.chartDayText, item.isToday && { color: '#4F46E5', fontWeight: '600' }]}>
+                    {item.day}
+                  </Text>
                 </View>
-                <Text style={[styles.chartDayText, item.isToday && { color: '#06B6D4', fontWeight: '800' }]}>
-                  {item.day}
-                </Text>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
         </Surface>
 
-        {/* ── 7. LIVE TEAM FIELD MAP (Matching Manager Dashboard & Image) ── */}
+        {/* ── 7. LIVE TEAM FIELD MAP & TELEMETRY (Interactive Map + Top 5 Roster) ── */}
         <Surface style={[styles.weeklyTrendCard, cardShadow]} elevation={1}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.cardHeaderTitle}>Live Team Field Map</Text>
-            <TouchableOpacity onPress={() => router.push('/(admin)/tracking')}>
-              <Text style={styles.viewLinkText}>View All →</Text>
+            <Text style={[styles.cardHeaderTitle, { flex: 1 }]}>Live Field Map</Text>
+            <TouchableOpacity style={styles.viewAllPillBtn} onPress={() => router.push('/(admin)/tracking')}>
+              <Text style={styles.viewLinkText}>Full Map</Text>
+              <ChevronRight size={13} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Embedded Interactive Live Map Preview */}
+          <View style={styles.liveMapPreviewBox}>
+            <MapViewComponent
+              ref={mapRef}
+              initialRegion={{
+                latitude: 26.4499,
+                longitude: 80.3319,
+                latitudeDelta: 0.08,
+                longitudeDelta: 0.08,
+              }}
+              directoryStaff={directoryStaff}
+              onSelectEmployee={(emp) => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
+            />
+            <View style={styles.liveMapFloatingBadge}>
+              <View style={styles.pulseDotGreen} />
+              <Text style={styles.liveMapFloatingText}>
+                {onFieldStaffCount} Active
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.liveMapExpandFab}
+              onPress={() => router.push('/(admin)/tracking')}
+              activeOpacity={0.85}
+            >
+              <Navigation size={12} color="#FFFFFF" />
+              <Text style={styles.liveMapExpandFabText}>Open Map</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.dutyList}>
-            {directoryStaff.slice(0, 5).map((emp, idx) => (
-              <TouchableOpacity
-                key={emp._id || String(idx)}
-                style={styles.dutyRowItem}
-                onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.dutyLeftCol}>
-                  <Text style={styles.dutyRankNum}>{idx + 1}.</Text>
-                  {emp.avatar ? (
-                    <Image
-                      source={{ uri: emp.avatar }}
-                      style={styles.dutyAvatarImg}
-                    />
-                  ) : (
-                    <View style={[styles.dutyAvatarFallback, { backgroundColor: ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777'][idx % 5] }]}>
-                      <Text style={styles.dutyAvatarFallbackText}>{emp.initials || getUserInitials(emp.name)}</Text>
+            {directoryStaff
+              .slice()
+              .sort((a, b) => (Number(b.todayKm) || 0) - (Number(a.todayKm) || 0))
+              .slice(0, 5)
+              .map((emp, idx) => (
+                <TouchableOpacity
+                  key={emp._id || String(idx)}
+                  style={styles.dutyRowItem}
+                  onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
+                  activeOpacity={0.78}
+                >
+                  <View style={styles.dutyLeftCol}>
+                    <View style={[styles.dutyRankBadge, idx === 0 && { backgroundColor: '#EEF2FF', borderColor: '#E0E7FF' }]}>
+                      <Text style={[styles.dutyRankNum, idx === 0 && { color: '#4F46E5' }]}>{idx + 1}</Text>
                     </View>
-                  )}
-                  <Text style={styles.dutyNameText} numberOfLines={1}>{emp.name}</Text>
-                </View>
+                    {emp.avatar ? (
+                      <Image
+                        source={{ uri: emp.avatar }}
+                        style={styles.dutyAvatarImg}
+                      />
+                    ) : (
+                      <View style={[styles.dutyAvatarFallback, { backgroundColor: '#EEF2FF' }]}>
+                        <Text style={[styles.dutyAvatarFallbackText, { color: '#4F46E5' }]}>{emp.initials || getUserInitials(emp.name)}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dutyNameText} numberOfLines={1}>{emp.name}</Text>
+                      <Text style={styles.dutySubAddrText} numberOfLines={1}>
+                        {emp.currentAddress || emp.department || 'Field Services'}
+                      </Text>
+                    </View>
+                  </View>
 
-                <Text style={styles.dutyKmText}>{emp.todayKm} km</Text>
+                  <View style={styles.dutyRightCol}>
+                    <View style={styles.dutyKmBadge}>
+                      <Text style={styles.dutyKmText}>{emp.todayKm} km</Text>
+                    </View>
 
-                {emp.status === 'ACTIVE' ? (
-                  <View style={styles.dutyActivePill}>
-                    <View style={styles.dutyActiveDot} />
-                    <Text style={styles.dutyActivePillText}>Active</Text>
+                    {emp.status === 'ACTIVE' ? (
+                      <View style={styles.dutyActivePill}>
+                        <View style={styles.dutyActiveDot} />
+                        <Text style={styles.dutyActivePillText}>Active</Text>
+                      </View>
+                    ) : emp.status === 'IDLE' ? (
+                      <View style={styles.dutyIdlePill}>
+                        <Text style={styles.dutyIdlePillText}>At Spot</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.dutyOfflinePill}>
+                        <Text style={styles.dutyOfflinePillText}>Offline</Text>
+                      </View>
+                    )}
                   </View>
-                ) : emp.status === 'IDLE' ? (
-                  <View style={styles.dutyIdlePill}>
-                    <Text style={styles.dutyIdlePillText}>Idle</Text>
-                  </View>
-                ) : (
-                  <View style={styles.dutyOfflinePill}>
-                    <Text style={styles.dutyOfflinePillText}>Offline</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))}
           </View>
         </Surface>
 
-        {/* ── 8. ALL EMPLOYEES DIRECTORY ROSTER ── */}
-        <Surface style={[styles.weeklyTrendCard, cardShadow, { marginBottom: 24 }]} elevation={1}>
+        {/* ── 8. ALL EMPLOYEES DIRECTORY ROSTER (CLEAN CORPORATE CARDS) ── */}
+        <Surface style={[styles.weeklyTrendCard, cardShadow, { marginBottom: 28 }]} elevation={1}>
           {/* Section Header */}
           <View style={styles.sectionHeaderRow}>
-            <View style={styles.allEmpHeaderTitleGroup}>
-              <View style={styles.allEmpHeaderIconWrap}>
-                <Users size={16} color={COLORS.primary} />
-              </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
               <Text style={styles.cardHeaderTitle}>All Employees</Text>
               <View style={styles.allEmpCountBadge}>
                 <Text style={styles.allEmpCountText}>{directoryStaff.length}</Text>
@@ -1008,26 +1061,31 @@ export default function OrgAdminDashboardScreen() {
                 <Plus size={13} color="#FFFFFF" />
                 <Text style={styles.allEmpAddQuickBtnText}>Add</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/(admin)/team')} activeOpacity={0.7}>
-                <Text style={styles.viewLinkText}>Manage →</Text>
+              <TouchableOpacity
+                style={styles.viewAllPillBtn}
+                onPress={() => router.push('/(admin)/team')}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.viewLinkText}>Directory</Text>
+                <ChevronRight size={13} color={COLORS.primary} />
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Search Box */}
           <View style={styles.allEmpSearchBox}>
-            <Search size={15} color={COLORS.textMuted} />
+            <Search size={15} color="#64748B" />
             <TextInput
               style={styles.allEmpSearchInput}
-              placeholder="Search by name, dept, phone..."
-              placeholderTextColor={COLORS.textMuted}
+              placeholder="Search employee by name, role, or phone..."
+              placeholderTextColor="#94A3B8"
               value={empSearchQuery}
               onChangeText={setEmpSearchQuery}
               clearButtonMode="while-editing"
             />
             {empSearchQuery ? (
               <TouchableOpacity onPress={() => setEmpSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <X size={15} color={COLORS.textMuted} />
+                <X size={15} color="#64748B" />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -1049,7 +1107,7 @@ export default function OrgAdminDashboardScreen() {
               onPress={() => setEmpStatusFilter('ACTIVE')}
               activeOpacity={0.75}
             >
-              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.success }]} />
+              <View style={[styles.filterStatusDot, { backgroundColor: empStatusFilter === 'ACTIVE' ? '#FFFFFF' : '#10B981' }]} />
               <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'ACTIVE' && styles.allEmpFilterChipTextActive]}>
                 Active ({activeStaffCount})
               </Text>
@@ -1060,9 +1118,9 @@ export default function OrgAdminDashboardScreen() {
               onPress={() => setEmpStatusFilter('IDLE')}
               activeOpacity={0.75}
             >
-              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.warning }]} />
+              <View style={[styles.filterStatusDot, { backgroundColor: empStatusFilter === 'IDLE' ? '#FFFFFF' : '#F59E0B' }]} />
               <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'IDLE' && styles.allEmpFilterChipTextActive]}>
-                Idle ({idleStaffCount})
+                At Spot ({idleStaffCount})
               </Text>
             </TouchableOpacity>
 
@@ -1071,7 +1129,7 @@ export default function OrgAdminDashboardScreen() {
               onPress={() => setEmpStatusFilter('OFFLINE')}
               activeOpacity={0.75}
             >
-              <View style={[styles.filterStatusDot, { backgroundColor: COLORS.textMuted }]} />
+              <View style={[styles.filterStatusDot, { backgroundColor: empStatusFilter === 'OFFLINE' ? '#FFFFFF' : '#94A3B8' }]} />
               <Text style={[styles.allEmpFilterChipText, empStatusFilter === 'OFFLINE' && styles.allEmpFilterChipTextActive]}>
                 Offline ({offlineStaffCount})
               </Text>
@@ -1099,8 +1157,6 @@ export default function OrgAdminDashboardScreen() {
           ) : (
             <View style={styles.allEmpList}>
               {displayedDirectoryStaff.map((emp, idx) => {
-                const paletteColors = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#db2777', '#0891b2', '#4f46e5', '#16a34a'];
-                const avatarBg = paletteColors[idx % paletteColors.length];
                 const isLive = emp.isTracking;
                 const isMoving = emp.status === 'ACTIVE' && (emp.speed > 1.5 || emp.motionState === 'MOVING');
                 const isStationary = isLive && !isMoving;
@@ -1118,13 +1174,13 @@ export default function OrgAdminDashboardScreen() {
                         {emp.avatar ? (
                           <Image source={{ uri: emp.avatar }} style={styles.teamMemberAvatarImg} />
                         ) : (
-                          <View style={[styles.teamMemberAvatarFallback, { backgroundColor: avatarBg }]}>
-                            <Text style={styles.teamMemberAvatarText}>{emp.initials || getUserInitials(emp.name)}</Text>
+                          <View style={[styles.teamMemberAvatarFallback, { backgroundColor: '#EEF2FF' }]}>
+                            <Text style={[styles.teamMemberAvatarText, { color: '#4F46E5' }]}>{emp.initials || getUserInitials(emp.name)}</Text>
                           </View>
                         )}
                         <View style={[
                           styles.teamMemberStatusDot,
-                          { backgroundColor: isMoving ? '#10b981' : isStationary ? '#f59e0b' : '#94a3b8' }
+                          { backgroundColor: isMoving ? '#4F46E5' : isStationary ? '#64748B' : '#CBD5E1' }
                         ]} />
                       </View>
 
@@ -1162,53 +1218,39 @@ export default function OrgAdminDashboardScreen() {
                       </View>
                     </View>
 
-                    {/* Middle Row: Structured Metrics Strip (Distance, Punch-in, Speed) */}
+                    {/* Middle Row: Clean Unified Slate Metrics Strip */}
                     <View style={styles.teamMemberMetricsStrip}>
-                      {/* Metric 1: Distance */}
                       <View style={styles.teamMetricItem}>
-                        <View style={styles.teamMetricIconBox}>
-                          <Route size={13} color="#059669" />
-                        </View>
                         <View>
                           <Text style={styles.teamMetricValue}>{kmDisplay} KM</Text>
-                          <Text style={styles.teamMetricLabel}>Today's Travel</Text>
+                          <Text style={styles.teamMetricLabel}>Travel</Text>
                         </View>
                       </View>
 
-                      {/* Divider */}
                       <View style={styles.teamMetricDivider} />
 
-                      {/* Metric 2: Punch-in Time */}
                       <View style={styles.teamMetricItem}>
-                        <View style={[styles.teamMetricIconBox, { backgroundColor: '#eff6ff' }]}>
-                          <Clock size={13} color="#2563eb" />
-                        </View>
                         <View>
                           <Text style={styles.teamMetricValue}>{emp.punchInTime || '—'}</Text>
                           <Text style={styles.teamMetricLabel}>Check-In</Text>
                         </View>
                       </View>
 
-                      {/* Divider */}
                       <View style={styles.teamMetricDivider} />
 
-                      {/* Metric 3: Speed / Motion */}
                       <View style={styles.teamMetricItem}>
-                        <View style={[styles.teamMetricIconBox, { backgroundColor: isMoving ? '#ecfdf5' : '#fef3c7' }]}>
-                          <Activity size={13} color={isMoving ? '#059669' : '#d97706'} />
-                        </View>
                         <View>
                           <Text style={styles.teamMetricValue}>
                             {isMoving ? `${Math.round(emp.speed || 0)} km/h` : isStationary ? '0 km/h' : '—'}
                           </Text>
-                          <Text style={styles.teamMetricLabel}>Live Speed</Text>
+                          <Text style={styles.teamMetricLabel}>Speed</Text>
                         </View>
                       </View>
                     </View>
 
                     {/* Location Bar */}
                     <View style={styles.teamMemberLocationBar}>
-                      <MapPin size={12} color="#64748b" style={{ marginTop: 2, marginRight: 5, flexShrink: 0 }} />
+                      <MapPin size={12} color="#64748B" style={{ marginRight: 5, flexShrink: 0 }} />
                       <Text style={styles.teamMemberLocationText} numberOfLines={1}>
                         {emp.currentAddress || 'Location pending'}
                       </Text>
@@ -1227,7 +1269,7 @@ export default function OrgAdminDashboardScreen() {
                           onPress={() => Linking.openURL(`tel:${emp.phone}`)}
                           activeOpacity={0.8}
                         >
-                          <Phone size={13} color="#0284c7" />
+                          <Phone size={13} color="#334155" />
                           <Text style={styles.teamActionBtnCallText}>Call</Text>
                         </TouchableOpacity>
                       ) : null}
@@ -1241,8 +1283,8 @@ export default function OrgAdminDashboardScreen() {
                           }}
                           activeOpacity={0.8}
                         >
-                          <MessageCircle size={13} color="#16a34a" />
-                          <Text style={styles.teamActionBtnWhatsAppText}>WhatsApp</Text>
+                          <MessageCircle size={13} color="#334155" />
+                          <Text style={styles.teamActionBtnWhatsAppText}>Message</Text>
                         </TouchableOpacity>
                       ) : null}
 
@@ -1279,40 +1321,8 @@ export default function OrgAdminDashboardScreen() {
         </Surface>
       </ScrollView>
 
-      {/* ── BOTTOM TAB NAVIGATION BAR (5 Tabs matching Template) ── */}
-      <Surface style={[styles.bottomTabBar, cardShadow]} elevation={4}>
-        {/* Tab 1: Home */}
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => {}} activeOpacity={0.8}>
-          <View style={styles.tabActiveIndicator}>
-            <Home size={20} color={COLORS.primary} />
-          </View>
-          <Text style={[styles.tabBarLabel, { color: COLORS.primary, fontWeight: '800' }]}>Home</Text>
-        </TouchableOpacity>
-
-        {/* Tab 2: Live Map */}
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.8}>
-          <Compass size={20} color={COLORS.textMuted} />
-          <Text style={styles.tabBarLabel}>Live Map</Text>
-        </TouchableOpacity>
-
-        {/* Tab 3: My Team */}
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/team')} activeOpacity={0.8}>
-          <Users size={20} color={COLORS.textMuted} />
-          <Text style={styles.tabBarLabel}>My Team</Text>
-        </TouchableOpacity>
-
-        {/* Tab 4: Reports */}
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.8}>
-          <BarChart2 size={20} color={COLORS.textMuted} />
-          <Text style={styles.tabBarLabel}>Reports</Text>
-        </TouchableOpacity>
-
-        {/* Tab 5: Settings */}
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push('/(admin)/settings')} activeOpacity={0.8}>
-          <Settings size={20} color={COLORS.textMuted} />
-          <Text style={styles.tabBarLabel}>Settings</Text>
-        </TouchableOpacity>
-      </Surface>
+      {/* ── UNIFIED ENTERPRISE BOTTOM NAVIGATION BAR ── */}
+      <FloatingAdminTabBar activeTab="dashboard" />
 
       {/* ── ADD EMPLOYEE MODAL ── */}
       <Modal visible={addEmpModalVisible} animationType="slide" transparent>
@@ -1461,10 +1471,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerGradient: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   topNavRow: {
     flexDirection: 'row',
@@ -1475,8 +1485,10 @@ const styles = StyleSheet.create({
   menuBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1488,10 +1500,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logoBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#ffffff',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1501,13 +1515,13 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   brandSub: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.85)',
+    color: '#64748B',
     fontFamily: FONT,
   },
   topNavRight: {
@@ -1516,18 +1530,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   syncBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   notifBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1538,75 +1556,123 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#FB7185',
+    backgroundColor: '#EF4444',
   },
   adminAvatarBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 10,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#ffffff',
-    backgroundColor: '#FDA4AF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   adminAvatarRealImg: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
+    borderRadius: 10,
   },
   adminAvatarFallback: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FDA4AF',
+    backgroundColor: '#EEF2FF',
   },
   adminAvatarText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#881337',
+    fontWeight: '600',
+    color: '#4F46E5',
     fontFamily: FONT,
   },
   greetingBox: {
     marginTop: 12,
   },
-  greetingTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#ffffff',
-    fontFamily: FONT,
-  },
-  greetingDate: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    fontFamily: FONT,
-    marginTop: 2,
-  },
-  regionSelectorPill: {
+  greetingHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginTop: 12,
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  regionSelectorText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
+  greetingTitle: {
+    fontSize: 19,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
-    marginLeft: 6,
+    letterSpacing: -0.2,
+  },
+  greetingDate: {
+    fontSize: 12.5,
+    color: '#64748B',
+    fontFamily: FONT,
+    marginTop: 2,
+    fontWeight: '400',
+  },
+  headerLivePulseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.24)',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.45)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 6,
+  },
+  headerLivePulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#34D399',
+  },
+  headerLivePulseText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ECFDF5',
+    fontFamily: FONT,
+  },
+  headerSummaryRibbon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(6, 78, 59, 0.42)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 14,
+  },
+  headerRibbonItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerRibbonVal: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: FONT,
+  },
+  headerRibbonLbl: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.78)',
+    marginTop: 1,
+    fontFamily: FONT,
+  },
+  headerRibbonDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   body: {
     padding: 16,
-    paddingBottom: 160,
+    paddingBottom: 110,
   },
 
-  // ── OVERALL PERFORMANCE HERO CARD ──
+  // ── UNIFIED EXECUTIVE PERFORMANCE & ATTENDANCE HERO CARD ──
   heroPerfCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
@@ -1614,115 +1680,171 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  heroCardTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cardHeaderTitle: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
+  },
+  cardHeaderSub: {
+    fontSize: 11,
+    color: COLORS.textSub,
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+  viewAllPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 2,
   },
   heroPerfBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 16,
   },
   gaugeContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  gaugeOuterRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 5,
+  },
   gaugeCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 7,
-    borderColor: COLORS.primary,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 6,
+    borderColor: '#4F46E5',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   gaugeScore: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
   },
   gaugeSub: {
-    fontSize: 8,
-    color: COLORS.textMuted,
+    fontSize: 8.5,
+    fontWeight: '500',
+    color: COLORS.textSub,
+    letterSpacing: 0.5,
     fontFamily: FONT,
   },
+  gaugeLiveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 8,
+  },
+  gaugeLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#4F46E5',
+  },
   gaugeTrend: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.success,
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#4F46E5',
     fontFamily: FONT,
   },
   stats2x2Grid: {
     flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginLeft: 16,
+    marginLeft: 14,
     gap: 8,
   },
   statBox: {
-    width: '46%',
+    width: '47%',
     backgroundColor: COLORS.surface,
-    padding: 10,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statBoxTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   statBoxLabel: {
     fontSize: 11,
+    fontWeight: '400',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
   statBoxValue: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '600',
     color: COLORS.text,
     fontFamily: FONT,
-    marginTop: 2,
+    marginTop: 3,
   },
 
-  // ── TODAY'S ATTENDANCE SEGMENTED BAR CARD ──
-  attendanceBarCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  attendanceBarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  // ── INTEGRATED ATTENDANCE BAR & LEGEND ──
+  integratedAttendanceWrap: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   viewAllLink: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: COLORS.primary,
     fontFamily: FONT,
-  },
-  attendanceCountBig: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: COLORS.text,
-    fontFamily: FONT,
-    marginTop: 8,
   },
   segmentedBarTrack: {
     height: 10,
     borderRadius: 5,
     flexDirection: 'row',
     overflow: 'hidden',
-    marginTop: 10,
     backgroundColor: COLORS.surface,
+    gap: 2,
   },
   segmentedBarPart: {
     height: '100%',
+    borderRadius: 4,
   },
   legendRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 12,
+    justifyContent: 'space-between',
+    marginTop: 10,
   },
   legendItem: {
     flexDirection: 'row',
@@ -1736,32 +1858,51 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 11,
+    fontWeight: '400',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
   warningAlertPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginTop: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    marginTop: 12,
     gap: 8,
   },
   warningAlertText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#DC2626',
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#334155',
     fontFamily: FONT,
   },
 
-  // ── 3. TODAY'S ATTENDANCE 4-CARD CONTAINER (POLISHED & BALANCED) ──
+  // ── PENDING APPROVALS 4-CARD STRIP ──
+  action4SectionWrap: {
+    marginTop: 18,
+  },
+  sectionSubHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sectionSubHint: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+  },
   action4Container: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 8,
-    marginTop: 14,
   },
   action4Card: {
     flex: 1,
@@ -1772,7 +1913,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   action4Touch: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1780,7 +1921,7 @@ const styles = StyleSheet.create({
   action4IconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
@@ -1788,11 +1929,11 @@ const styles = StyleSheet.create({
   },
   action4Badge: {
     position: 'absolute',
-    top: -4,
+    top: -5,
     right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 9.5,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -1802,17 +1943,17 @@ const styles = StyleSheet.create({
   action4BadgeText: {
     color: '#ffffff',
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '600',
     fontFamily: FONT,
   },
   action4Label: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '500',
     color: COLORS.text,
     fontFamily: FONT,
     textAlign: 'center',
-    lineHeight: 13,
-    minHeight: 26,
+    lineHeight: 14,
+    minHeight: 28,
   },
 
   // ── QUICK ACTIONS (6 Grid Cards) ──
@@ -1824,38 +1965,46 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 10,
-    marginTop: 10,
   },
   quick6Card: {
     width: '31%',
     backgroundColor: '#ffffff',
     borderRadius: 16,
     paddingVertical: 14,
+    paddingHorizontal: 6,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   quick6IconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 7,
   },
   quick6Label: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: COLORS.text,
     fontFamily: FONT,
     textAlign: 'center',
   },
+  quick6Sub: {
+    fontSize: 9.5,
+    fontWeight: '400',
+    color: COLORS.textMuted,
+    fontFamily: FONT,
+    textAlign: 'center',
+    marginTop: 1,
+  },
   tripClaimsBannerCard: {
     backgroundColor: '#ffffff',
     borderRadius: 18,
-    marginTop: 14,
+    marginTop: 16,
     borderWidth: 1,
-    borderColor: '#ccfbf1',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
   },
   tripClaimsBannerTouch: {
@@ -1864,7 +2013,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#f0fdfa',
+    backgroundColor: '#FFFFFF',
   },
   tripClaimsBannerLeft: {
     flexDirection: 'row',
@@ -1875,8 +2024,7 @@ const styles = StyleSheet.create({
   tripClaimsBannerIconBox: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ccfbf1',
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1884,87 +2032,90 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tripClaimsBannerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.primaryDark,
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   newBadge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
     paddingHorizontal: 6,
     paddingVertical: 1.5,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   newBadgeText: {
-    color: '#ffffff',
+    color: '#2563EB',
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '600',
+    letterSpacing: 0.4,
   },
   tripClaimsBannerSub: {
     fontSize: 11,
-    color: COLORS.textSub,
+    color: '#64748B',
     marginTop: 2,
+    fontWeight: '400',
     fontFamily: FONT,
   },
   tripClaimsArrowCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#4F46E5',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ccfbf1',
     marginLeft: 8,
   },
 
-  // ── 5. TOP MANAGERS (SMOOTH HORIZONTALLY SCROLLABLE) ──
+  // ── 5. TOP MANAGERS (CLEAN EXECUTIVE CARDS) ──
   topManagersCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
-    marginTop: 14,
+    marginTop: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   managersScrollerContainer: {
     flexDirection: 'row',
-    gap: 14,
-    paddingVertical: 6,
+    gap: 12,
+    paddingVertical: 4,
     paddingRight: 10,
   },
   managerScrollCard: {
-    width: 100,
+    width: 112,
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
   },
   managerAvatarWrap: {
     position: 'relative',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   managerAvatarImg: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: COLORS.border,
   },
   managerRankBadge: {
     position: 'absolute',
     bottom: -2,
-    right: -2,
-    width: 18,
+    right: -4,
+    paddingHorizontal: 5,
     height: 18,
+    minWidth: 20,
     borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1973,21 +2124,22 @@ const styles = StyleSheet.create({
   },
   managerRankText: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#ffffff',
     fontFamily: FONT,
   },
   managerItemName: {
     fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontWeight: '500',
+    color: '#0F172A',
     fontFamily: FONT,
     textAlign: 'center',
     width: '100%',
   },
   managerItemRegion: {
     fontSize: 10,
-    color: COLORS.textMuted,
+    color: '#64748B',
+    fontWeight: '400',
     fontFamily: FONT,
     textAlign: 'center',
     marginTop: 2,
@@ -1996,17 +2148,19 @@ const styles = StyleSheet.create({
   managerScoreTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.mintLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
-    gap: 3,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 7,
   },
   managerScoreText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: COLORS.success,
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#4F46E5',
     fontFamily: FONT,
   },
 
@@ -2015,50 +2169,99 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
-    marginTop: 14,
+    marginTop: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
   },
-  weeklySubLabel: {
-    fontSize: 12,
-    color: COLORS.textSub,
+  chartContainerBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  chartSummaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  chartSummaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chartLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  chartSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
     fontFamily: FONT,
-    marginBottom: 8,
   },
   chartBarsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    height: 70,
-    paddingTop: 8,
+    height: 110,
+    paddingTop: 6,
+    paddingHorizontal: 4,
   },
   chartCol: {
     alignItems: 'center',
     flex: 1,
   },
-  chartTrack: {
-    width: 14,
-    height: 48,
-    backgroundColor: COLORS.surface,
+  chartCountPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: 6,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 5,
+  },
+  chartCountPillToday: {
+    backgroundColor: '#2563EB',
+  },
+  chartCountLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#334155',
+    fontFamily: FONT,
+  },
+  chartTrack: {
+    width: 24,
+    height: 64,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 8,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
+  chartTrackToday: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
   chartFill: {
     width: '100%',
-    borderRadius: 6,
+    borderRadius: 7,
   },
   chartDayText: {
-    fontSize: 10,
-    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#475569',
     fontFamily: FONT,
-    marginTop: 4,
+    marginTop: 6,
   },
 
   managerAvatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -2066,117 +2269,210 @@ const styles = StyleSheet.create({
   },
   managerAvatarFallbackText: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '600',
     fontFamily: FONT,
   },
 
   viewLinkText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '500',
     color: COLORS.primary,
     fontFamily: FONT,
   },
 
-  // ── DUTY LIST STYLES ──
+  // ── LIVE TEAM MAP PREVIEW & DUTY LIST STYLES ──
+  liveMapPreviewBox: {
+    height: 185,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    marginBottom: 12,
+    position: 'relative',
+    backgroundColor: '#E2E8F0',
+  },
+  liveMapFloatingBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  liveMapFloatingText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: FONT,
+  },
+  liveMapExpandFab: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#6366F1',
+  },
+  liveMapExpandFabText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '500',
+    fontFamily: FONT,
+  },
   dutyList: {
-    marginTop: 8,
+    marginTop: 2,
+    gap: 8,
   },
   dutyRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   dutyLeftCol: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 8,
+    gap: 10,
+    marginRight: 8,
+  },
+  dutyRankBadge: {
+    minWidth: 26,
+    height: 24,
+    paddingHorizontal: 5,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dutyRankNum: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textMuted,
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: COLORS.textSub,
     fontFamily: FONT,
-    width: 14,
   },
   dutyAvatarImg: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.border,
   },
   dutyAvatarFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dutyAvatarFallbackText: {
     color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12.5,
+    fontWeight: '600',
     fontFamily: FONT,
   },
   dutyNameText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontWeight: '500',
+    color: '#0F172A',
     fontFamily: FONT,
   },
-  dutyKmText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.primary,
+  dutySubAddrText: {
+    fontSize: 11,
+    color: '#64748B',
     fontFamily: FONT,
-    marginRight: 10,
+    marginTop: 1,
+    fontWeight: '400',
+  },
+  dutyRightCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dutyKmBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  dutyKmText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#4F46E5',
+    fontFamily: FONT,
   },
   dutyActivePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.mintLight,
+    backgroundColor: '#F0FDFA',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
     gap: 4,
   },
   dutyActiveDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: COLORS.success,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0D9488',
   },
   dutyActivePillText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.success,
+    fontWeight: '600',
+    color: '#0D9488',
     fontFamily: FONT,
   },
   dutyIdlePill: {
-    backgroundColor: COLORS.warningLight,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   dutyIdlePillText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.warning,
+    fontWeight: '600',
+    color: '#D97706',
     fontFamily: FONT,
   },
   dutyOfflinePill: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   dutyOfflinePillText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
     color: COLORS.textMuted,
     fontFamily: FONT,
   },
@@ -2464,7 +2760,7 @@ const styles = StyleSheet.create({
   },
   allEmpCountText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
     color: COLORS.primaryDark,
     fontFamily: FONT,
   },
@@ -2479,7 +2775,7 @@ const styles = StyleSheet.create({
   },
   allEmpAddQuickBtnText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#FFFFFF',
     fontFamily: FONT,
   },
@@ -2511,27 +2807,27 @@ const styles = StyleSheet.create({
   allEmpFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 5,
+    borderColor: '#E2E8F0',
+    gap: 6,
   },
   allEmpFilterChipActive: {
-    backgroundColor: COLORS.primaryLight,
-    borderColor: COLORS.primary,
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
   },
   allEmpFilterChipText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textSub,
+    fontWeight: '500',
+    color: '#475569',
     fontFamily: FONT,
   },
   allEmpFilterChipTextActive: {
-    color: COLORS.primaryDark,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   filterStatusDot: {
     width: 6,
@@ -2567,7 +2863,7 @@ const styles = StyleSheet.create({
   allEmpAvatarFallbackText: {
     color: '#ffffff',
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '600',
     fontFamily: FONT,
   },
   allEmpStatusDot: {
@@ -2587,7 +2883,7 @@ const styles = StyleSheet.create({
   },
   allEmpNameText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '500',
     color: COLORS.text,
     fontFamily: FONT,
   },
@@ -2599,7 +2895,7 @@ const styles = StyleSheet.create({
   },
   allEmpRoleBadgeText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '500',
     color: COLORS.textSub,
     fontFamily: FONT,
   },
@@ -2632,7 +2928,7 @@ const styles = StyleSheet.create({
   },
   allEmpKmText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
     color: COLORS.primary,
     fontFamily: FONT,
   },
@@ -2690,8 +2986,8 @@ const styles = StyleSheet.create({
   },
   teamMemberAvatarText: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13.5,
+    fontWeight: '600',
     fontFamily: FONT,
   },
   teamMemberStatusDot: {
@@ -2705,8 +3001,8 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   teamMemberName: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13.5,
+    fontWeight: '500',
     color: '#0f172a',
     fontFamily: FONT,
     flex: 1,
@@ -2726,38 +3022,38 @@ const styles = StyleSheet.create({
   },
   empCodeBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#475569',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   teamMemberRoleText: {
     fontSize: 11,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '400',
     fontFamily: FONT,
     flex: 1,
   },
   statusPillMoving: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#F0FDFA',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#CCFBF1',
     gap: 4,
   },
   pulseDotGreen: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#059669',
+    backgroundColor: '#0D9488',
   },
   statusPillMovingText: {
     fontSize: 10,
-    fontWeight: '800',
-    color: '#059669',
+    fontWeight: '600',
+    color: '#0D9488',
     fontFamily: FONT,
   },
   statusPillStationary: {
@@ -2779,7 +3075,7 @@ const styles = StyleSheet.create({
   },
   statusPillStationaryText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#d97706',
     fontFamily: FONT,
   },
@@ -2793,7 +3089,7 @@ const styles = StyleSheet.create({
   },
   statusPillOfflineText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#94a3b8',
     fontFamily: FONT,
   },
@@ -2818,19 +3114,21 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   teamMetricValue: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#0f172a',
     fontFamily: FONT,
   },
   teamMetricLabel: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 9.5,
+    fontWeight: '400',
     color: '#94a3b8',
     fontFamily: FONT,
     textTransform: 'uppercase',
@@ -2851,6 +3149,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#475569',
     fontFamily: FONT,
+    fontWeight: '400',
     flex: 1,
   },
   teamMemberPingTime: {
@@ -2871,35 +3170,35 @@ const styles = StyleSheet.create({
   teamActionBtnCall: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0f9ff',
-    paddingVertical: 6,
+    gap: 5,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 7,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: '#E2E8F0',
   },
   teamActionBtnCallText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#0284c7',
+    fontWeight: '500',
+    color: '#334155',
     fontFamily: FONT,
   },
   teamActionBtnWhatsApp: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0fdf4',
-    paddingVertical: 6,
+    gap: 5,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 7,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#E2E8F0',
   },
   teamActionBtnWhatsAppText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#16a34a',
+    fontWeight: '500',
+    color: '#334155',
     fontFamily: FONT,
   },
   teamActionBtnTrack: {
@@ -2908,14 +3207,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#4F46E5',
     paddingVertical: 7,
     paddingHorizontal: 12,
     borderRadius: 8,
   },
   teamActionBtnTrackText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#ffffff',
     fontFamily: FONT,
   },

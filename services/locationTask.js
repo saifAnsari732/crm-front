@@ -370,14 +370,21 @@ export async function sendHeartbeatNow(force = false) {
 
     const lastLocStr = await storage.getItem('last_recorded_location');
     const lastLoc = lastLocStr ? JSON.parse(lastLocStr) : null;
-    const cachedAddr = (await storage.getItem('last_actual_address')) || lastLoc?.address || '';
+    const lastLocTs = lastLoc?.lastTickTimestamp
+      ? new Date(lastLoc.lastTickTimestamp).getTime()
+      : (lastLoc?.timestamp ? new Date(lastLoc.timestamp).getTime() : 0);
+    // Do NOT attach stale cached coordinates (> 2 min old) after screen lock/doze wakeup
+    const isFreshLastLoc = lastLocTs > 0 && (Date.now() - lastLocTs) <= 120000;
+    const cachedAddr = (await storage.getItem('last_actual_address')) || (isFreshLastLoc ? lastLoc?.address : '') || '';
 
     const response = await trackingAPI.heartbeat({
       sessionId,
-      lat: lastLoc?.lat,
-      lng: lastLoc?.lng,
-      accuracy: lastLoc?.accuracy,
-      speed: lastLoc?.speed,
+      ...(isFreshLastLoc ? {
+        lat: lastLoc?.lat,
+        lng: lastLoc?.lng,
+        accuracy: lastLoc?.accuracy,
+        speed: lastLoc?.speed,
+      } : {}),
       currentAddress: cachedAddr,
     });
     if (response.data?.success && !response.data?.sessionClosed) {

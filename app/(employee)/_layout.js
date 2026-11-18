@@ -47,7 +47,7 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
                   ]}
                 >
                   <LinearGradient
-                    colors={["#0072ff", "#00c6ff"]}
+                    colors={["#0f766e", "#14b8a6"]}
                     style={styles.centerGradient}
                   >
                     <Map size={24} color="#ffffff" strokeWidth={2.2} />
@@ -60,7 +60,7 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
           // Check if this route is currently active
           const isFocused = state.routes[state.index]?.name === item.name || pathname.includes(item.name);
           const IconComponent = item.icon;
-          const activeColor = "#0284c7";
+          const activeColor = "#0f766e";
           const inactiveColor = "#64748b";
 
           return (
@@ -81,12 +81,12 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
               <IconComponent
                 size={22}
                 color={isFocused ? activeColor : inactiveColor}
-                strokeWidth={isFocused ? 2.5 : 2}
+                strokeWidth={isFocused ? 2.3 : 1.8}
               />
               <Text
                 style={[
                   styles.tabLabelText,
-                  { color: isFocused ? activeColor : inactiveColor, fontWeight: isFocused ? "700" : "500" },
+                  { color: isFocused ? activeColor : inactiveColor, fontWeight: isFocused ? "600" : "400" },
                 ]}
               >
                 {item.label}
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     width: 14,
     height: 3,
     borderRadius: 2,
-    backgroundColor: "#0284c7",
+    backgroundColor: "#0f766e",
   },
   centerButtonWrapper: {
     position: "relative",
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     padding: 3,
     elevation: 10,
-    shadowColor: "#0072ff",
+    shadowColor: "#0f766e",
     shadowOpacity: 0.35,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },

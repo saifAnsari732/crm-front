@@ -428,160 +428,156 @@ export default function ProfileScreen() {
       </Surface>
 
       {/* ─── 5. APP PERMISSIONS SECTION ─────────────────────────────────────── */}
-      {Platform.OS !== 'web' && (
-        <>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {language === 'en' ? '🔐 App Permissions' : '🔐 ऐप अनुमतियाँ'}
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        {language === 'en' ? '🔐 App Permissions Status' : '🔐 ऐप अनुमतियाँ स्थिति'}
+      </Text>
+      <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
+        
+        {/* Permission: Device GPS Location Services */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+          onPress={() => handlePermissionPress('locationForeground')}
+        >
+          <Shield size={20} color={permissions.gpsServices ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'Device GPS Hardware' : 'डिवाइस GPS हार्डवेयर'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: permissions.gpsServices ? colors.subText : '#ef4444' }]}>
+              {permissions.gpsServices
+                ? (language === 'en' ? 'Phone GPS Services ON' : 'फोन GPS सेवाएं चालू हैं')
+                : (language === 'en' ? '⚠️ Phone GPS is OFF! Tap to enable' : '⚠️ फोन GPS बंद है! चालू करने के लिए टैप करें')
+              }
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: permissions.gpsServices ? '#dcfce7' : '#fee2e2' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.gpsServices ? '#15803d' : '#dc2626' }}>
+              {permissions.gpsServices ? 'ACTIVE' : 'OFF'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Permission: Location (Foreground) */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+          onPress={() => handlePermissionPress('locationForeground')}
+        >
+          <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'Foreground Location' : 'फोरग्राउंड लोकेशन'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: colors.subText }]}>
+              {language === 'en' ? 'Required for shift check-in & maps' : 'शिफ्ट चेक-इन और मैप के लिए ज़रूरी'}
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
+              {permissions.locationForeground ? 'ALLOWED' : 'DENIED'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Permission: Background Location */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+          onPress={() => handlePermissionPress('locationBackground')}
+        >
+          <Navigation size={20} color={permissions.locationBackground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'Background Location' : 'बैकग्राउंड लोकेशन'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
+              {permissions.locationBackground
+                ? (language === 'en' ? '✅ "Allow all the time" is ACTIVE' : '✅ "हमेशा अनुमति दें" चालू है')
+                : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" सेट करें')
+              }
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
+              {permissions.locationBackground ? 'ALLOW ALL' : 'DENIED'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Permission: Battery Optimization */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+          onPress={() => handlePermissionPress('battery')}
+        >
+          <BatteryCharging size={20} color="#f59e0b" style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'Battery Optimization' : 'बैटरी ऑप्टिमाइजेशन'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: '#f59e0b' }]}>
+              {language === 'en' ? 'Set to "Unrestricted" → prevents GPS kill' : ' "अनरिस्ट्रिक्टेड" रखें → GPS बंद होने से बचाएं'}
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: '#fef3c7' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>CONFIGURE</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Permission: Notifications */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
+          onPress={() => handlePermissionPress('notifications')}
+        >
+          <Bell size={20} color={permissions.notifications ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'System Notifications' : 'सिस्टम नोटिफिकेशन'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: colors.subText }]}>
+              {language === 'en' ? 'Required for active status bar tracking' : 'सक्रिय स्टेटस बार ट्रैकिंग के लिए जरूरी'}
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: permissions.notifications ? '#dcfce7' : '#fee2e2' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.notifications ? '#15803d' : '#dc2626' }}>
+              {permissions.notifications ? 'ALLOWED' : 'DENIED'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Permission: Camera */}
+        <TouchableOpacity 
+          style={[styles.settingsRow, { borderBottomWidth: 0 }]}
+          onPress={() => handlePermissionPress('camera')}
+        >
+          <Camera size={20} color={permissions.camera ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
+          <View style={styles.settingsTextCol}>
+            <Text style={[styles.settingsLabel, { color: colors.text }]}>
+              {language === 'en' ? 'Camera' : 'कैमरा'}
+            </Text>
+            <Text style={[styles.settingsSub, { color: colors.subText }]}>
+              {language === 'en' ? 'Selfie check-in & expense receipts' : 'सेल्फी चेक-इन और खर्चे की रसीदें'}
+            </Text>
+          </View>
+          <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.camera ? '#15803d' : '#dc2626' }}>
+              {permissions.camera ? 'ALLOWED' : 'DENIED'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+      </Surface>
+
+      {/* Warning banner if critical permissions are OFF */}
+      {(!permissions.gpsServices || !permissions.locationBackground || !permissions.locationForeground) && (
+        <TouchableOpacity 
+          style={styles.warningBanner}
+          onPress={() => handlePermissionPress('locationBackground')}
+        >
+          <Shield size={18} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.warningText}>
+            {language === 'en' 
+              ? '⚠️ Critical Permission OFF — KM will NOT track! Tap to fix.' 
+              : '⚠️ आवश्यक अनुमति बंद है — KM ट्रैक नहीं होगा! ठीक करने के लिए टैप करें'}
           </Text>
-          <Surface style={[styles.settingsSurface, { backgroundColor: colors.surface, borderColor: colors.border }]} elevation={1}>
-            
-            {/* Permission: Device GPS Location Services */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-              onPress={() => handlePermissionPress('locationForeground')}
-            >
-              <Shield size={20} color={permissions.gpsServices ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Device GPS Hardware' : 'डिवाइस GPS हार्डवेयर'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: permissions.gpsServices ? colors.subText : '#ef4444' }]}>
-                  {permissions.gpsServices
-                    ? (language === 'en' ? 'Phone GPS Services ON' : 'फोन GPS सेवाएं चालू हैं')
-                    : (language === 'en' ? '⚠️ Phone GPS is OFF! Tap to enable' : '⚠️ फोन GPS बंद है! चालू करने के लिए टैप करें')
-                  }
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: permissions.gpsServices ? '#dcfce7' : '#fee2e2' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.gpsServices ? '#15803d' : '#dc2626' }}>
-                  {permissions.gpsServices ? 'ACTIVE' : 'OFF'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Permission: Location (Foreground) */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-              onPress={() => handlePermissionPress('locationForeground')}
-            >
-              <MapPin size={20} color={permissions.locationForeground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Foreground Location' : 'फोरग्राउंड लोकेशन'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                  {language === 'en' ? 'Required for shift check-in & maps' : 'शिफ्ट चेक-इन और मैप के लिए ज़रूरी'}
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: permissions.locationForeground ? '#dcfce7' : '#fee2e2' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationForeground ? '#15803d' : '#dc2626' }}>
-                  {permissions.locationForeground ? 'ALLOWED' : 'DENIED'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Permission: Background Location */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-              onPress={() => handlePermissionPress('locationBackground')}
-            >
-              <Navigation size={20} color={permissions.locationBackground ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Background Location' : 'बैकग्राउंड लोकेशन'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: permissions.locationBackground ? colors.subText : '#ef4444' }]}>
-                  {permissions.locationBackground
-                    ? (language === 'en' ? '✅ "Allow all the time" is ACTIVE' : '✅ "हमेशा अनुमति दें" चालू है')
-                    : (language === 'en' ? '⚠️ MUST be "Allow all the time"' : '⚠️ "हमेशा अनुमति दें" सेट करें')
-                  }
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: permissions.locationBackground ? '#dcfce7' : '#fee2e2' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.locationBackground ? '#15803d' : '#dc2626' }}>
-                  {permissions.locationBackground ? 'ALLOW ALL' : 'DENIED'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Permission: Battery Optimization */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-              onPress={() => handlePermissionPress('battery')}
-            >
-              <BatteryCharging size={20} color="#f59e0b" style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Battery Optimization' : 'बैटरी ऑप्टिमाइजेशन'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: '#f59e0b' }]}>
-                  {language === 'en' ? 'Set to "Unrestricted" → prevents GPS kill' : ' "अनरिस्ट्रिक्टेड" रखें → GPS बंद होने से बचाएं'}
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: '#fef3c7' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>CONFIGURE</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Permission: Notifications */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}
-              onPress={() => handlePermissionPress('notifications')}
-            >
-              <Bell size={20} color={permissions.notifications ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'System Notifications' : 'सिस्टम नोटिफिकेशन'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                  {language === 'en' ? 'Required for active status bar tracking' : 'सक्रिय स्टेटस बार ट्रैकिंग के लिए जरूरी'}
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: permissions.notifications ? '#dcfce7' : '#fee2e2' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.notifications ? '#15803d' : '#dc2626' }}>
-                  {permissions.notifications ? 'ALLOWED' : 'DENIED'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Permission: Camera */}
-            <TouchableOpacity 
-              style={[styles.settingsRow, { borderBottomWidth: 0 }]}
-              onPress={() => handlePermissionPress('camera')}
-            >
-              <Camera size={20} color={permissions.camera ? '#10b981' : '#ef4444'} style={{ marginRight: 14 }} />
-              <View style={styles.settingsTextCol}>
-                <Text style={[styles.settingsLabel, { color: colors.text }]}>
-                  {language === 'en' ? 'Camera' : 'कैमरा'}
-                </Text>
-                <Text style={[styles.settingsSub, { color: colors.subText }]}>
-                  {language === 'en' ? 'Selfie check-in & expense receipts' : 'सेल्फी चेक-इन और खर्चे की रसीदें'}
-                </Text>
-              </View>
-              <View style={[styles.permBadge, { backgroundColor: permissions.camera ? '#dcfce7' : '#fee2e2' }]}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: permissions.camera ? '#15803d' : '#dc2626' }}>
-                  {permissions.camera ? 'ALLOWED' : 'DENIED'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-          </Surface>
-
-          {/* Warning banner if critical permissions are OFF */}
-          {(!permissions.gpsServices || !permissions.locationBackground || !permissions.locationForeground) && (
-            <TouchableOpacity 
-              style={styles.warningBanner}
-              onPress={() => handlePermissionPress('locationBackground')}
-            >
-              <Shield size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.warningText}>
-                {language === 'en' 
-                  ? '⚠️ Critical Permission OFF — KM will NOT track! Tap to fix.' 
-                  : '⚠️ आवश्यक अनुमति बंद है — KM ट्रैक नहीं होगा! ठीक करने के लिए टैप करें'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </>
+        </TouchableOpacity>
       )}
 
 

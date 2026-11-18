@@ -18,7 +18,7 @@ import * as Location from 'expo-location';
 import { meetingAPI, uploadAPI, adminAPI, getAvatarUrl } from '../../services/api';
 import { useSettings } from '../../context/SettingsContext';
 
-const FONT = Platform.OS === 'web' ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif-medium';
+const FONT = Platform.OS === 'web' ? 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' : Platform.OS === 'ios' ? 'System' : 'sans-serif';
 const statusOptions = ['all', 'scheduled', 'completed', 'follow-up', 'cancelled'];
 
 const getTodayStr = () => {
@@ -291,14 +291,14 @@ export default function AdminVisitsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#047857" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* ── TOP HEADER ── */}
       <LinearGradient
-        colors={['#047857', '#0d9488', '#0f766e']}
+        colors={['#FFFFFF', '#F8FAFC']}
         style={styles.headerContainer}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 0, y: 1 }}
       >
         <SafeAreaView edges={['top']}>
           <View style={styles.topHeaderBar}>
@@ -311,7 +311,7 @@ export default function AdminVisitsScreen() {
                 }}
                 activeOpacity={0.7}
               >
-                <ArrowLeft size={20} color="#fff" />
+                <ArrowLeft size={18} color="#334155" />
               </TouchableOpacity>
               <View style={{ marginLeft: 10, flex: 1 }}>
                 <Text style={styles.screenHeaderTitle}>Client Visits & Meetings</Text>
@@ -319,7 +319,7 @@ export default function AdminVisitsScreen() {
               </View>
             </View>
             <TouchableOpacity style={styles.addVisitBtnHeader} onPress={handleOpenAddModal} activeOpacity={0.85}>
-              <Plus size={16} color="#047857" />
+              <Plus size={15} color="#FFFFFF" />
               <Text style={styles.addVisitBtnText}>Log Visit</Text>
             </TouchableOpacity>
           </View>
@@ -329,41 +329,41 @@ export default function AdminVisitsScreen() {
       <FlatList
         data={filteredVisits}
         keyExtractor={(item, index) => String(item._id || index)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#059669']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4F46E5']} />}
         contentContainerStyle={styles.content}
         ListHeaderComponent={(
           <View style={{ marginBottom: 12 }}>
 
-            {/* 4-COLUMN PREMIUM SUMMARY KPI CARDS */}
+            {/* 4-COLUMN CLEAN UNIFIED SUMMARY KPI CARDS */}
             <View style={styles.summaryRow}>
-              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#f0f9ff', borderColor: isDark ? '#334155' : '#bae6fd' }]} elevation={1}>
+              <Surface style={[styles.kpiCardItem, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
                 <View style={styles.kpiCardTop}>
-                  <BriefcaseBusiness size={14} color="#0284c7" />
-                  <Text style={[styles.kpiCardNum, { color: '#0284c7' }]}>{counts.all}</Text>
+                  <BriefcaseBusiness size={14} color="#4F46E5" />
+                  <Text style={[styles.kpiCardNum, { color: '#0F172A' }]}>{counts.all}</Text>
                 </View>
                 <Text style={[styles.kpiCardLabel, { color: C.sub }]}>ALL</Text>
               </Surface>
 
-              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: isDark ? '#334155' : '#bfdbfe' }]} elevation={1}>
+              <Surface style={[styles.kpiCardItem, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
                 <View style={styles.kpiCardTop}>
-                  <Clock3 size={14} color="#2563eb" />
-                  <Text style={[styles.kpiCardNum, { color: '#2563eb' }]}>{counts.scheduled}</Text>
+                  <Clock3 size={14} color="#4F46E5" />
+                  <Text style={[styles.kpiCardNum, { color: '#0F172A' }]}>{counts.scheduled}</Text>
                 </View>
                 <Text style={[styles.kpiCardLabel, { color: C.sub }]}>SCHEDULED</Text>
               </Surface>
 
-              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#f0fdf4', borderColor: isDark ? '#334155' : '#bbf7d0' }]} elevation={1}>
+              <Surface style={[styles.kpiCardItem, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
                 <View style={styles.kpiCardTop}>
-                  <CheckCircle2 size={14} color="#16a34a" />
-                  <Text style={[styles.kpiCardNum, { color: '#16a34a' }]}>{counts.completed}</Text>
+                  <CheckCircle2 size={14} color="#4F46E5" />
+                  <Text style={[styles.kpiCardNum, { color: '#0F172A' }]}>{counts.completed}</Text>
                 </View>
                 <Text style={[styles.kpiCardLabel, { color: C.sub }]}>DONE</Text>
               </Surface>
 
-              <Surface style={[styles.kpiCardItem, { backgroundColor: isDark ? '#1e293b' : '#fff7ed', borderColor: isDark ? '#334155' : '#fed7aa' }]} elevation={1}>
+              <Surface style={[styles.kpiCardItem, { backgroundColor: C.surface, borderColor: C.border }]} elevation={1}>
                 <View style={styles.kpiCardTop}>
-                  <CalendarDays size={14} color="#d97706" />
-                  <Text style={[styles.kpiCardNum, { color: '#d97706' }]}>{counts.followUp}</Text>
+                  <CalendarDays size={14} color="#4F46E5" />
+                  <Text style={[styles.kpiCardNum, { color: '#0F172A' }]}>{counts.followUp}</Text>
                 </View>
                 <Text style={[styles.kpiCardLabel, { color: C.sub }]}>FOLLOW-UP</Text>
               </Surface>
@@ -373,12 +373,12 @@ export default function AdminVisitsScreen() {
             <View style={styles.empScrollerSection}>
               <View style={styles.empScrollerHeaderRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Users size={14} color="#059669" />
+                  <Users size={14} color="#4F46E5" />
                   <Text style={[styles.empScrollerTitle, { color: C.text }]}>Filter By Staff Member</Text>
                 </View>
                 {selectedEmpFilter !== 'all' && (
                   <TouchableOpacity onPress={() => setSelectedEmpFilter('all')} style={styles.resetEmpBtn}>
-                    <RotateCcw size={11} color="#059669" />
+                    <RotateCcw size={11} color="#4F46E5" />
                     <Text style={styles.resetEmpText}>Show All</Text>
                   </TouchableOpacity>
                 )}
@@ -389,12 +389,12 @@ export default function AdminVisitsScreen() {
                   style={[
                     styles.empChipPill,
                     selectedEmpFilter === 'all' && styles.empChipPillActive,
-                    { borderColor: selectedEmpFilter === 'all' ? '#059669' : C.border, backgroundColor: selectedEmpFilter === 'all' ? '#064e3b' : C.surface }
+                    { borderColor: selectedEmpFilter === 'all' ? '#4F46E5' : C.border, backgroundColor: selectedEmpFilter === 'all' ? '#4F46E5' : C.surface }
                   ]}
                   onPress={() => setSelectedEmpFilter('all')}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.empChipText, { color: selectedEmpFilter === 'all' ? '#a7f3d0' : C.sub }]}>All Staff ({uniqueStaffList.length})</Text>
+                  <Text style={[styles.empChipText, { color: selectedEmpFilter === 'all' ? '#FFFFFF' : C.sub }]}>All Staff ({uniqueStaffList.length})</Text>
                 </TouchableOpacity>
 
                 {uniqueStaffList.map((emp) => {
@@ -408,12 +408,12 @@ export default function AdminVisitsScreen() {
                       style={[
                         styles.empChipPill,
                         isSelected && styles.empChipPillActive,
-                        { borderColor: isSelected ? '#059669' : C.border, backgroundColor: isSelected ? '#064e3b' : C.surface }
+                        { borderColor: isSelected ? '#4F46E5' : C.border, backgroundColor: isSelected ? '#4F46E5' : C.surface }
                       ]}
                       onPress={() => setSelectedEmpFilter(isSelected ? 'all' : empId)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.empChipText, { color: isSelected ? '#a7f3d0' : C.text }]}>{empName}</Text>
+                      <Text style={[styles.empChipText, { color: isSelected ? '#FFFFFF' : C.text }]}>{empName}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -424,11 +424,11 @@ export default function AdminVisitsScreen() {
             <View style={styles.filterRowSection}>
               <View style={styles.datePickerTriggerRow}>
                 <TouchableOpacity
-                  style={[styles.dateBoxBtn, { backgroundColor: C.surface, borderColor: date ? '#059669' : C.border }]}
+                  style={[styles.dateBoxBtn, { backgroundColor: C.surface, borderColor: date ? '#4F46E5' : C.border }]}
                   onPress={() => setDatePickerVisible(true)}
                   activeOpacity={0.8}
                 >
-                  <CalendarDays size={16} color="#059669" />
+                  <CalendarDays size={16} color="#4F46E5" />
                   <Text style={[styles.dateBoxBtnText, { color: date ? C.text : C.sub }]}>
                     {date ? formatDate(date) : 'Choose Date (Calendar)'}
                   </Text>
@@ -448,23 +448,23 @@ export default function AdminVisitsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.quickDateChip,
-                    { backgroundColor: date === getTodayStr() ? '#064e3b' : C.surface, borderColor: date === getTodayStr() ? '#059669' : C.border }
+                    { backgroundColor: date === getTodayStr() ? '#4F46E5' : C.surface, borderColor: date === getTodayStr() ? '#4F46E5' : C.border }
                   ]}
                   onPress={() => setDate(date === getTodayStr() ? '' : getTodayStr())}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.quickDateText, { color: date === getTodayStr() ? '#a7f3d0' : C.sub }]}>Today</Text>
+                  <Text style={[styles.quickDateText, { color: date === getTodayStr() ? '#FFFFFF' : C.sub }]}>Today</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.quickDateChip,
-                    { backgroundColor: date === getYesterdayStr() ? '#064e3b' : C.surface, borderColor: date === getYesterdayStr() ? '#059669' : C.border }
+                    { backgroundColor: date === getYesterdayStr() ? '#4F46E5' : C.surface, borderColor: date === getYesterdayStr() ? '#4F46E5' : C.border }
                   ]}
                   onPress={() => setDate(date === getYesterdayStr() ? '' : getYesterdayStr())}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.quickDateText, { color: date === getYesterdayStr() ? '#a7f3d0' : C.sub }]}>Yesterday</Text>
+                  <Text style={[styles.quickDateText, { color: date === getYesterdayStr() ? '#FFFFFF' : C.sub }]}>Yesterday</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -857,31 +857,32 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    paddingTop: Platform.OS === 'android' ? 10 : 0,
-    borderCurve: 'round',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    paddingBottom: 12,
+    paddingTop: Platform.OS === 'android' ? 10 : 6,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   topHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 4 },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  screenHeaderTitle: { fontSize: 16, fontWeight: '800', fontFamily: FONT, color: '#ffffff' },
-  screenHeaderSub: { fontSize: 10, fontWeight: '600', marginTop: 1, color: '#a7f3d0' },
-  addVisitBtnHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
-  addVisitBtnText: { color: '#047857', fontSize: 11, fontWeight: '800' },
+  screenHeaderTitle: { fontSize: 16.5, fontWeight: '600', fontFamily: FONT, color: '#0F172A' },
+  screenHeaderSub: { fontSize: 11, fontWeight: '400', marginTop: 1, color: '#64748B', fontFamily: FONT },
+  addVisitBtnHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#4F46E5', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
+  addVisitBtnText: { color: '#FFFFFF', fontSize: 11.5, fontWeight: '500', fontFamily: FONT },
   content: { padding: 14, paddingBottom: 32 },
   summaryRow: { flexDirection: 'row', gap: 7, marginBottom: 12 },
   summaryCard: { flex: 1, minHeight: 62, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 1 },
-  summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold' },
-  summaryLabel: { fontFamily: FONT, color: '#64748b', fontSize: 8, fontWeight: 'bold', marginTop: 3 },
+  summaryValue: { fontFamily: FONT, fontSize: 18, fontWeight: '600' },
+  summaryLabel: { fontFamily: FONT, color: '#64748b', fontSize: 8.5, fontWeight: '500', marginTop: 3 },
   searchBox: { height: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginBottom: 10 },
   searchInput: { flex: 1, fontFamily: FONT, fontSize: 12 },
   filterRow: { gap: 8, marginBottom: 4 },
@@ -889,31 +890,31 @@ const styles = StyleSheet.create({
   dateInput: { flex: 1, fontFamily: FONT, fontSize: 12 },
   statusScroll: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
   statusChip: { borderWidth: 1, borderRadius: 15, paddingHorizontal: 10, paddingVertical: 6 },
-  statusChipText: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' },
-  resultsLabel: { fontFamily: FONT, fontSize: 11, marginVertical: 10, fontWeight: '700' },
+  statusChipText: { fontFamily: FONT, fontSize: 9.5, fontWeight: '500' },
+  resultsLabel: { fontFamily: FONT, fontSize: 11, marginVertical: 10, fontWeight: '500' },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12 },
   cardTop: { flexDirection: 'row', alignItems: 'center' },
-  clientIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#e8edff', alignItems: 'center', justifyContent: 'center' },
+  clientIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   cardMain: { flex: 1, marginLeft: 10 },
-  clientName: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold' },
+  clientName: { fontFamily: FONT, fontSize: 14, fontWeight: '500' },
   company: { fontFamily: FONT, fontSize: 11, marginTop: 2 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 5 },
-  statusText: { fontFamily: FONT, fontSize: 9, fontWeight: 'bold' },
+  statusText: { fontFamily: FONT, fontSize: 9.5, fontWeight: '500' },
   divider: { height: 1, marginVertical: 10 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  detailLabel: { fontFamily: FONT, fontSize: 10 },
-  detailValue: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', maxWidth: '65%', textAlign: 'right' },
+  detailLabel: { fontFamily: FONT, fontSize: 10.5 },
+  detailValue: { fontFamily: FONT, fontSize: 11, fontWeight: '500', maxWidth: '65%', textAlign: 'right' },
   locationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 3 },
-  locationText: { flex: 1, fontFamily: FONT, fontSize: 10 },
-  amount: { color: '#008080', fontFamily: FONT, fontSize: 11, fontWeight: 'bold', marginTop: 8 },
+  locationText: { flex: 1, fontFamily: FONT, fontSize: 10.5 },
+  amount: { color: '#4F46E5', fontFamily: FONT, fontSize: 11, fontWeight: '600', marginTop: 8 },
   empty: { alignItems: 'center', paddingVertical: 42 },
-  emptyTitle: { fontFamily: FONT, fontSize: 14, fontWeight: 'bold', marginTop: 10 },
+  emptyTitle: { fontFamily: FONT, fontSize: 14, fontWeight: '600', marginTop: 10 },
   emptyText: { fontFamily: FONT, fontSize: 11, marginTop: 4, textAlign: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontFamily: FONT, fontSize: 12, marginTop: 8 },
   expandedContent: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 },
   notesBox: { backgroundColor: '#f8fafc', padding: 10, borderRadius: 8, marginTop: 8 },
-  notesLabel: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  notesLabel: { fontFamily: FONT, fontSize: 10, fontWeight: '500', marginBottom: 4 },
   notesText: { fontFamily: FONT, fontSize: 11, lineHeight: 16 },
   selfieBox: { marginTop: 12 },
   cardSelfieThumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1' },
@@ -927,45 +928,45 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', fontFamily: FONT },
+  modalTitle: { fontSize: 16, fontWeight: '600', color: '#0f172a', fontFamily: FONT },
   modalCloseBtn: { padding: 4 },
-  inputLabel: { fontSize: 11, fontWeight: '800', color: '#475569', marginBottom: 6, marginTop: 12, textTransform: 'uppercase' },
+  inputLabel: { fontSize: 11, fontWeight: '500', color: '#475569', marginBottom: 6, marginTop: 12, textTransform: 'uppercase' },
   formInput: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#0f172a', backgroundColor: '#f8fafc' },
   statusChipSelect: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-  statusChipSelectActive: { backgroundColor: '#0a3d3c', borderColor: '#0a3d3c' },
-  statusChipSelectText: { fontSize: 10, fontWeight: '800', color: '#64748b' },
+  statusChipSelectActive: { backgroundColor: '#4F46E5', borderColor: '#4F46E5' },
+  statusChipSelectText: { fontSize: 10, fontWeight: '500', color: '#64748b' },
   selfiePickerBox: { borderWidth: 1.5, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 14, height: 120, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', marginTop: 4, marginBottom: 16 },
-  saveSubmitBtn: { backgroundColor: '#0a3d3c', paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 24 },
-  saveSubmitBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  saveSubmitBtn: { backgroundColor: '#4F46E5', paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 24 },
+  saveSubmitBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
   // Branded Loading Card
   loadingBrandCard: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  loadingLogoBadge: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#022c17', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  loadingLogoBadge: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', elevation: 2 },
   loadingLogoImg: { width: 48, height: 48 },
-  loadingBrandTitle: { fontSize: 18, fontWeight: '800', fontFamily: FONT, marginTop: 12 },
-  loadingBrandSub: { fontSize: 12, fontWeight: '500', fontFamily: FONT, marginTop: 4 },
+  loadingBrandTitle: { fontSize: 17, fontWeight: '600', fontFamily: FONT, marginTop: 12 },
+  loadingBrandSub: { fontSize: 12, fontWeight: '400', fontFamily: FONT, marginTop: 4 },
 
   // KPI Summary Card Items
   kpiCardItem: { flex: 1, padding: 10, borderRadius: 14, borderWidth: 1 },
   kpiCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  kpiCardNum: { fontSize: 16, fontWeight: '800', fontFamily: FONT },
-  kpiCardLabel: { fontSize: 8, fontWeight: '800', fontFamily: FONT, marginTop: 4, letterSpacing: 0.5 },
+  kpiCardNum: { fontSize: 16, fontWeight: '600', fontFamily: FONT },
+  kpiCardLabel: { fontSize: 8.5, fontWeight: '500', fontFamily: FONT, marginTop: 4, letterSpacing: 0.4 },
 
   // Employee Scroller
   empScrollerSection: { marginTop: 12, marginBottom: 8 },
   empScrollerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  empScrollerTitle: { fontSize: 12, fontWeight: '800', fontFamily: FONT },
+  empScrollerTitle: { fontSize: 12, fontWeight: '500', fontFamily: FONT },
   resetEmpBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  resetEmpText: { fontSize: 11, fontWeight: '700', color: '#059669' },
+  resetEmpText: { fontSize: 11, fontWeight: '500', color: '#4F46E5' },
   empChipPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
-  empChipPillActive: { backgroundColor: '#064e3b' },
-  empChipText: { fontSize: 11, fontWeight: '700', fontFamily: FONT },
+  empChipPillActive: { backgroundColor: '#4F46E5' },
+  empChipText: { fontSize: 11, fontWeight: '500', fontFamily: FONT },
 
   // Filter Row Section
   filterRowSection: { gap: 8, marginBottom: 8 },
   statusChipPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
-  statusChipPillActive: { backgroundColor: '#064e3b' },
-  statusChipPillText: { fontSize: 10, fontWeight: '800', fontFamily: FONT },
+  statusChipPillActive: { backgroundColor: '#4F46E5' },
+  statusChipPillText: { fontSize: 10, fontWeight: '500', fontFamily: FONT },
 
   // Result Badge Row
   resultBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },

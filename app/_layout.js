@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { PaperProvider } from 'react-native-paper';
 import { useRouter, useSegments } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import AnimatedSplash from '../components/AnimatedSplash';
 
@@ -103,8 +103,32 @@ import { SettingsProvider } from '../context/SettingsContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import NotificationBanner from '../components/NotificationBanner';
 import GlobalAlert, { globalAlertRef } from '../components/GlobalAlert';
+import UpdatePromptModal from '../components/UpdatePromptModal';
 
 export default function RootLayout() {
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const styleId = 'kisan-clean-typography-style';
+      if (!document.getElementById(styleId)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap';
+        document.head.appendChild(link);
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+  }, []);
+
   return (
     <PaperProvider>
       <AuthProvider>
@@ -113,6 +137,7 @@ export default function RootLayout() {
             <InitialLayout />
             <NotificationBanner />
             <GlobalAlert ref={globalAlertRef} />
+            <UpdatePromptModal />
           </NotificationProvider>
         </SettingsProvider>
       </AuthProvider>

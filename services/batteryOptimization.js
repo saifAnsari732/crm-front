@@ -34,8 +34,15 @@ export async function isBatteryOptimizationExempt() {
  * Opens Android battery optimization settings directly.
  */
 export async function openBatteryOptimizationSettings(packageName = 'com.kisanteam.crm') {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android') {
+    Alert.alert(
+      'Battery Optimization',
+      'Battery optimization settings are available on Android devices. Make sure background app refresh and location are set to Always in phone settings.'
+    );
+    return;
+  }
 
+  // 1. Try Native KeepAliveModule if available
   try {
     if (KeepAliveModule && typeof KeepAliveModule.requestIgnoreBatteryOptimizations === 'function') {
       const ok = await KeepAliveModule.requestIgnoreBatteryOptimizations();
@@ -43,25 +50,45 @@ export async function openBatteryOptimizationSettings(packageName = 'com.kisante
     }
   } catch (_) {}
 
+  // 2. Direct intent request for ignoring battery optimizations for this package
   try {
     await IntentLauncher.startActivityAsync(
       IntentLauncher.ActivityAction.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
       { data: `package:${packageName}` }
     );
+    return;
   } catch (e1) {
-    try {
-      await IntentLauncher.startActivityAsync(
-        IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-      );
-    } catch (e2) {
-      try {
-        await IntentLauncher.startActivityAsync(
-          'android.settings.BATTERY_SAVER_SETTINGS'
-        );
-      } catch (e3) {
-        Linking.openSettings();
-      }
-    }
+    console.log('Action REQUEST_IGNORE_BATTERY_OPTIMIZATIONS failed, trying general ignore settings...');
+  }
+
+  // 3. Fallback to Ignore Battery Optimization Settings list
+  try {
+    await IntentLauncher.startActivityAsync(
+      IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+    );
+    return;
+  } catch (e2) {
+    console.log('Action IGNORE_BATTERY_OPTIMIZATION_SETTINGS failed, trying device power/battery saver...');
+  }
+
+  // 4. Fallback to Battery Saver / Power usage settings
+  try {
+    await IntentLauncher.startActivityAsync('android.settings.BATTERY_SAVER_SETTINGS');
+    return;
+  } catch (e3) {
+    console.log('Action BATTERY_SAVER_SETTINGS failed, opening app details...');
+  }
+
+  // 5. Fallback to App Application Details settings
+  try {
+    await IntentLauncher.startActivityAsync(
+      IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
+      { data: `package:${packageName}` }
+    );
+    return;
+  } catch (e4) {
+    // 6. Final fallback: general OS settings
+    Linking.openSettings();
   }
 }
 

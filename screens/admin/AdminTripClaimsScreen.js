@@ -155,7 +155,7 @@ export default function AdminTripClaimsScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/dashboard'))}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={20} color="#0f172a" />
+          <ArrowLeft size={20} color="#334155" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.headerTitle}>Trip Route Claims</Text>
@@ -166,7 +166,7 @@ export default function AdminTripClaimsScreen() {
           onPress={fetchTrips}
           activeOpacity={0.7}
         >
-          <RefreshCw size={18} color="#0f766e" />
+          <RefreshCw size={18} color="#334155" />
         </TouchableOpacity>
       </View>
 
@@ -180,7 +180,7 @@ export default function AdminTripClaimsScreen() {
               setRefreshing(true);
               fetchTrips();
             }}
-            tintColor="#0f766e"
+            tintColor="#4F46E5"
           />
         }
       >
@@ -212,8 +212,8 @@ export default function AdminTripClaimsScreen() {
         <View style={styles.kpiGrid}>
           {/* Total Claims */}
           <Surface style={styles.kpiCard} elevation={1}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#eff6ff' }]}>
-              <Car size={16} color="#2563eb" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EEF2FF' }]}>
+              <Car size={16} color="#4F46E5" />
             </View>
             <Text style={styles.kpiLabel}>TOTAL TRIPS</Text>
             <Text style={styles.kpiVal}>{summary.totalTrips}</Text>
@@ -221,29 +221,29 @@ export default function AdminTripClaimsScreen() {
 
           {/* Total KM */}
           <Surface style={styles.kpiCard} elevation={1}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#f0fdf4' }]}>
-              <Route size={16} color="#16a34a" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EEF2FF' }]}>
+              <Route size={16} color="#4F46E5" />
             </View>
             <Text style={styles.kpiLabel}>ROAD DISTANCE</Text>
-            <Text style={[styles.kpiVal, { color: '#16a34a' }]}>{summary.totalKm} KM</Text>
+            <Text style={[styles.kpiVal, { color: '#0F172A' }]}>{summary.totalKm} KM</Text>
           </Surface>
 
           {/* Total Payout */}
           <Surface style={styles.kpiCard} elevation={1}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#fef3c7' }]}>
-              <TrendingUp size={16} color="#d97706" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EEF2FF' }]}>
+              <TrendingUp size={16} color="#4F46E5" />
             </View>
             <Text style={styles.kpiLabel}>TOTAL PAYOUT</Text>
-            <Text style={[styles.kpiVal, { color: '#d97706' }]}>₹{summary.totalPayout}</Text>
+            <Text style={[styles.kpiVal, { color: '#4F46E5' }]}>₹{summary.totalPayout}</Text>
           </Surface>
 
           {/* Claimants */}
           <Surface style={styles.kpiCard} elevation={1}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#f5f3ff' }]}>
-              <Users size={16} color="#7c3aed" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EEF2FF' }]}>
+              <Users size={16} color="#4F46E5" />
             </View>
             <Text style={styles.kpiLabel}>CLAIMANTS</Text>
-            <Text style={[styles.kpiVal, { color: '#7c3aed' }]}>{summary.uniqueEmployees}</Text>
+            <Text style={[styles.kpiVal, { color: '#0F172A' }]}>{summary.uniqueEmployees}</Text>
           </Surface>
         </View>
 
@@ -256,7 +256,7 @@ export default function AdminTripClaimsScreen() {
         {/* ── CLAIMS LIST ── */}
         {loading && !refreshing ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color="#0f766e" />
+            <ActivityIndicator size="large" color="#4F46E5" />
             <Text style={styles.loadingText}>Fetching trip claims...</Text>
           </View>
         ) : trips.length === 0 ? (
@@ -305,7 +305,7 @@ export default function AdminTripClaimsScreen() {
 
                   {/* Status badge */}
                   <View style={styles.statusBadge}>
-                    <CheckCircle2 size={12} color="#16a34a" />
+                    <CheckCircle2 size={12} color="#4F46E5" />
                     <Text style={styles.statusBadgeText}>CREDITED</Text>
                   </View>
                 </View>
@@ -347,7 +347,7 @@ export default function AdminTripClaimsScreen() {
                   <View style={styles.metricDivider} />
                   <View style={styles.metricItem}>
                     <Text style={styles.metricItemLabel}>ALLOWANCE</Text>
-                    <Text style={[styles.metricItemVal, { color: '#16a34a' }]}>
+                    <Text style={[styles.metricItemVal, { color: '#4F46E5' }]}>
                       ₹{item.reimbursementAmount}
                     </Text>
                   </View>
@@ -376,7 +376,7 @@ export default function AdminTripClaimsScreen() {
                     onPress={() => setSelectedTripForMap(item)}
                     activeOpacity={0.7}
                   >
-                    <Eye size={14} color="#0f766e" />
+                    <Eye size={14} color="#4F46E5" />
                     <Text style={styles.viewRouteBtnText}>View Map Route</Text>
                   </TouchableOpacity>
 
@@ -471,27 +471,31 @@ const styles = StyleSheet.create({
   backButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 10,
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '600',
     color: '#0f172a',
     letterSpacing: -0.2,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '400',
   },
   refreshButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f0fdfa',
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -516,17 +520,17 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   activeFilterPill: {
-    backgroundColor: '#0f766e',
-    borderColor: '#0f766e',
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
   },
   filterPillText: {
     fontSize: 11.5,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#64748b',
   },
   activeFilterPillText: {
     color: '#ffffff',
-    fontWeight: '700',
+    fontWeight: '600',
   },
   kpiGrid: {
     flexDirection: 'row',
@@ -546,20 +550,20 @@ const styles = StyleSheet.create({
   kpiIconBox: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   kpiLabel: {
     fontSize: 9,
-    fontWeight: '700',
-    color: '#94a3b8',
+    fontWeight: '500',
+    color: '#64748b',
     letterSpacing: 0.3,
   },
   kpiVal: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#0f172a',
     marginTop: 1,
   },
@@ -571,14 +575,14 @@ const styles = StyleSheet.create({
   },
   listSectionTitle: {
     fontSize: 11.5,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#475569',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   listSectionCount: {
     fontSize: 11.5,
     color: '#94a3b8',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   loadingBox: {
     alignItems: 'center',
@@ -600,7 +604,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0f172a',
     marginTop: 10,
   },
@@ -643,21 +647,23 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarFallbackText: {
-    color: '#ffffff',
+    color: '#4F46E5',
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   empDetails: {
     gap: 1,
   },
   empNameText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0f172a',
   },
   empMetaRow: {
@@ -673,7 +679,7 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#475569',
   },
   phoneRow: {
@@ -688,7 +694,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#dcfce7',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 7,
     paddingVertical: 2.5,
     borderRadius: 8,
@@ -696,8 +702,8 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 9.5,
-    fontWeight: '800',
-    color: '#16a34a',
+    fontWeight: '600',
+    color: '#4F46E5',
   },
   routeDetailsBox: {
     flexDirection: 'row',
@@ -713,7 +719,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#10b981',
+    backgroundColor: '#4F46E5',
   },
   lineConnector: {
     width: 1.5,
@@ -724,7 +730,7 @@ const styles = StyleSheet.create({
   squareDest: {
     width: 6,
     height: 6,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#64748B',
     borderRadius: 1.5,
   },
   routeAddressesCol: {
@@ -738,13 +744,13 @@ const styles = StyleSheet.create({
   },
   addressLabel: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#94a3b8',
     width: 34,
   },
   addressVal: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#1e293b',
     flex: 1,
   },
@@ -762,13 +768,13 @@ const styles = StyleSheet.create({
   },
   metricItemLabel: {
     fontSize: 8.5,
-    fontWeight: '700',
+    fontWeight: '500',
     color: '#94a3b8',
     letterSpacing: 0.3,
   },
   metricItemVal: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#0f172a',
     marginTop: 1,
   },
@@ -784,20 +790,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   purposeTag: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 5,
   },
   purposeTagText: {
     fontSize: 10.5,
-    fontWeight: '600',
-    color: '#2563eb',
+    fontWeight: '500',
+    color: '#4F46E5',
   },
   clientNameText: {
     fontSize: 11,
     color: '#475569',
-    fontWeight: '500',
+    fontWeight: '400',
     maxWidth: 130,
   },
   dateStampText: {
@@ -816,7 +822,7 @@ const styles = StyleSheet.create({
   viewRouteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0fdfa',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -824,8 +830,8 @@ const styles = StyleSheet.create({
   },
   viewRouteBtnText: {
     fontSize: 11.5,
-    fontWeight: '700',
-    color: '#0f766e',
+    fontWeight: '600',
+    color: '#4F46E5',
   },
   deleteBtn: {
     padding: 4,
@@ -854,7 +860,7 @@ const styles = StyleSheet.create({
   },
   mapModalTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
     color: '#0f172a',
   },
   mapModalSubtitle: {
@@ -892,13 +898,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10b981',
+    backgroundColor: '#4F46E5',
   },
   footerDestSquare: {
     width: 8,
     height: 8,
     borderRadius: 2,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#64748B',
   },
   footerAddressText: {
     fontSize: 12,
