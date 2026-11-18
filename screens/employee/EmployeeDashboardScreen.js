@@ -41,7 +41,7 @@ import useLocationTracker from "../../hooks/useLocationTracker";
 import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
-import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, getAvatarUrl, compressImageWeb } from "../../services/api";
+import { dashboardApi, meetingApi, expenseApi, taskApi, leadAPI, uploadAPI, authAPI, getAvatarUrl, compressImageWeb } from "../../services/api";
 import { storage } from "../../services/storage";
 import socketService from "../../services/socket";
 
@@ -63,7 +63,8 @@ const getExpenseStatusStyle = (statusVal) => {
 
 export default function EmployeeDashboardScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const { isTracking, startTracking, stopTracking, requestPermissions } = useLocationTracker();
   const [currentDate, setCurrentDate] = useState("");
   const [showMenu, setShowMenu] = useState(false);
@@ -205,6 +206,12 @@ export default function EmployeeDashboardScreen() {
       syncLocalDistance();
       loadDashboardData();
       fetchNotifications();
+      // Fresh user profile fetch to ensure updated avatar syncs across tabs
+      authAPI.getMe().then((res) => {
+        if (res.data?.success && res.data?.user && updateUser) {
+          updateUser(res.data.user);
+        }
+      }).catch(() => {});
     }, [isTracking])
   );
 
@@ -483,11 +490,12 @@ export default function EmployeeDashboardScreen() {
               onPress={() => router.push("/(employee)/profile")} 
               activeOpacity={0.85}
             >
-              {getAvatarUrl(user?.avatar) ? (
+              {getAvatarUrl(user?.emp_profile_pic || user?.avatar) && !avatarLoadFailed ? (
                 <Image 
-                  source={{ uri: getAvatarUrl(user.avatar) }} 
+                  source={{ uri: getAvatarUrl(user.emp_profile_pic || user.avatar) }} 
                   style={styles.heroEmployeeAvatar} 
                   resizeMode="cover"
+                  onError={() => setAvatarLoadFailed(true)}
                 />
               ) : (
                 <Image

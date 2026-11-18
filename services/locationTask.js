@@ -132,8 +132,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: false };
   }
 
-  // Direct single-step departure when hardware Doppler confirms velocity (>= 1.5 km/h) or calcSpeed >= 1.5 km/h or screen moving flag, with displacement >= 8m and accuracy <= 140m
-  if (distM >= 8.0 && (reportedSpeedKmh >= 1.5 || (Number.isFinite(calcSpeedKmh) && calcSpeedKmh >= 1.5) || currCoord?.screenMoving === true) && accuracyM <= 140) {
+  // Direct single-step departure when real displacement >= 25m with Doppler speed >= 2.5 km/h, or displacement >= 55m
+  if (((distM >= 25.0 && (reportedSpeedKmh >= 2.5 || (Number.isFinite(calcSpeedKmh) && calcSpeedKmh >= 2.5))) || distM >= 55.0) && accuracyM <= 120) {
     console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
     _movementCandidateBuffer = [];
     _isConfirmedMoving = true;
@@ -141,8 +141,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
   }
 
   // 2-Point Progressive Departure Verification (blocks single-spike indoor bounces while capturing 100% of real departure distance)
-  const minCandDistM = (reportedSpeedKmh >= 1.2 || currCoord?.screenMoving === true) ? 6.0 : 8.0;
-  if (distM >= minCandDistM) {
+  const minCandDistM = 18.0;
+  if (distM >= minCandDistM && accuracyM <= 120) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
       : null;
@@ -157,9 +157,9 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
 
       // Confirmed genuine travel: progressive movement away from anchor AND away from candidate 1
       if (
-        distM >= minCandDistM + 4.0 &&
-        stepFromFirstCandidateM >= 4.0 &&
-        distM >= firstCandidate.distM + 3.0
+        distM >= minCandDistM + 6.0 &&
+        stepFromFirstCandidateM >= 6.0 &&
+        distM >= firstCandidate.distM + 4.0
       ) {
         console.log(`📍 Movement Confirmed: Progressive travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m). Transitioning to MOVING.`);
         const savedCandidateCoord = firstCandidate.coord || null;
@@ -168,8 +168,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
         return { confirmed: true, backfillDistKm: distM / 1000, candidateCoord: savedCandidateCoord };
       }
 
-      // If phone bounced back toward stationary spot (< 14m or closer than candidate), clear candidate buffer
-      if (distM < 14.0 || distM < firstCandidate.distM - 5.0) {
+      // If phone bounced back toward stationary spot (< 18m or closer than candidate), clear candidate buffer
+      if (distM < 18.0 || distM < firstCandidate.distM - 5.0) {
         _movementCandidateBuffer = [];
         return { confirmed: false, pending: false };
       }
@@ -180,7 +180,7 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: true };
   }
 
-  if (_movementCandidateBuffer.length > 0 && distM < 14.0) {
+  if (_movementCandidateBuffer.length > 0 && distM < 18.0) {
     _movementCandidateBuffer = [];
   }
   return { confirmed: false, pending: false };
@@ -318,13 +318,13 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, Zero Stationary Drift) ──
-  // When confirmed moving: only zero-displacement pause (< 3.0m with speed < 1.2 km/h) holds anchor
+  // When confirmed moving: filter out stationary pause/indoor wobble (< 6.0m OR < 18.0m with speed < 2.5 km/h)
   const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh);
-  if (distM < 3.0 && activeStepSpeedKmh < 1.2) {
-    if (rawSecs > 60) {
+  if (distM < 6.0 || (distM < 18.0 && activeStepSpeedKmh < 2.5 && reportedSpeedKmh < 2.5)) {
+    if (rawSecs > 45) {
       _isConfirmedMoving = false;
     }
-    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 60 };
+    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 45 };
   }
 
   return { valid: true, distKm };

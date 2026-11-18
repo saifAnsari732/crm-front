@@ -11,14 +11,15 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import { useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera } from 'lucide-react-native';
+import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { meetingApi, uploadAPI } from '../../services/api';
+import { meetingApi, uploadAPI, getAvatarUrl } from '../../services/api';
 
 export default function MeetingsScreen() {
   const [meetings, setMeetings] = useState([]);
@@ -27,6 +28,7 @@ export default function MeetingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
 
   // New Meeting Form States
   const [clientName, setClientName] = useState('');
@@ -320,13 +322,24 @@ export default function MeetingsScreen() {
           ) : (
             meetings.map((item) => {
               const badge = getStatusBadgeStyle(item.status);
+              const selfieUri = getAvatarUrl(item.selfieUrl || (item.images && item.images[0]));
               return (
                 <Surface key={item._id || item.id} style={styles.meetingCard} elevation={1}>
                   <View style={styles.cardHeader}>
                     <View style={styles.clientInfoBlock}>
-                      <View style={styles.avatarCircleBox}>
-                        <User size={16} color="#0f766e" />
-                      </View>
+                      {selfieUri ? (
+                        <TouchableOpacity
+                          onPress={() => setPreviewPhotoUrl(selfieUri)}
+                          activeOpacity={0.85}
+                          style={styles.meetingSelfieThumbWrap}
+                        >
+                          <Image source={{ uri: selfieUri }} style={styles.meetingSelfieThumb} />
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.avatarCircleBox}>
+                          <User size={16} color="#0f766e" />
+                        </View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.clientNameText}>{item.clientName}</Text>
                         <Text style={styles.clientPhoneText}>{item.mobileNumber}</Text>
@@ -343,6 +356,21 @@ export default function MeetingsScreen() {
                     <MapPin size={13} color="#94a3b8" style={{ marginRight: 6, marginTop: 2 }} />
                     <Text style={styles.metaText} numberOfLines={2}>{item.meetingAddress || "Location not recorded"}</Text>
                   </View>
+
+                  {selfieUri && (
+                    <TouchableOpacity
+                      style={styles.meetingSelfieBannerRow}
+                      onPress={() => setPreviewPhotoUrl(selfieUri)}
+                      activeOpacity={0.85}
+                    >
+                      <Image source={{ uri: selfieUri }} style={styles.meetingSelfieInline} />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.meetingSelfieLabel}>Visit Selfie Verified</Text>
+                        <Text style={styles.meetingSelfieSub}>Tap to view full photo</Text>
+                      </View>
+                      <Eye size={15} color="#0f766e" />
+                    </TouchableOpacity>
+                  )}
 
                   {item.meetingNotes ? (
                     <View style={styles.notesBlock}>
@@ -573,6 +601,31 @@ export default function MeetingsScreen() {
             </ScrollView>
           </Surface>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Full Photo Preview Modal */}
+      <Modal
+        visible={!!previewPhotoUrl}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPreviewPhotoUrl(null)}
+      >
+        <View style={styles.previewOverlay}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setPreviewPhotoUrl(null)}
+            activeOpacity={0.8}
+          >
+            <X size={22} color="#ffffff" />
+          </TouchableOpacity>
+          {previewPhotoUrl && (
+            <Image
+              source={{ uri: previewPhotoUrl }}
+              style={styles.previewFullImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
       </Modal>
     </View>
   );
@@ -980,5 +1033,65 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     fontWeight: 'bold',
+  },
+  meetingSelfieThumbWrap: {
+    marginRight: 10,
+  },
+  meetingSelfieThumb: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#e2e8f0',
+    borderWidth: 1.5,
+    borderColor: '#0f766e',
+  },
+  meetingSelfieBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdfa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+    padding: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  meetingSelfieInline: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: '#e2e8f0',
+  },
+  meetingSelfieLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0f766e',
+  },
+  meetingSelfieSub: {
+    fontSize: 10.5,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewCloseBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 48 : 24,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewFullImage: {
+    width: '90%',
+    height: '75%',
   },
 });
