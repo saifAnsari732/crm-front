@@ -37,7 +37,7 @@ export function getInstalledVersion() {
   return (
     Constants.expoConfig?.version ||
     Constants.manifest2?.extra?.expoClient?.version ||
-    '1.0.39'
+    '1.0.41'
   );
 }
 
