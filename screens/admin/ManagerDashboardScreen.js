@@ -715,17 +715,17 @@ export default function ManagerDashboardScreen() {
               const calculatedSpeedKmh = (distFromLastM / 1000) / (timeDiffSecs / 3600);
               const effectiveSpeedKmh = Math.max(rawSpeedKmh, calculatedSpeedKmh);
 
-              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (30m - 50m bubble):
-              // Covers indoor multipath reflection scatter ellipse so stationary phones never register movement
+              // 🎯 ADAPTIVE STATIONARY CENTROID GEOFENCE (12m - 25m bubble):
+              // Covers indoor multipath reflection scatter ellipse so stationary phones never register fake movement
               const gpsAcc = Number.isFinite(acc) && acc > 0 ? acc : 25;
-              const anchorThresholdM = Math.max(30.0, Math.min(50.0, gpsAcc * 1.0));
+              const anchorThresholdM = Math.max(12.0, Math.min(25.0, gpsAcc * 0.6));
 
               if (!isMovingRef.current) {
                 // ── SCENARIO A: Currently STATIONARY (Inside Office, At Desk, Sitting) ──
                 const isInsideAnchor = distFromAnchorM < anchorThresholdM;
-                const isStationarySpeed = effectiveSpeedKmh < 4.5;
+                const isStationarySpeed = effectiveSpeedKmh < 1.0;
 
-                if (isInsideAnchor || isStationarySpeed) {
+                if (isInsideAnchor && isStationarySpeed) {
                   // Confirmed STATIONARY: Strictly 0 KM, 0 km/h displayed
                   departureCandidateCountRef.current = 0;
                   isMovingRef.current = false;
@@ -739,22 +739,21 @@ export default function ManagerDashboardScreen() {
                     lng: 0.98 * stationaryAnchorRef.current.lng + 0.02 * lng,
                   };
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
-                } else {
-                  // Candidate departure detected outside anchor bubble (> 30-50m) with travel speed >= 4.5 km/h
-                  // Require 2 consecutive confirmations to prevent a single satellite multipath bounce from triggering false departure
+                } else if ((distFromAnchorM >= 12.0 && effectiveSpeedKmh >= 1.2) || distFromAnchorM >= 20.0) {
+                  // Candidate departure detected outside anchor bubble or with legitimate walking speed >= 1.2 km/h
                   departureCandidateCountRef.current += 1;
-                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 55) {
+                  if (departureCandidateCountRef.current < 2 && distFromAnchorM < 18.0 && effectiveSpeedKmh < 2.0) {
                     isMovingRef.current = false;
                     setIsMoving(false);
                     setMotionStatusLabel('STATIONARY');
                     setManagerSpeed('0');
                   } else {
-                    // Confirmed physical departure! Manager has left the office and is traveling on road
+                    // Confirmed physical departure! Manager has left the spot and is traveling on road/foot
                     departureCandidateCountRef.current = 0;
                     isMovingRef.current = true;
                     setIsMoving(true);
                     setMotionStatusLabel('MOVING');
-                    setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
+                    setManagerSpeed(Math.round(Math.max(1, effectiveSpeedKmh)).toString());
 
                     lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                     stationaryAnchorRef.current = { lat, lng };
@@ -762,8 +761,8 @@ export default function ManagerDashboardScreen() {
                 }
               } else {
                 // ── SCENARIO B: Currently MOVING (Traveling on road/path) ──
-                // Check if manager came to a stop (traffic light, client visit, parked, entered office)
-                const hasHalted = effectiveSpeedKmh < 2.0 || (distFromLastM < 6.0 && effectiveSpeedKmh < 3.5);
+                // Check if manager came to an extended halt (> 90s without displacement)
+                const hasHalted = effectiveSpeedKmh < 0.8 && distFromLastM < 3.0 && timeDiffSecs > 90;
                 if (hasHalted) {
                   departureCandidateCountRef.current = 0;
                   isMovingRef.current = false;
@@ -778,7 +777,7 @@ export default function ManagerDashboardScreen() {
                   isMovingRef.current = true;
                   setIsMoving(true);
                   setMotionStatusLabel('MOVING');
-                  setManagerSpeed(Math.round(effectiveSpeedKmh).toString());
+                  setManagerSpeed(Math.round(Math.max(1, effectiveSpeedKmh)).toString());
 
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: position.timestamp };
                   stationaryAnchorRef.current = { lat, lng };
@@ -961,7 +960,18 @@ export default function ManagerDashboardScreen() {
     );
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
+    const distNum = Number(
+      liveLoc?.officialDistance ??
+      liveLoc?.totalDistanceToday ??
+      liveLoc?.todayKm ??
+      liveLoc?.totalDistance ??
+      attRec?.officialDistance ??
+      attRec?.totalDistanceTraveled ??
+      emp.todayKm ??
+      emp.totalDistanceToday ??
+      emp.totalDistance ??
+      0
+    );
 
     const empCode = emp.employeeId || (empId.length > 8 ? 'EMP-' + empId.slice(-6).toUpperCase() : '');
     const designation = emp.designation || emp.role || 'Field Executive';
@@ -1006,10 +1016,23 @@ export default function ManagerDashboardScreen() {
     ['present', 'late', 'half-day'].includes((r.status || '').toLowerCase()) || r.checkIn
   ).length;
   const activeLive = liveLocations.filter((l) => l.isActive === true && l.manuallyStopped !== true && l.autoClosed !== true).length;
-  const teamTodayKm = liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistance) || 0), 0);
+  const teamTodayKm = Math.max(
+    directoryStaff.reduce((sum, e) => sum + (Number(e.todayKm) || 0), 0),
+    liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistanceToday || l.todayKm || l.totalDistance) || 0), 0)
+  );
   
   const myLiveLoc = liveLocations.find((l) => String(l.employeeId?._id || l.employeeId || '') === String(user?._id || ''));
-  const myTodayKmVal = isTracking ? (Number(localKmState) || Number(myLiveLoc?.officialDistance) || Number(myLiveLoc?.totalDistance) || 0).toFixed(2) : (Number(myLiveLoc?.officialDistance) || Number(myLiveLoc?.totalDistance) || Number(managerKm) || 0).toFixed(2);
+  const myAttRec = attendanceRecords.find((a) => String(a.employee?._id || a.employee || '') === String(user?._id || ''));
+  const myTodayKmVal = (
+    (isTracking ? Number(localKmState) : 0) ||
+    Number(myLiveLoc?.officialDistance) ||
+    Number(myLiveLoc?.totalDistance) ||
+    Number(myLiveLoc?.todayKm) ||
+    Number(myAttRec?.officialDistance) ||
+    Number(myAttRec?.totalDistanceTraveled) ||
+    Number(managerKm) ||
+    0
+  ).toFixed(2);
 
   const leaveCount = pendingLeaves.filter((l) => (l.status || '').toLowerCase() === 'pending').length;
   const expenseCount = pendingExpenses.filter((e) => (e.status || '').toLowerCase() === 'pending').length;
@@ -1166,23 +1189,6 @@ export default function ManagerDashboardScreen() {
             </Text>
           </View>
 
-          {/* Dynamic Motion State Live Banner (Manager Side) */}
-          {isTracking && (
-            <View style={[styles.motionStateBanner, { backgroundColor: isMoving ? '#dcfce7' : '#f1f5f9', borderColor: isMoving ? '#bbf7d0' : '#e2e8f0' }]}>
-              <View style={[styles.motionStateDot, { backgroundColor: isMoving ? '#16a34a' : '#64748b' }]} />
-              <Text style={[styles.motionStateText, { color: isMoving ? '#15803d' : '#475569' }]}>
-                {isMoving ? `🟢 MOVING — Travel Recording Active (${managerSpeed} km/h)` : '⏸️ STATIONARY — 0 KM Added (At Spot)'}
-              </Text>
-            </View>
-          )}
-
-          {isTracking && managerAddress ? (
-            <View style={styles.managerAddressRow}>
-              <MapPin size={12} color={COLORS.primary} />
-              <Text style={styles.managerAddressText} numberOfLines={1}>{managerAddress}</Text>
-            </View>
-          ) : null}
-
           {/* Main CTA Button */}
           <TouchableOpacity
             style={[styles.punchCtaBtn, isTracking && styles.punchCtaBtnStop]}
@@ -1235,7 +1241,16 @@ export default function ManagerDashboardScreen() {
           {/* Header Row: Team size + Avatar Pile + Manage Team Link */}
           <View style={styles.teamCardHeaderRow}>
             <View style={styles.teamHeaderLeft}>
-              <Text style={styles.teamHeaderTitle}>Team Pulse</Text>
+              <View style={styles.teamPulseIconBadge}>
+                <Users size={15} color="#4F46E5" />
+              </View>
+              <View>
+                <Text style={styles.teamHeaderTitle}>Team Pulse</Text>
+                <Text style={styles.teamHeaderSubtitle}>Live workforce & field activity</Text>
+              </View>
+            </View>
+
+            <View style={styles.teamHeaderRight}>
               {/* Avatar Pile */}
               <View style={styles.avatarPile}>
                 {directoryStaff.slice(0, 3).map((emp, idx) => (
@@ -1268,61 +1283,108 @@ export default function ManagerDashboardScreen() {
                   </View>
                 )}
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.teamManageLink}
-              onPress={() => router.push('/(admin)/team')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.teamManageLinkText}>Manage ({totalTeam})</Text>
-              <ArrowRight size={13} color={COLORS.primary} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.teamManageLink}
+                onPress={() => router.push('/(admin)/team')}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.teamManageLinkText}>Manage ({totalTeam})</Text>
+                <ArrowRight size={12} color="#4F46E5" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* 2x2 Clean KPI Grid */}
           <View style={styles.teamKpiGrid}>
             {/* KPI 1: Present Today */}
-            <View style={styles.teamKpiBox}>
-              <Text style={styles.teamKpiLabel}>Present Today</Text>
-              <View style={styles.teamKpiValRow}>
-                <Text style={styles.teamKpiVal}>{realPresentCount}/{totalTeam}</Text>
+            <TouchableOpacity
+              style={styles.teamKpiBox}
+              activeOpacity={0.8}
+              onPress={() => router.push('/(admin)/attendance')}
+            >
+              <View style={styles.teamKpiTopRow}>
+                <Text style={styles.teamKpiLabel}>Present Today</Text>
+                <View style={[styles.teamKpiIconBadge, { backgroundColor: '#ECFDF5' }]}>
+                  <UserCheck size={13} color="#059669" />
+                </View>
               </View>
-              <Text style={styles.teamKpiSub}>
-                ↑ {totalTeam > 0 ? Math.round((realPresentCount / totalTeam) * 100) : 0}% attended
-              </Text>
-            </View>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{realPresentCount}</Text>
+                <Text style={styles.teamKpiTotalUnit}>/ {totalTeam}</Text>
+              </View>
+              <View style={[styles.teamKpiBadgePill, { backgroundColor: '#ECFDF5' }]}>
+                <Text style={[styles.teamKpiSub, { color: '#059669' }]}>
+                  ↑ {totalTeam > 0 ? Math.round((realPresentCount / totalTeam) * 100) : 0}% attended
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* KPI 2: Active On Field */}
-            <View style={styles.teamKpiBox}>
-              <Text style={styles.teamKpiLabel}>Active On Field</Text>
+            <TouchableOpacity
+              style={styles.teamKpiBox}
+              activeOpacity={0.8}
+              onPress={() => router.push('/(admin)/tracking')}
+            >
+              <View style={styles.teamKpiTopRow}>
+                <Text style={styles.teamKpiLabel}>Active On Field</Text>
+                <View style={[styles.teamKpiIconBadge, { backgroundColor: '#F0F9FF' }]}>
+                  <Activity size={13} color="#0284C7" />
+                </View>
+              </View>
               <View style={styles.teamKpiValRow}>
                 <Text style={styles.teamKpiVal}>{activeLive}</Text>
-                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Staff</Text>
+                <Text style={styles.teamKpiTotalUnit}>Staff</Text>
               </View>
-              <Text style={[styles.teamKpiSub, { color: activeLive > 0 ? '#0284C7' : '#64748b' }]}>
-                {activeLive > 0 ? '● Live on duty' : '○ None active'}
-              </Text>
-            </View>
+              <View style={[styles.teamKpiBadgePill, { backgroundColor: activeLive > 0 ? '#F0F9FF' : '#F1F5F9' }]}>
+                <View style={[styles.kpiLiveDot, { backgroundColor: activeLive > 0 ? '#0284C7' : '#94A3B8' }]} />
+                <Text style={[styles.teamKpiSub, { color: activeLive > 0 ? '#0284C7' : '#64748B' }]}>
+                  {activeLive > 0 ? 'Live on duty' : 'None active'}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* KPI 3: Team Travel */}
-            <View style={styles.teamKpiBox}>
-              <Text style={styles.teamKpiLabel}>Team Travel</Text>
+            <TouchableOpacity
+              style={styles.teamKpiBox}
+              activeOpacity={0.8}
+              onPress={() => router.push('/(admin)/history')}
+            >
+              <View style={styles.teamKpiTopRow}>
+                <Text style={styles.teamKpiLabel}>Team Travel</Text>
+                <View style={[styles.teamKpiIconBadge, { backgroundColor: '#EEF2FF' }]}>
+                  <Navigation size={13} color="#4F46E5" />
+                </View>
+              </View>
               <View style={styles.teamKpiValRow}>
                 <Text style={styles.teamKpiVal}>{teamTodayKm.toFixed(1)}</Text>
-                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>KM</Text>
+                <Text style={styles.teamKpiTotalUnit}>KM</Text>
               </View>
-              <Text style={styles.teamKpiSub}>Total logged today</Text>
-            </View>
+              <View style={[styles.teamKpiBadgePill, { backgroundColor: '#EEF2FF' }]}>
+                <Text style={[styles.teamKpiSub, { color: '#4F46E5' }]}>Total logged today</Text>
+              </View>
+            </TouchableOpacity>
 
             {/* KPI 4: Visits Done */}
-            <View style={styles.teamKpiBox}>
-              <Text style={styles.teamKpiLabel}>Visits Done</Text>
-              <View style={styles.teamKpiValRow}>
-                <Text style={styles.teamKpiVal}>{visitsToday}/{visitCount || visitsToday || 0}</Text>
+            <TouchableOpacity
+              style={styles.teamKpiBox}
+              activeOpacity={0.8}
+              onPress={() => router.push('/(admin)/visits')}
+            >
+              <View style={styles.teamKpiTopRow}>
+                <Text style={styles.teamKpiLabel}>Visits Done</Text>
+                <View style={[styles.teamKpiIconBadge, { backgroundColor: '#F5F3FF' }]}>
+                  <Briefcase size={13} color="#7C3AED" />
+                </View>
               </View>
-              <Text style={[styles.teamKpiSub, { color: '#7c3aed' }]}>Client meetings</Text>
-            </View>
+              <View style={styles.teamKpiValRow}>
+                <Text style={styles.teamKpiVal}>{visitsToday}</Text>
+                <Text style={styles.teamKpiTotalUnit}>/ {visitCount || visitsToday || 0}</Text>
+              </View>
+              <View style={[styles.teamKpiBadgePill, { backgroundColor: '#F5F3FF' }]}>
+                <Text style={[styles.teamKpiSub, { color: '#7C3AED' }]}>Client meetings</Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Integrated Visits Progress Bar */}
@@ -1332,10 +1394,13 @@ export default function ManagerDashboardScreen() {
               <Text style={styles.teamVisitsProgressVal}>{visitsToday}/{visitCount || visitsToday || 1} Completed</Text>
             </View>
             <View style={styles.teamVisitsTrack}>
-              <View
+              <LinearGradient
+                colors={['#4F46E5', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
                 style={[
                   styles.teamVisitsFill,
-                  { width: `${Math.min(100, Math.max(8, ((visitsToday || 0) / (visitCount || visitsToday || 1)) * 100))}%` }
+                  { width: `${Math.min(100, Math.max(6, ((visitsToday || 0) / (visitCount || visitsToday || 1)) * 100))}%` }
                 ]}
               />
             </View>
@@ -1345,15 +1410,28 @@ export default function ManagerDashboardScreen() {
         {/* ── SECTION 3: ATTENTION ALERT BANNER (Only when action required) ── */}
         {(leaveCount > 0 || expenseCount > 0 || latePunchinsCount > 0) && (
           <Surface style={[styles.attentionAlertCard, cardShadow]} elevation={1}>
-            <View style={styles.attentionAlertLeft}>
-              <AlertCircle size={16} color="#d97706" />
-              <Text style={styles.attentionAlertText} numberOfLines={1}>
-                Action Required: {[
-                  leaveCount > 0 && `${leaveCount} Leave${leaveCount > 1 ? 's' : ''}`,
-                  expenseCount > 0 && `${expenseCount} Expense${expenseCount > 1 ? 's' : ''}`,
-                  latePunchinsCount > 0 && `${latePunchinsCount} Late`
-                ].filter(Boolean).join(' • ')}
-              </Text>
+            <View style={styles.attentionAlertIconWrap}>
+              <AlertCircle size={17} color="#D97706" />
+            </View>
+            <View style={styles.attentionAlertCenter}>
+              <Text style={styles.attentionAlertTitle}>Action Required</Text>
+              <View style={styles.attentionPillsRow}>
+                {leaveCount > 0 && (
+                  <View style={styles.attentionCountPill}>
+                    <Text style={styles.attentionCountPillText}>{leaveCount} Leave{leaveCount > 1 ? 's' : ''}</Text>
+                  </View>
+                )}
+                {expenseCount > 0 && (
+                  <View style={styles.attentionCountPill}>
+                    <Text style={styles.attentionCountPillText}>{expenseCount} Expense{expenseCount > 1 ? 's' : ''}</Text>
+                  </View>
+                )}
+                {latePunchinsCount > 0 && (
+                  <View style={styles.attentionCountPill}>
+                    <Text style={styles.attentionCountPillText}>{latePunchinsCount} Late</Text>
+                  </View>
+                )}
+              </View>
             </View>
             <TouchableOpacity
               style={styles.attentionAlertBtn}
@@ -1364,7 +1442,8 @@ export default function ManagerDashboardScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.attentionAlertBtnText}>Review →</Text>
+              <Text style={styles.attentionAlertBtnText}>Review</Text>
+              <ArrowRight size={12} color="#92400E" />
             </TouchableOpacity>
           </Surface>
         )}
@@ -1498,22 +1577,22 @@ export default function ManagerDashboardScreen() {
         </Surface>
 
         {/* ── ALL TEAM MEMBERS DIRECTORY (CLEAN ENTERPRISE CARDS) ── */}
-        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90, paddingHorizontal: 14, paddingVertical: 16 }]} elevation={1}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Surface style={[styles.sectionCard, cardShadow, { marginBottom: 90, paddingHorizontal: 16, paddingVertical: 18, borderRadius: 22 }]} elevation={1}>
+          <View style={styles.teamDirHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
               <View style={styles.teamHeaderIconBox}>
-                <Users size={17} color={COLORS.primary} />
+                <Users size={16} color="#4F46E5" />
               </View>
-              <View>
-                <Text style={styles.sectionTitle}>My Team Members</Text>
-                <Text style={styles.sectionSubtitle}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle} numberOfLines={1}>My Team Members</Text>
+                <Text style={styles.sectionSubtitle} numberOfLines={1}>
                   {directoryStaff.length} Field Executives Assigned
                 </Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => router.push('/(admin)/team')} activeOpacity={0.7} style={styles.viewLinkRow}>
-              <Text style={styles.viewLinkText}>Manage Team</Text>
-              <ArrowRight size={13} color={COLORS.primary} />
+            <TouchableOpacity onPress={() => router.push('/(admin)/team')} activeOpacity={0.75} style={styles.teamManageLink}>
+              <Text style={styles.teamManageLinkText}>Manage</Text>
+              <ArrowRight size={12} color="#4F46E5" />
             </TouchableOpacity>
           </View>
 
@@ -1531,6 +1610,7 @@ export default function ManagerDashboardScreen() {
                 const isStationary = isLive && !isMoving;
                 const kmDisplay = (parseFloat(emp.todayKm) || 0).toFixed(2);
                 const avatarBg = isMoving ? '#0F766E' : isStationary ? '#334155' : '#64748B';
+                const checkInVal = (!emp.punchInTime || emp.punchInTime === 'Not Punched') ? 'Not In' : emp.punchInTime;
 
                 return (
                   <Surface
@@ -1555,7 +1635,7 @@ export default function ManagerDashboardScreen() {
                       </View>
 
                       <View style={{ flex: 1, marginLeft: 12 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                           <Text style={styles.teamMemberName} numberOfLines={1}>{emp.name}</Text>
                           {/* Live Status Pill */}
                           {isMoving ? (
@@ -1588,97 +1668,95 @@ export default function ManagerDashboardScreen() {
                       </View>
                     </View>
 
-                    {/* Middle Row: Clean Structured Metrics Strip (Distance, Punch-in, Speed) */}
+                    {/* Middle Row: 3-Column Non-Overlapping Metrics Strip (Travel, Check-In, Live Speed) */}
                     <View style={styles.teamMemberMetricsStrip}>
                       {/* Metric 1: Distance */}
                       <View style={styles.teamMetricItem}>
-                        <View style={[styles.teamMetricIconBox, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                          <Route size={13} color="#0F766E" />
+                        <View style={styles.teamMetricTopLine}>
+                          <Route size={12} color="#0F766E" />
+                          <Text style={styles.teamMetricLabel}>TRAVEL</Text>
                         </View>
-                        <View>
-                          <Text style={styles.teamMetricValue}>{kmDisplay} KM</Text>
-                          <Text style={styles.teamMetricLabel}>Travel</Text>
-                        </View>
+                        <Text style={[styles.teamMetricValue, { color: '#0F766E' }]} numberOfLines={1}>
+                          {kmDisplay} KM
+                        </Text>
                       </View>
 
-                      {/* Divider */}
                       <View style={styles.teamMetricDivider} />
 
                       {/* Metric 2: Punch-in Time */}
                       <View style={styles.teamMetricItem}>
-                        <View style={[styles.teamMetricIconBox, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                          <Clock size={13} color="#475569" />
+                        <View style={styles.teamMetricTopLine}>
+                          <Clock size={12} color="#475569" />
+                          <Text style={styles.teamMetricLabel}>CHECK-IN</Text>
                         </View>
-                        <View>
-                          <Text style={styles.teamMetricValue}>{emp.punchInTime || '—'}</Text>
-                          <Text style={styles.teamMetricLabel}>Check-In</Text>
-                        </View>
+                        <Text style={styles.teamMetricValue} numberOfLines={1}>
+                          {checkInVal}
+                        </Text>
                       </View>
 
-                      {/* Divider */}
                       <View style={styles.teamMetricDivider} />
 
                       {/* Metric 3: Speed / Motion */}
                       <View style={styles.teamMetricItem}>
-                        <View style={[styles.teamMetricIconBox, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                          <Activity size={13} color={isMoving ? '#0F766E' : '#64748B'} />
+                        <View style={styles.teamMetricTopLine}>
+                          <Activity size={12} color={isMoving ? '#059669' : '#64748B'} />
+                          <Text style={styles.teamMetricLabel}>SPEED</Text>
                         </View>
-                        <View>
-                          <Text style={styles.teamMetricValue}>
-                            {isMoving ? `${Math.round(emp.speed || 0)} km/h` : isStationary ? '0 km/h' : '—'}
-                          </Text>
-                          <Text style={styles.teamMetricLabel}>Live Speed</Text>
-                        </View>
+                        <Text style={[styles.teamMetricValue, isMoving && { color: '#059669' }]} numberOfLines={1}>
+                          {isMoving ? `${Math.round(emp.speed || 0)} km/h` : isStationary ? '0 km/h' : '—'}
+                        </Text>
                       </View>
                     </View>
 
                     {/* Location Bar */}
                     <View style={styles.teamMemberLocationBar}>
-                      <MapPin size={12} color="#64748b" style={{ marginTop: 2, marginRight: 5, flexShrink: 0 }} />
+                      <MapPin size={12} color="#64748B" style={{ marginRight: 6, flexShrink: 0 }} />
                       <Text style={styles.teamMemberLocationText} numberOfLines={1}>
-                        {emp.currentAddress || 'Location pending'}
+                        {emp.currentAddress || 'Offline / Idle'}
                       </Text>
                       {emp.lastPingTime && emp.lastPingTime !== '—' && (
-                        <Text style={styles.teamMemberPingTime}>
-                          • {emp.lastPingTime}
-                        </Text>
+                        <View style={styles.pingTimeBadge}>
+                          <Text style={styles.teamMemberPingTime}>
+                            {emp.lastPingTime}
+                          </Text>
+                        </View>
                       )}
                     </View>
 
-                    {/* Bottom Action Row: Call, WhatsApp, Track Live */}
+                    {/* Bottom Action Row: Single-Line Proportional Call, Message, Track Route */}
                     <View style={styles.teamMemberActionsRow}>
                       {emp.phone ? (
                         <TouchableOpacity
-                          style={[styles.teamActionBtnCall, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                          style={styles.teamActionBtnSecondary}
                           onPress={() => Linking.openURL(`tel:${emp.phone}`)}
                           activeOpacity={0.8}
                         >
                           <Phone size={13} color="#334155" />
-                          <Text style={[styles.teamActionBtnCallText, { color: '#334155' }]}>Call</Text>
+                          <Text style={styles.teamActionBtnSecondaryText} numberOfLines={1}>Call</Text>
                         </TouchableOpacity>
                       ) : null}
 
                       {emp.phone ? (
                         <TouchableOpacity
-                          style={[styles.teamActionBtnWhatsApp, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}
+                          style={styles.teamActionBtnSecondary}
                           onPress={() => {
                             const cleanPhone = String(emp.phone).replace(/[^0-9]/g, '');
                             Linking.openURL(`whatsapp://send?phone=${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}`);
                           }}
                           activeOpacity={0.8}
                         >
-                          <MessageCircle size={13} color="#334155" />
-                          <Text style={[styles.teamActionBtnWhatsAppText, { color: '#334155' }]}>Message</Text>
+                          <MessageCircle size={13} color="#059669" />
+                          <Text style={styles.teamActionBtnSecondaryText} numberOfLines={1}>Chat</Text>
                         </TouchableOpacity>
                       ) : null}
 
                       <TouchableOpacity
                         style={styles.teamActionBtnTrack}
                         onPress={() => router.push(`/(admin)/tracking?employeeId=${emp._id}`)}
-                        activeOpacity={0.8}
+                        activeOpacity={0.85}
                       >
                         <Navigation size={13} color="#ffffff" />
-                        <Text style={styles.teamActionBtnTrackText}>Track Route</Text>
+                        <Text style={styles.teamActionBtnTrackText} numberOfLines={1}>Track Route</Text>
                         <ChevronRight size={13} color="#ffffff" />
                       </TouchableOpacity>
                     </View>
@@ -2069,38 +2147,70 @@ const styles = StyleSheet.create({
   // ── CONSOLIDATED TEAM PULSE CARD ──
   cleanTeamCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 22,
+    padding: 18,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E2E8F0',
   },
   teamCardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   teamHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
+  teamPulseIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   teamHeaderTitle: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '800',
-    color: '#0f172a',
+    color: '#0F172A',
     fontFamily: FONT,
+    letterSpacing: -0.2,
+  },
+  teamHeaderSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748B',
+    fontFamily: FONT,
+    marginTop: 1,
+  },
+  teamHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   teamManageLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
   },
   teamManageLinkText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: '#4F46E5',
     fontFamily: FONT,
   },
   teamKpiGrid: {
@@ -2110,72 +2220,104 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   teamKpiBox: {
-    width: '48%',
-    backgroundColor: '#f8fafc',
-    borderRadius: 14,
-    padding: 12,
+    width: '48.2%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 13,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: '#E2E8F0',
   },
-  teamKpiLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748b',
-    fontFamily: FONT,
-  },
-  teamKpiValRow: {
+  teamKpiTopRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginTop: 4,
-  },
-  teamKpiVal: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    fontFamily: FONT,
-  },
-  teamKpiSub: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    color: '#059669',
-    fontFamily: FONT,
-    marginTop: 2,
-  },
-  teamVisitsProgressWrap: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  teamVisitsProgressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
-  teamVisitsProgressTitle: {
+  teamKpiIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamKpiLabel: {
     fontSize: 11.5,
     fontWeight: '700',
     color: '#475569',
     fontFamily: FONT,
   },
-  teamVisitsProgressVal: {
-    fontSize: 11.5,
+  teamKpiValRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginBottom: 8,
+  },
+  teamKpiVal: {
+    fontSize: 21,
     fontWeight: '800',
-    color: '#0f172a',
+    color: '#0F172A',
+    fontFamily: FONT,
+    letterSpacing: -0.4,
+  },
+  teamKpiTotalUnit: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#64748B',
+    fontFamily: FONT,
+  },
+  teamKpiBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 8,
+    gap: 5,
+  },
+  kpiLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  teamKpiSub: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#059669',
+    fontFamily: FONT,
+  },
+  teamVisitsProgressWrap: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  teamVisitsProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  teamVisitsProgressTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    fontFamily: FONT,
+  },
+  teamVisitsProgressVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   teamVisitsTrack: {
-    height: 6,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 3,
+    height: 7,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
     overflow: 'hidden',
   },
   teamVisitsFill: {
     height: '100%',
-    backgroundColor: '#059669',
-    borderRadius: 3,
+    borderRadius: 4,
   },
 
   // ── ATTENTION ALERT CARD ──
@@ -2183,40 +2325,69 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fffbeb',
-    borderRadius: 14,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: '#FDE68A',
+    gap: 10,
   },
-  attentionAlertLeft: {
-    flexDirection: 'row',
+  attentionAlertIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    marginRight: 8,
+    justifyContent: 'center',
   },
-  attentionAlertText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#b45309',
-    fontFamily: FONT,
+  attentionAlertCenter: {
     flex: 1,
+  },
+  attentionAlertTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#92400E',
+    fontFamily: FONT,
+    marginBottom: 4,
+  },
+  attentionPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  attentionCountPill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  attentionCountPillText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#B45309',
+    fontFamily: FONT,
   },
   attentionAlertBtn: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: '#FCD34D',
   },
   attentionAlertBtnText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '800',
-    color: '#92400e',
+    color: '#92400E',
     fontFamily: FONT,
   },
 
@@ -2964,17 +3135,28 @@ const styles = StyleSheet.create({
   },
 
   // ── STRUCTURED TEAM MEMBER CARDS (UI/UX PRO MAX) ──
+  teamDirHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
   teamHeaderIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#f0fdfa',
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sectionSubtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: '500',
     fontFamily: FONT,
     marginTop: 1,
@@ -2993,12 +3175,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     fontWeight: '700',
-    color: '#64748b',
+    color: '#64748B',
     fontFamily: FONT,
   },
   teamEmptySub: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#94A3B8',
     marginTop: 2,
     fontFamily: FONT,
   },
@@ -3007,11 +3189,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   teamMemberCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 15,
     borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.8)',
+    borderColor: '#E2E8F0',
   },
   teamMemberTopRow: {
     flexDirection: 'row',
@@ -3021,20 +3203,20 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   teamMemberAvatarImg: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#e2e8f0',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#E2E8F0',
   },
   teamMemberAvatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
   },
   teamMemberAvatarText: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
     fontFamily: FONT,
@@ -3047,27 +3229,28 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: '#FFFFFF',
   },
   teamMemberName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#0f172a',
+    color: '#0F172A',
     fontFamily: FONT,
     flex: 1,
-    marginRight: 8,
   },
   teamMemberSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 3,
+    marginTop: 4,
   },
   empCodeBadge: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   empCodeBadgeText: {
     fontSize: 10,
@@ -3076,8 +3259,8 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   teamMemberRoleText: {
-    fontSize: 11,
-    color: '#64748b',
+    fontSize: 11.5,
+    color: '#64748B',
     fontWeight: '500',
     fontFamily: FONT,
     flex: 1,
@@ -3085,12 +3268,12 @@ const styles = StyleSheet.create({
   statusPillMoving: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: '#A7F3D0',
     gap: 4,
   },
   pulseDotGreen: {
@@ -3108,143 +3291,136 @@ const styles = StyleSheet.create({
   statusPillStationary: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: '#FDE68A',
     gap: 4,
   },
   dotAmber: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#d97706',
+    backgroundColor: '#D97706',
   },
   statusPillStationaryText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#d97706',
+    color: '#D97706',
     fontFamily: FONT,
   },
   statusPillOffline: {
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E2E8F0',
   },
   statusPillOfflineText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#94a3b8',
+    color: '#64748B',
     fontFamily: FONT,
   },
   teamMemberMetricsStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginTop: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: '#E2E8F0',
   },
   teamMetricItem: {
     flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  teamMetricTopLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-  },
-  teamMetricIconBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: '#ecfdf5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    gap: 4,
+    marginBottom: 3,
   },
   teamMetricValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
-    color: '#0f172a',
+    color: '#0F172A',
     fontFamily: FONT,
   },
   teamMetricLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#94a3b8',
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#64748B',
     fontFamily: FONT,
-    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   teamMetricDivider: {
     width: 1,
-    height: 22,
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 4,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 6,
   },
   teamMemberLocationBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 9,
-    paddingHorizontal: 2,
+    marginTop: 10,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
   },
   teamMemberLocationText: {
-    fontSize: 11,
+    fontSize: 11.5,
     color: '#475569',
+    fontWeight: '500',
     fontFamily: FONT,
     flex: 1,
   },
+  pingTimeBadge: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
   teamMemberPingTime: {
     fontSize: 10,
-    color: '#94a3b8',
+    fontWeight: '700',
+    color: '#475569',
     fontFamily: FONT,
-    marginLeft: 4,
   },
   teamMemberActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: '#F1F5F9',
   },
-  teamActionBtnCall: {
+  teamActionBtnSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0f9ff',
-    paddingVertical: 6,
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: '#E2E8F0',
   },
-  teamActionBtnCallText: {
-    fontSize: 11,
+  teamActionBtnSecondaryText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#0284c7',
-    fontFamily: FONT,
-  },
-  teamActionBtnWhatsApp: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0fdf4',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  teamActionBtnWhatsAppText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#16a34a',
+    color: '#334155',
     fontFamily: FONT,
   },
   teamActionBtnTrack: {
@@ -3252,16 +3428,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    backgroundColor: '#0f766e',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    gap: 6,
+    backgroundColor: '#0F766E',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
   },
   teamActionBtnTrackText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontFamily: FONT,
   },
 
