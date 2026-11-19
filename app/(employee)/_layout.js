@@ -67,14 +67,17 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
             <Pressable
               key={item.key}
               onPress={() => {
-                const event = navigation.emit({
-                  type: "tabPress",
-                  target: state.routes.find(r => r.name === item.name)?.key || item.key,
-                  canPreventDefault: true,
-                });
-                if (!event.defaultPrevented) {
-                  router.push(item.route);
+                if (navigation && typeof navigation.emit === "function") {
+                  const event = navigation.emit({
+                    type: "tabPress",
+                    target: state?.routes?.find(r => r.name === item.name)?.key || item.key,
+                    canPreventDefault: true,
+                  });
+                  if (event?.defaultPrevented) {
+                    return;
+                  }
                 }
+                router.push(item.route);
               }}
               style={styles.tabItemPressable}
             >

@@ -70,22 +70,10 @@ function InitialLayout() {
     }
   }, [isLoading, showSplash]);
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#002020' }}>
-        <ActivityIndicator size="large" color="#008080" />
-      </View>
-    );
-  }
-
   const finishSplash = () => {
     splashCompleted = true;
     setShowSplash(false);
   };
-
-  if (showSplash) {
-    return <AnimatedSplash onFinish={finishSplash} />;
-  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -95,6 +83,18 @@ function InitialLayout() {
         <Stack.Screen name="(employee)" options={{ animation: 'none' }} />
         <Stack.Screen name="(admin)" options={{ animation: 'none' }} />
       </Stack>
+
+      {isLoading && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#002020', zIndex: 9998 }}>
+          <ActivityIndicator size="large" color="#008080" />
+        </View>
+      )}
+
+      {!isLoading && showSplash && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}>
+          <AnimatedSplash onFinish={finishSplash} />
+        </View>
+      )}
     </View>
   );
 }

@@ -17,14 +17,6 @@ export default function AdminLayout() {
     }
   }, [isAdminOrManager, isLoading, router, user]);
 
-  if (isLoading || !isAdminOrManager) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f4f8fb' }}>
-        <ActivityIndicator size="large" color="#0a3d3c" />
-      </View>
-    );
-  }
-
   return (
     <View style={{ flex: 1, backgroundColor: '#f4f8fb' }}>
       <Stack

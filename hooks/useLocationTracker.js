@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { Platform, PermissionsAndroid, DeviceEventEmitter, Alert, AppState, Linking } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, AppState, Linking } from 'react-native';
+import { appEvents } from '../services/eventBus';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import { showCustomAlert } from '../components/GlobalAlert';
@@ -73,7 +74,7 @@ export default function useLocationTracker() {
     const boolVal = Boolean(nextState);
     _globalIsTracking = boolVal;
     setIsTracking(boolVal);
-    DeviceEventEmitter.emit('TrackingStateChanged', boolVal);
+    appEvents.emit('TrackingStateChanged', boolVal);
   };
 
   // Re-sync tracking state immediately whenever screen/tab gains focus
@@ -88,7 +89,7 @@ export default function useLocationTracker() {
             if (_globalIsTracking) {
               _globalIsTracking = false;
               setIsTracking(false);
-              DeviceEventEmitter.emit('TrackingStateChanged', false);
+              appEvents.emit('TrackingStateChanged', false);
             }
             return;
           }
@@ -98,7 +99,7 @@ export default function useLocationTracker() {
           if (active) { startCpuKeepAlive().catch(() => {}); }
           if (_globalIsTracking !== active) {
             _globalIsTracking = active;
-            DeviceEventEmitter.emit('TrackingStateChanged', active);
+            appEvents.emit('TrackingStateChanged', active);
           }
           setIsTracking(active);
 
@@ -118,7 +119,7 @@ export default function useLocationTracker() {
     showBatteryOptimizationDialog();
     
     // Listen for global tracking state changes (syncs across multiple hook instances)
-    const subscription = DeviceEventEmitter.addListener('TrackingStateChanged', (newState) => {
+    const subscription = appEvents.addListener('TrackingStateChanged', (newState) => {
       const boolVal = Boolean(newState);
       _globalIsTracking = boolVal;
       setIsTracking(boolVal);
@@ -170,7 +171,7 @@ export default function useLocationTracker() {
           if (sessionId && sessionId !== 'AUTO_RECOVER_SESSION' && manualOut !== 'true') {
             if (!_globalIsTracking) {
               _globalIsTracking = true;
-              DeviceEventEmitter.emit('TrackingStateChanged', true);
+              appEvents.emit('TrackingStateChanged', true);
             }
             const health = await detectTrackingFailure();
             if (health === 'SERVICE_INTERRUPTED' || health === 'GPS_STALE') {
@@ -270,7 +271,7 @@ export default function useLocationTracker() {
             const todayRes = await trackingApi.getTodaySessions();
             if (todayRes.data?.success && Array.isArray(todayRes.data?.sessions)) {
               const liveTodaySession = todayRes.data.sessions.find(
-                (s) => !s.manuallyStopped
+                (s) => s.isActive && !s.manuallyStopped
               );
               if (liveTodaySession && liveTodaySession.sessionId) {
                 console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
@@ -290,6 +291,13 @@ export default function useLocationTracker() {
                 await storage.setItem('tracking_accumulated_distance', finalDist);
                 activeSession = liveTodaySession.sessionId;
                 syncGlobalTrackingState(true);
+              } else {
+                // No active session on server today: align local storage with server's authoritative today total
+                const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                const srvTodayTotal = Number(todayRes.data?.totalDistanceToday) || 0;
+                await storage.setItem('tracking_accumulated_date', todayKolkata);
+                await storage.setItem('tracking_accumulated_distance', srvTodayTotal.toFixed(2));
+                await storage.removeItem('tracking_accumulated_session_id');
               }
             }
           }
@@ -989,8 +997,12 @@ export default function useLocationTracker() {
       await storage.setItem('isTrackingActive', 'false');
       const sessionId = await storage.getItem('currentTrackingSessionId');
       const savedLocalDistStr = await storage.getItem('tracking_accumulated_distance');
+      const savedDateStr = await storage.getItem('tracking_accumulated_date');
+      const savedSessIdStr = await storage.getItem('tracking_accumulated_session_id');
+      const todayCheckStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const isValidLocalForStop = savedDateStr === todayCheckStr && (!sessionId || !savedSessIdStr || savedSessIdStr === sessionId);
       const savedLastLocationStr = await storage.getItem('last_recorded_location');
-      let savedLocalDist = parseFloat(savedLocalDistStr) || 0;
+      let savedLocalDist = isValidLocalForStop ? (parseFloat(savedLocalDistStr) || 0) : 0;
       
       // Defer purging session keys until final distance is submitted to backend
       
@@ -1079,8 +1091,10 @@ export default function useLocationTracker() {
       try {
         const response = await trackingApi.stopTracking(sessionId, new Date().toISOString(), '', savedLocalDist, true);
         const srvDist = Number(response.data?.totalDistance ?? response.data?.totalDistanceToday ?? 0);
-        // Authoritative resolution: local distance accumulated by user can NEVER decrease upon punch out!
-        totalDistance = Math.max(savedLocalDist, srvDist);
+        // Server returns the authoritative verified road & ledger distance (with 10% road compensation).
+        // If server returned a valid distance > 0, trust the authoritative server settlement;
+        // otherwise fall back to validated local distance.
+        totalDistance = srvDist > 0 ? srvDist : savedLocalDist;
       } catch (netErr) {
         console.log('⚠️ useLocationTracker: Backend unreachable during stop, queueing stop for retry.');
         await enqueueStop(sessionId, new Date().toISOString());

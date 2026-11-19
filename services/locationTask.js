@@ -15,7 +15,8 @@
  *  6. DUPLICATE SUPPRESSION — eventId deduplication prevents replay inflation.
  */
 
-import { Platform, DeviceEventEmitter } from 'react-native';
+import { Platform } from 'react-native';
+import { appEvents } from './eventBus';
 import Constants from 'expo-constants';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
@@ -132,8 +133,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: false };
   }
 
-  // Direct single-step departure when real displacement >= 25m with Doppler speed >= 2.5 km/h, or displacement >= 55m
-  if (((distM >= 25.0 && (reportedSpeedKmh >= 2.5 || (Number.isFinite(calcSpeedKmh) && calcSpeedKmh >= 2.5))) || distM >= 55.0) && accuracyM <= 120) {
+  // Direct single-step departure when real displacement >= 28m with hardware Doppler speed >= 2.8 km/h, or verified displacement >= 65m with good accuracy
+  if (((distM >= 28.0 && reportedSpeedKmh >= 2.8) || (distM >= 65.0 && accuracyM <= 45)) && accuracyM <= 110) {
     console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
     _movementCandidateBuffer = [];
     _isConfirmedMoving = true;
@@ -318,13 +319,14 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, Zero Stationary Drift) ──
-  // When confirmed moving: filter out stationary pause/indoor wobble (< 6.0m OR < 18.0m with speed < 2.5 km/h)
-  const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh);
-  if (distM < 6.0 || (distM < 18.0 && activeStepSpeedKmh < 2.5 && reportedSpeedKmh < 2.5)) {
-    if (rawSecs > 45) {
+  // When confirmed moving: filter out stationary pause/indoor wobble (< 6.0m OR < 18.0m with speed < 2.2 km/h)
+  const stepCalcKmh = (distKm / Math.max(stepSecs, 1)) * 3600;
+  const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh, stepCalcKmh);
+  if (distM < 6.0 || (distM < 18.0 && activeStepSpeedKmh < 2.2 && reportedSpeedKmh < 2.2)) {
+    if (rawSecs > 60) {
       _isConfirmedMoving = false;
     }
-    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 45 };
+    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 60 };
   }
 
   return { valid: true, distKm };
@@ -403,7 +405,7 @@ export async function sendHeartbeatNow(force = false) {
         if (Platform.OS !== 'web' && !isExpoGo) {
           Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
         }
-        DeviceEventEmitter.emit('TrackingStateChanged', false);
+        appEvents.emit('TrackingStateChanged', false);
       } else {
         console.log(`🛡️ [HEARTBEAT_IMMORTAL_SHIELD] Server reported sessionClosed for ${sessionId}, but user NEVER manually punched out! Keeping GPS task ALIVE.`);
       }
@@ -549,8 +551,10 @@ const processLocationUnlocked = async (location) => {
 
     const distFromBgBaseM = distanceMeters(_backgroundBaselineCoord.lat, _backgroundBaselineCoord.lng, latitude, longitude);
 
-    // If ALREADY confirmed moving or screen/Doppler confirms motion, baseline follows current position
-    const isScreenOrDopplerMoving = Boolean(location.coords?.screenMoving) || _isConfirmedMoving || reportedSpeedKmh >= 2.2 || calcStepSpeedKmh >= 2.2;
+    // If ALREADY confirmed moving, or genuine departure occurs (Doppler >= 2.8 km/h AND displaced >= 18m from stationary anchor),
+    // baseline follows current position. Never let an indoor 2.2 km/h GPS Doppler spike (< 18m) prematurely bypass the departure gate!
+    const isGenuineDopplerDeparture = reportedSpeedKmh >= 2.8 && stepFromLastM >= 18.0 && reportedAcc <= 60;
+    const isScreenOrDopplerMoving = _isConfirmedMoving || isGenuineDopplerDeparture;
     if (isScreenOrDopplerMoving) {
       _isConfirmedMoving = true;
       _backgroundBaselineCoord = {
@@ -561,16 +565,16 @@ const processLocationUnlocked = async (location) => {
       };
     } else {
       // 🎯 TRUE INDOOR STATIONARY GEOFENCE (Sitting at desk / home):
-      // Suppress only if tightly within 8m of baseline and speed < 1.5 km/h and step < 3m:
-      const isBgStationarySpot = distFromBgBaseM < 8.0 && reportedSpeedKmh < 1.5 && stepFromLastM < 3.0;
+      // Suppress when within 12m of baseline and speed < 1.8 km/h and step < 10m:
+      const isBgStationarySpot = distFromBgBaseM < 12.0 && reportedSpeedKmh < 1.8 && stepFromLastM < 10.0;
       if (isBgStationarySpot) {
         _currentMotionState = 'STATIONARY';
         _isConfirmedMoving = false;
-        if (distFromBgBaseM < 8.0) {
+        if (distFromBgBaseM < 10.0) {
           _movementCandidateBuffer = [];
         }
-        const storedDistNow = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-        DeviceEventEmitter.emit('LiveDistanceUpdated', {
+        const storedDistNow = await storage.getValidatedTodayDistance(sessionId);
+        appEvents.emit('LiveDistanceUpdated', {
           sessionId,
           totalDistance: storedDistNow,
           stepDistKm: 0,
@@ -587,7 +591,7 @@ const processLocationUnlocked = async (location) => {
 
     // ── STEP 4: BUILD COORDINATE PAYLOAD (STRICTLY PRESERVING RAW HARDWARE DOPPLER SPEED) ──
     const cachedActualAddress = location.coords?.address || (await storage.getItem('last_actual_address')) || '';
-    const storedLocalDist = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+    const storedLocalDist = await storage.getValidatedTodayDistance(sessionId);
     const eventId = `${sessionId}:${timestamp}:${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
 
     let computedMotionState = _isConfirmedMoving ? _currentMotionState : 'STATIONARY';
@@ -692,16 +696,16 @@ const processLocationUnlocked = async (location) => {
             const displaySpeedMps = rawSpeedMps >= 0.8 ? rawSpeedMps : stepSpeedMps;
 
             if (calculatedDistKm > 0) {
-              const currentLocal = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+              const currentLocal = await storage.getValidatedTodayDistance(sessionId);
               // Store 5-decimal precision (1 cm) so sub-10m steps NEVER get distorted by .toFixed(2) rounding!
               const updatedLocalNum = Number((currentLocal + calculatedDistKm).toFixed(5));
-              await storage.setItem('tracking_accumulated_distance', String(updatedLocalNum));
+              await storage.setValidatedTodayDistance(updatedLocalNum, sessionId);
               newCoord.screenDistanceKm = updatedLocalNum;
               newCoord.motionState = displaySpeedMps >= 4.0 ? 'VEHICLE' : 'WALKING';
               newCoord.screenMoving = true;
 
               // Emit immediate local real-time distance event so UI updates instantly
-              DeviceEventEmitter.emit('LiveDistanceUpdated', {
+              appEvents.emit('LiveDistanceUpdated', {
                 sessionId,
                 totalDistance: updatedLocalNum,
                 stepDistKm: calculatedDistKm,
@@ -724,8 +728,8 @@ const processLocationUnlocked = async (location) => {
           } else if (!reanchorOnly && !isRejectedOutlier) {
             // Stationary / unconfirmed step: keep anchor at lastLocation, update status to STATIONARY if not moving
             if (!_isConfirmedMoving) {
-              const currentLocal = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
-              DeviceEventEmitter.emit('LiveDistanceUpdated', {
+              const currentLocal = await storage.getValidatedTodayDistance(sessionId);
+              appEvents.emit('LiveDistanceUpdated', {
                 sessionId,
                 totalDistance: currentLocal,
                 stepDistKm: 0,
@@ -780,8 +784,12 @@ const processLocationUnlocked = async (location) => {
     const nowMs = Date.now();
     const elapsedSinceLastUpload = nowMs - (_lastCoordUploadTs || 0);
 
-    const isDisplacedStep = (lastLocation && distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) >= 8.0) || reportedSpeedKmh >= 1.5;
-    if (calculatedDistKm <= 0 && !isDisplacedStep && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 30000) {
+    // Only upload immediately when a movement step is confirmed (calculatedDistKm > 0),
+    // on initial seed / 30-min re-anchor, or when genuinely moving (displaced >= 18m with Doppler >= 2.5 km/h).
+    // Stationary unconfirmed indoor bounces (< 60s) send a lightweight heartbeat instead of polluting the map trajectory!
+    const isGenuineMovingUpload = _isConfirmedMoving &&
+      ((lastLocation && distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) >= 8.0) || reportedSpeedKmh >= 2.2);
+    if (calculatedDistKm <= 0 && !isGenuineMovingUpload && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 60000) {
       sendHeartbeatNow(false).catch(() => {});
       return;
     }
@@ -831,7 +839,7 @@ const processLocationUnlocked = async (location) => {
             if (Platform.OS !== 'web' && !isExpoGo) {
               Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
             }
-            DeviceEventEmitter.emit('TrackingStateChanged', false);
+            appEvents.emit('TrackingStateChanged', false);
             return;
           }
           console.log(`🛡️ [IMMORTAL_SHIELD] BackgroundTask retained points for ${sessionId} because user did not manually punch out.`);
@@ -883,7 +891,7 @@ const processLocationUnlocked = async (location) => {
         const srvMotionState = response.data?.motionState || newCoord.motionState || 'STATIONARY';
         const isCurrentlyMoving = srvMotionState !== 'STATIONARY' && _isConfirmedMoving;
 
-        DeviceEventEmitter.emit('LiveDistanceUpdated', {
+        appEvents.emit('LiveDistanceUpdated', {
           sessionId,
           totalDistance: finalNum,
           sessionDistance: Number(response.data.sessionDistance ?? response.data.totalDistance ?? finalNum),
@@ -910,7 +918,7 @@ const processLocationUnlocked = async (location) => {
           if (Platform.OS !== 'web' && !isExpoGo) {
             Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
           }
-          DeviceEventEmitter.emit('TrackingStateChanged', false);
+          appEvents.emit('TrackingStateChanged', false);
           return;
         }
         console.log('🛡️ [IMMORTAL_SHIELD] Ignored 409/sessionClosed because user never manually punched out.');

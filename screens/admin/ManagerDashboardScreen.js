@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, RefreshControl, StatusBar,
-  Dimensions, Modal, Linking, Image, Alert, AppState, DeviceEventEmitter
+  Dimensions, Modal, Linking, Image, Alert, AppState
 } from 'react-native';
+import { appEvents } from '../../services/eventBus';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -389,8 +390,9 @@ export default function ManagerDashboardScreen() {
       }
 
       try {
-        const storedDist = await storage.getItem('tracking_accumulated_distance');
-        if (storedDist) setLocalKmState(parseFloat(storedDist).toFixed(2));
+        const activeSid = await storage.getItem('currentTrackingSessionId');
+        const validatedDist = await storage.getValidatedTodayDistance(activeSid || null);
+        if (validatedDist > 0) setLocalKmState(validatedDist.toFixed(2));
       } catch (_) {}
 
       const [empRes, locRes, orgRes, visitRes, attRes, myStatsRes, leavesRes, expRes, tasksRes, leadsRes] = await Promise.all([
@@ -573,9 +575,8 @@ export default function ManagerDashboardScreen() {
           totalDistanceRef.current = 0;
           return;
         }
-        const cachedDist = await storage.getItem('tracking_accumulated_distance');
-        if (cachedDist) {
-          const parsed = parseFloat(cachedDist) || 0.0;
+        const parsed = await storage.getValidatedTodayDistance(sessionId);
+        if (parsed > 0) {
           totalDistanceRef.current = parsed;
           const distStr = parsed.toFixed(2);
           setLocalKmState(distStr);
@@ -629,7 +630,7 @@ export default function ManagerDashboardScreen() {
         syncDistanceWithBackend();
       });
 
-      liveDistSub = DeviceEventEmitter.addListener('LiveDistanceUpdated', (data) => {
+      liveDistSub = appEvents.addListener('LiveDistanceUpdated', (data) => {
         if (!data) return;
         const incomingKm = parseFloat(data.totalDistance);
         if (!isNaN(incomingKm) && incomingKm >= 0) {

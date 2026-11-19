@@ -3,7 +3,55 @@ import { Platform } from 'react-native';
 
 const CHUNK_SIZE = 1500; // Well below Android Keystore's 2048-byte single value limit
 
+// Helper: Get current business date in Asia/Kolkata (YYYY-MM-DD)
+export function getKolkataBusinessDate(dateObj = new Date()) {
+  try {
+    return dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch (_) {
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(dateObj.getTime() + istOffset);
+    return istDate.toISOString().split('T')[0];
+  }
+}
+
 export const storage = {
+  // ── Epoch-Bounded Monotonic Distance State Engine ──────────────────────────
+  // Guarantees that local cached distance is strictly scoped to:
+  // (businessDate, sessionId, isActive). Stale values from past days or closed
+  // sessions can NEVER leak or inflate via Math.max!
+  getValidatedTodayDistance: async (requiredSessionId = null) => {
+    try {
+      const todayStr = getKolkataBusinessDate();
+      const storedDate = await storage.getItem('tracking_accumulated_date');
+      if (!storedDate || storedDate !== todayStr) {
+        return 0;
+      }
+      if (requiredSessionId) {
+        const storedSessionId = await storage.getItem('tracking_accumulated_session_id');
+        if (!storedSessionId || storedSessionId !== requiredSessionId) {
+          return 0;
+        }
+      }
+      const rawDist = await storage.getItem('tracking_accumulated_distance');
+      const parsed = parseFloat(rawDist);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    } catch (_) {
+      return 0;
+    }
+  },
+
+  setValidatedTodayDistance: async (distanceKm, sessionId = null) => {
+    try {
+      const todayStr = getKolkataBusinessDate();
+      const num = Number(distanceKm);
+      const safeDist = Number.isFinite(num) && num >= 0 ? Number(num.toFixed(5)).toString() : '0';
+      await storage.setItem('tracking_accumulated_date', todayStr);
+      if (sessionId) {
+        await storage.setItem('tracking_accumulated_session_id', String(sessionId));
+      }
+      await storage.setItem('tracking_accumulated_distance', safeDist);
+    } catch (_) {}
+  },
   setItem: async (key, value) => {
     try {
       if (Platform.OS === 'web') {

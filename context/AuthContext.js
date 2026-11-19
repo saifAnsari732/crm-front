@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Platform, DeviceEventEmitter } from 'react-native';
+import { Platform } from 'react-native';
+import { appEvents } from '../services/eventBus';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { storage } from '../services/storage';
@@ -39,7 +40,7 @@ async function purgeLocalTrackingState() {
       await Location.stopLocationUpdatesAsync(BACKGROUND_TRACKING_TASK).catch(() => {});
     }
     await Promise.all(TRACKING_STORAGE_KEYS.map((k) => storage.removeItem(k).catch(() => {})));
-    DeviceEventEmitter.emit('TrackingStateChanged', false);
+    appEvents.emit('TrackingStateChanged', false);
   } catch (_) {}
 }
 

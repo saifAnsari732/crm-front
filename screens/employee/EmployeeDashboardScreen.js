@@ -13,8 +13,8 @@ import {
   Image,
   StatusBar,
   Linking,
-  DeviceEventEmitter
 } from "react-native";
+import { appEvents } from "../../services/eventBus";
 import * as ImagePicker from 'expo-image-picker';
 import { Text, Surface } from "react-native-paper";
 import {
@@ -36,6 +36,8 @@ import {
   Radio,
   Building2,
   Car,
+  Square,
+  Power,
 } from "lucide-react-native";
 import useLocationTracker from "../../hooks/useLocationTracker";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -187,15 +189,15 @@ export default function EmployeeDashboardScreen() {
 
   const syncLocalDistance = async () => {
     try {
-      const cachedDist = await storage.getItem('tracking_accumulated_distance');
-      if (cachedDist) {
-        const parsed = parseFloat(cachedDist) || 0;
-        if (parsed > 0) {
-          setStats((prev) => ({
-            ...prev,
-            distanceToday: Math.max(parseFloat(prev?.distanceToday || 0), parsed).toFixed(2),
-          }));
-        }
+      const activeSid = await storage.getItem('currentTrackingSessionId');
+      const validatedLocalKm = await storage.getValidatedTodayDistance(activeSid || null);
+      if (validatedLocalKm > 0) {
+        setStats((prev) => ({
+          ...prev,
+          distanceToday: activeSid
+            ? Math.max(parseFloat(prev?.distanceToday || 0), validatedLocalKm).toFixed(2)
+            : validatedLocalKm.toFixed(2),
+        }));
       }
     } catch (_) {}
   };
@@ -225,7 +227,7 @@ export default function EmployeeDashboardScreen() {
       syncLocalDistance();
 
       // Listen to immediate local and synced distance events from locationTask
-      liveDistSub = DeviceEventEmitter.addListener('LiveDistanceUpdated', (data) => {
+      liveDistSub = appEvents.addListener('LiveDistanceUpdated', (data) => {
         if (!data) return;
         const incomingKm = parseFloat(data.totalDistance);
         if (!isNaN(incomingKm) && incomingKm >= 0) {
@@ -507,33 +509,52 @@ export default function EmployeeDashboardScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* White Capsule Punch In Button with Cyan Arrow Circle */}
+          {/* Professional Gradient Capsule Punch In / Punch Out Button */}
           <TouchableOpacity
             style={[
-              styles.whiteCapsulePunchBtn,
+              styles.capsulePunchBtnOuter,
               isUploadingSelfie && { opacity: 0.88 }
             ]}
             onPress={handleClockToggle}
             disabled={isUploadingSelfie}
-            activeOpacity={0.88}
+            activeOpacity={0.9}
           >
-            <View style={styles.punchLeftIconWrap}>
-              {isUploadingSelfie ? (
-                <ActivityIndicator size="small" color="#0f766e" />
-              ) : (
-                <MapPin size={16} color="#0f766e" />
-              )}
-            </View>
+            <LinearGradient
+              colors={
+                isTracking
+                  ? ['#e11d48', '#be123c'] // Crimson Rose Gradient for Punch Out (End Shift)
+                  : ['#f59e0b', '#d97706'] // Warm Amber-Gold Gradient for Punch In (Start Shift)
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.whiteCapsulePunchBtn}
+            >
+              <View style={[
+                styles.punchLeftIconWrap,
+                { backgroundColor: isTracking ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.24)' }
+              ]}>
+                {isUploadingSelfie ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : isTracking ? (
+                  <Power size={15} color="#ffffff" />
+                ) : (
+                  <Play size={15} color="#ffffff" fill="#ffffff" />
+                )}
+              </View>
 
-            <Text style={styles.whiteCapsulePunchText}>
-              {isUploadingSelfie
-                ? 'UPLOADING SELFIE...'
-                : isTracking ? 'PUNCH OUT (END SHIFT)' : 'PUNCH IN (START SHIFT)'}
-            </Text>
+              <Text style={styles.whiteCapsulePunchText}>
+                {isUploadingSelfie
+                  ? 'UPLOADING SELFIE...'
+                  : isTracking ? 'PUNCH OUT (END SHIFT)' : 'PUNCH IN (START SHIFT)'}
+              </Text>
 
-            <View style={styles.tealCircleArrowBtn}>
-              <ChevronRight size={16} color="#ffffff" />
-            </View>
+              <View style={[
+                styles.tealCircleArrowBtn,
+                { backgroundColor: isTracking ? '#881337' : '#92400e' }
+              ]}>
+                <ChevronRight size={16} color="#ffffff" />
+              </View>
+            </LinearGradient>
           </TouchableOpacity>
         </LinearGradient>
 
@@ -1154,43 +1175,51 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     backgroundColor: "#ffffff",
   },
+  capsulePunchBtnOuter: {
+    width: "100%",
+    borderRadius: 28,
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
   whiteCapsulePunchBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-    paddingVertical: 7,
-    paddingLeft: 12,
-    paddingRight: 6,
+    paddingVertical: 8,
+    paddingLeft: 10,
+    paddingRight: 8,
     borderRadius: 28,
     width: "100%",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.35)",
   },
   punchLeftIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#f0fdfa",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
     justifyContent: "center",
     alignItems: "center",
   },
   whiteCapsulePunchText: {
-    color: "#0f766e",
-    fontSize: 11.5,
-    fontWeight: "700",
-    letterSpacing: 0.4,
+    color: "#ffffff",
+    fontSize: 12.5,
+    fontWeight: "800",
+    letterSpacing: 0.7,
     flex: 1,
     textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.18)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   tealCircleArrowBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#0f766e",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.25)",
     justifyContent: "center",
     alignItems: "center",
   },

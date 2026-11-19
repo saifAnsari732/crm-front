@@ -16,7 +16,8 @@ import axios from 'axios';
 import { BASE_URL } from './api';
 import { storage } from './storage';
 import NetInfo from '@react-native-community/netinfo';
-import { Platform, DeviceEventEmitter } from 'react-native';
+import { Platform } from 'react-native';
+import { appEvents } from './eventBus';
 import Constants from 'expo-constants';
 
 export const OFFLINE_SYNC_TASK = 'OFFLINE_SYNC_TASK';
@@ -253,10 +254,10 @@ async function flushOfflineQueueUnlocked() {
         successCount++;
         const serverDistance = Number(response.data?.exactTotalDistanceToday ?? response.data?.totalDistanceToday ?? response.data?.totalDistance);
         if (Number.isFinite(serverDistance) && serverDistance > 0) {
-          const prevCached = parseFloat(await storage.getItem('tracking_accumulated_distance')) || 0;
+          const prevCached = await storage.getValidatedTodayDistance(itemSessionId);
           if (serverDistance >= prevCached) {
-            await storage.setItem('tracking_accumulated_distance', Number(serverDistance.toFixed(5)).toString());
-            DeviceEventEmitter.emit('LiveDistanceUpdated', {
+            await storage.setValidatedTodayDistance(serverDistance, itemSessionId);
+            appEvents.emit('LiveDistanceUpdated', {
               sessionId: itemSessionId,
               totalDistance: serverDistance,
               sessionDistance: Number(response.data?.sessionDistance ?? serverDistance),

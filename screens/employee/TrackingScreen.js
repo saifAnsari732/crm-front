@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, View, ScrollView, TouchableOpacity, 
-  ActivityIndicator, Alert, Platform, Dimensions, Linking, AppState, DeviceEventEmitter 
+  ActivityIndicator, Alert, Platform, Dimensions, Linking, AppState 
 } from 'react-native';
+import { appEvents } from '../../services/eventBus';
 import { Text, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
@@ -300,10 +301,15 @@ export default function ActiveShiftMapScreen() {
     const loadLocalCachedDistance = async () => {
       try {
         const sessionId = await storage.getItem('currentTrackingSessionId');
+        const storedSessionId = await storage.getItem('tracking_accumulated_session_id');
+        const storedDate = await storage.getItem('tracking_accumulated_date');
+        const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const isSameSessionToday = sessionId && storedSessionId === sessionId && storedDate === todayKolkata;
+
         const cachedDist = await storage.getItem('tracking_accumulated_distance');
-        if (cachedDist) {
+        if (cachedDist && isSameSessionToday) {
           const parsed = parseFloat(cachedDist) || 0.0;
-          if (parsed > 0 || sessionId) {
+          if (parsed > 0) {
             totalDistanceRef.current = Math.max(totalDistanceRef.current || 0, parsed);
             setDistance(totalDistanceRef.current.toFixed(2));
             console.log('📍 Tracking Screen: Initialized distance from local cache:', totalDistanceRef.current);
@@ -369,8 +375,14 @@ export default function ActiveShiftMapScreen() {
             await storage.removeItem('user_manually_punched_out');
           }
 
-          let backendDistance = parseFloat(activeSession?.exactDistance ?? activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0;
-          let currentLocal = totalDistanceRef.current || 0.0;
+          const exactToday = parseFloat(response.data.exactTotalDistanceToday ?? response.data.totalDistanceToday);
+          let backendDistance = Number.isFinite(exactToday) && exactToday > 0
+            ? exactToday
+            : (parseFloat(activeSession?.exactDistance ?? activeSession?.officialDistance ?? activeSession?.totalDistance) || 0.0);
+          let currentLocal = await storage.getValidatedTodayDistance(sessionId || null);
+          if (totalDistanceRef.current > 0 && currentLocal > 0) {
+            currentLocal = Math.max(currentLocal, totalDistanceRef.current);
+          }
 
           // Straight Gap check without artificial multiplier:
           const startPt = activeSession?.coordinates && activeSession.coordinates.length > 0 ? activeSession.coordinates[0] : null;
@@ -383,13 +395,13 @@ export default function ActiveShiftMapScreen() {
             }
           }
 
-          // Absolute Monotonic Invariant: Screen distance can NEVER decrease from backend response
+          // Epoch-Bounded Monotonic Invariant: Within the validated active session today, distance never decreases
           let synchronizedDistance = Math.max(currentLocal, Number(backendDistance) || 0);
 
           console.log('📍 Tracking Screen: Synchronized distance with backend:', synchronizedDistance);
           totalDistanceRef.current = synchronizedDistance;
           setDistance(synchronizedDistance.toFixed(2));
-          await storage.setItem('tracking_accumulated_distance', Number(synchronizedDistance.toFixed(5)).toString());
+          await storage.setValidatedTodayDistance(synchronizedDistance, sessionId || null);
         }
       } catch (err) {
         console.log('📍 Tracking Screen: Failed to sync distance with backend:', err);
@@ -406,8 +418,8 @@ export default function ActiveShiftMapScreen() {
         syncDistanceWithBackend();
       });
 
-      // Step 2.5: Listen to DeviceEventEmitter LiveDistanceUpdated from locationTask.js
-      liveDistSub = DeviceEventEmitter.addListener('LiveDistanceUpdated', (data) => {
+      // Step 2.5: Listen to appEvents LiveDistanceUpdated from locationTask.js
+      liveDistSub = appEvents.addListener('LiveDistanceUpdated', (data) => {
         if (!data) return;
         const incomingKm = parseFloat(data.totalDistance);
         if (!isNaN(incomingKm) && incomingKm >= 0) {
@@ -482,7 +494,7 @@ export default function ActiveShiftMapScreen() {
         }
       });
     } else {
-      // When not tracking, display today's total distance if available instead of resetting to 0.00
+      // When not tracking, display today's authoritative total distance from backend
       (async () => {
         try {
           const token = await storage.getItem('userToken') || await storage.getItem('token');
@@ -494,14 +506,12 @@ export default function ActiveShiftMapScreen() {
           const response = await trackingApi.getTodaySessions();
           if (response?.data?.success && typeof response.data.totalDistanceToday === 'number') {
             const todayDist = response.data.totalDistanceToday;
-            const finalDisplayDist = Math.max(totalDistanceRef.current || 0, todayDist);
-            totalDistanceRef.current = finalDisplayDist;
-            setDistance(finalDisplayDist.toFixed(2));
+            totalDistanceRef.current = todayDist;
+            setDistance(todayDist.toFixed(2));
+            await storage.setValidatedTodayDistance(todayDist, null);
           } else {
-            if (!totalDistanceRef.current || totalDistanceRef.current <= 0) {
-              totalDistanceRef.current = 0.0;
-              setDistance('0.00');
-            }
+            totalDistanceRef.current = 0.0;
+            setDistance('0.00');
           }
         } catch {
           totalDistanceRef.current = 0.0;
@@ -751,6 +761,9 @@ export default function ActiveShiftMapScreen() {
 
                   if (departureConfirmed) {
                     // 🚗 DEPARTURE CONFIRMED: Employee stepped out or started riding/driving!
+                    // Single Source of Truth Invariant:
+                    // Distance accumulation is strictly performed by processLocation (locationTask.js)
+                    // and broadcast via 'LiveDistanceUpdated', preventing dual-accumulator 2x inflation!
                     isMovingRef.current = true;
                     didConfirmStep = true;
                     setIsMoving(true);
@@ -758,16 +771,6 @@ export default function ActiveShiftMapScreen() {
 
                     const travelSpeedKmh = Math.max(rawSpeedKmh, Math.min(Math.round(calculatedSpeedKmh), 60), 4);
                     setSpeed(Math.min(travelSpeedKmh, 120).toString());
-
-                    // Add departure distance locally for instant, fluid UI response:
-                    const departureDistanceKm = Math.max(distFromAnchorM, distFromLastM) / 1000;
-                    if (departureDistanceKm >= 0.012 && departureDistanceKm <= 10.0) {
-                      totalDistanceRef.current += departureDistanceKm;
-                      const dStr = totalDistanceRef.current.toFixed(2);
-                      setDistance(dStr);
-                      storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
-                      console.log(`📍 TrackingScreen: Movement departure confirmed! +${departureDistanceKm.toFixed(3)} km, total: ${dStr} km`);
-                    }
 
                     stationaryAnchorRef.current = { lat, lng };
                     lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
@@ -801,13 +804,6 @@ export default function ActiveShiftMapScreen() {
                     const travelSpeedKmh = rawSpeedKmh >= 2.0 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);
                     setSpeed(Math.max(2, Math.round(Math.min(travelSpeedKmh, 120))).toString());
 
-                    // Instant fluid step accumulation (Pure Haversine, 0 artificial multipliers)
-                    const addedKm = distFromLastM / 1000;
-                    totalDistanceRef.current += addedKm;
-                    const dStr = totalDistanceRef.current.toFixed(2);
-                    setDistance(dStr);
-                    storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
-
                     stationaryAnchorRef.current = { lat, lng };
                     lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
 
@@ -822,12 +818,6 @@ export default function ActiveShiftMapScreen() {
                   didConfirmStep = true;
                   const travelSpeedKmh = rawSpeedKmh >= 2.5 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);
                   setSpeed(Math.max(15, Math.min(travelSpeedKmh, 100)).toString());
-
-                  const addedKm = distFromLastM / 1000;
-                  totalDistanceRef.current += addedKm;
-                  const dStr = totalDistanceRef.current.toFixed(2);
-                  setDistance(dStr);
-                  storage.setItem('tracking_accumulated_distance', Number(totalDistanceRef.current.toFixed(5)).toString()).catch(() => {});
 
                   stationaryAnchorRef.current = { lat, lng };
                   lastConfirmedCoordRef.current = { lat, lng, timestamp: fixTsMs };
@@ -936,9 +926,10 @@ export default function ActiveShiftMapScreen() {
 
               if (
                 lastUploadedEventId !== expectedEventId &&
-                (isInitialScreenFix || elapsedSincePushMs >= 60000)
+                isInitialScreenFix
               ) {
-                // Strictly preserve real hardware GNSS speed (never fabricate 1.4 m/s!) and raw coordinates
+                // Only send full coordinate payload on the initial screen fix;
+                // stationary 60s keep-alives are handled via lightweight heartbeat in locationTask so zero fake drift points enter the map polyline!
                 const rawMps = Number.isFinite(mps) && mps >= 0 ? mps : 0;
                 const displayLat = Number(rawLat.toFixed(6));
                 const displayLng = Number(rawLng.toFixed(6));
@@ -966,7 +957,7 @@ export default function ActiveShiftMapScreen() {
                 };
                 await storage.setItem('last_server_upload_event_id', expectedEventId).catch(() => {});
                 await enqueueAndFlushScreenCoord(screenCoordPayload, resolvedActualAddress);
-              } else if (lastUploadedEventId === expectedEventId) {
+              } else if (lastUploadedEventId === expectedEventId || elapsedSincePushMs >= 60000) {
                 lastScreenServerPushRef.current = {
                   lat: rawLat,
                   lng: rawLng,
@@ -1060,9 +1051,13 @@ export default function ActiveShiftMapScreen() {
       const executeStop = async () => {
         const res = await stopTracking();
         if (res.success) {
-          const finalLoggedKm = Math.max(totalDistanceRef.current || 0, Number(res.totalDistance) || 0);
+          const srvStoppedKm = Number(res.totalDistance);
+          const finalLoggedKm = Number.isFinite(srvStoppedKm) && srvStoppedKm > 0
+            ? srvStoppedKm
+            : (totalDistanceRef.current || 0);
           totalDistanceRef.current = finalLoggedKm;
           setDistance(finalLoggedKm.toFixed(2));
+          await storage.setValidatedTodayDistance(finalLoggedKm, null);
           const msg = `Clock out complete. Logged ${finalLoggedKm.toFixed(2)} km traveled.`;
           if (Platform.OS === 'web') {
             alert(`Shift Ended: ${msg}`);
@@ -1166,10 +1161,10 @@ export default function ActiveShiftMapScreen() {
 
       {/* 2. Main Central Start/Stop Trigger */}
       <View style={styles.centerClockModule}>
-        <View style={styles.pulseOuterCircle}>
-          <View style={[styles.pulseInnerRing, { borderColor: isTracking ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.15)' }]}>
+        <View style={[styles.pulseOuterCircle, { backgroundColor: isTracking ? 'rgba(225, 29, 72, 0.08)' : 'rgba(13, 148, 136, 0.08)' }]}>
+          <View style={[styles.pulseInnerRing, { borderColor: isTracking ? 'rgba(225, 29, 72, 0.22)' : 'rgba(13, 148, 136, 0.22)' }]}>
             <TouchableOpacity 
-              style={[styles.mainTriggerCircle, { backgroundColor: isTracking ? '#10b981' : '#2563eb' }]} 
+              style={[styles.mainTriggerCircle, { backgroundColor: isTracking ? '#e11d48' : '#0d9488' }]} 
               onPress={handleStartStop}
               activeOpacity={0.85}
             >
@@ -1177,13 +1172,13 @@ export default function ActiveShiftMapScreen() {
                 <ActivityIndicator color="#fff" size="large" />
               ) : isTracking ? (
                 <>
-                  <Square size={28} color="#fff" style={styles.controlIcon} />
-                  <Text style={styles.controlText}>STOP</Text>
+                  <Square size={28} color="#fff" fill="#fff" style={styles.controlIcon} />
+                  <Text style={styles.controlText}>END SHIFT</Text>
                 </>
               ) : (
                 <>
-                  <Play size={28} color="#fff" style={styles.controlIcon} />
-                  <Text style={styles.controlText}>START</Text>
+                  <Play size={28} color="#fff" fill="#fff" style={styles.controlIcon} />
+                  <Text style={styles.controlText}>START SHIFT</Text>
                 </>
               )}
             </TouchableOpacity>
