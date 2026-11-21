@@ -125,7 +125,8 @@
           "backgroundColor": "#020617"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing"
     ],
     "owner": "saifalis"
   }

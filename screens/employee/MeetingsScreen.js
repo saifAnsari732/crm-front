@@ -16,7 +16,7 @@ import {
 import { Text, Surface } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye, ArrowLeft, ChevronDown, ChevronUp, Briefcase, Navigation, CheckCircle2, Clock, AlertCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { meetingApi, uploadAPI, getAvatarUrl } from '../../services/api';
@@ -501,180 +501,270 @@ export default function MeetingsScreen() {
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <Surface style={[styles.modalContent, { borderTopLeftRadius: 36, borderTopRightRadius: 36, paddingHorizontal: 24, paddingVertical: 32 }]} elevation={5}>
-            {/* Header */}
-            <View style={[styles.modalHeader, { marginBottom: 24, borderBottomWidth: 0 }]}>
-              <Text style={[styles.modalTitle, { fontSize: 22, fontWeight: '900', color: '#1e293b' }]}>
-                {editingMeeting ? 'Edit Client Visit' : 'Log Client Visit'}
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={{ backgroundColor: '#f1f5f9', padding: 8, borderRadius: 20 }}>
-                <X size={20} color="#64748b" />
+          <Surface style={styles.modalContent} elevation={5}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <View style={styles.modalHeaderIconWrap}>
+                  <Briefcase size={20} color="#059669" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>
+                    {editingMeeting ? 'Edit Client Visit' : 'Log Client Visit'}
+                  </Text>
+                  <Text style={styles.modalSubTitle}>
+                    {editingMeeting ? 'Update visit record details' : 'Record field meeting & geo-verification'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <X size={18} color="#64748B" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Client Name */}
-              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569' }]}>Client Name *</Text>
-              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
-                <User size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
-                <TextInput
-                  style={[styles.input, { fontSize: 15 }]}
-                  placeholder="Enter client name"
-                  value={clientName}
-                  onChangeText={setClientName}
-                  placeholderTextColor="#94a3b8"
-                />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {/* Field 1: Client Name */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.fieldLabel}>Client Name</Text>
+                  <Text style={styles.requiredStar}>*</Text>
+                </View>
+                <View style={styles.inputCard}>
+                  <View style={styles.inputIconBox}>
+                    <User size={17} color="#059669" />
+                  </View>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter client or shop name"
+                    value={clientName}
+                    onChangeText={setClientName}
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
               </View>
 
-              {/* Mobile Number */}
-              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Mobile / Phone *</Text>
-              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
-                <Phone size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
-                <TextInput
-                  style={[styles.input, { fontSize: 15 }]}
-                  placeholder="Enter phone number"
-                  keyboardType="phone-pad"
-                  value={mobileNumber}
-                  onChangeText={setMobileNumber}
-                  placeholderTextColor="#94a3b8"
-                />
+              {/* Field 2: Mobile Number */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.fieldLabel}>Mobile / Phone Number</Text>
+                  <Text style={styles.requiredStar}>*</Text>
+                </View>
+                <View style={styles.inputCard}>
+                  <View style={styles.inputIconBox}>
+                    <Phone size={17} color="#059669" />
+                  </View>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter phone number"
+                    keyboardType="phone-pad"
+                    value={mobileNumber}
+                    onChangeText={setMobileNumber}
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
               </View>
 
-              {/* Visit Location Address */}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
-                <Text style={[styles.inputLabel, { marginTop: 0, marginBottom: 0, fontWeight: '700', color: '#475569' }]}>Meeting Address *</Text>
-                <TouchableOpacity onPress={handleFetchCurrentLocation} disabled={fetchingLocation}>
-                  {fetchingLocation ? (
-                    <ActivityIndicator size="small" color="#00c6a9" />
-                  ) : (
-                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#00c6a9' }}>Fetch Current</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 56 }]}>
-                <MapPin size={18} color="#94a3b8" style={{ marginLeft: 16, marginRight: 8 }} />
-                <TextInput
-                  style={[styles.input, { fontSize: 15 }]}
-                  placeholder="Enter shop or office address"
-                  value={meetingAddress}
-                  onChangeText={setMeetingAddress}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-
-              {/* Status Pills */}
-              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Status</Text>
-              <View style={[styles.pillRow, { marginBottom: 4 }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusPill,
-                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
-                    status === 'scheduled' && { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
-                  ]}
-                  onPress={() => setStatus('scheduled')}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      { fontSize: 11, fontWeight: 'bold' },
-                      status === 'scheduled' && { color: '#d97706' },
-                    ]}
+              {/* Field 3: Meeting Location */}
+              <View style={styles.formGroup}>
+                <View style={styles.labelWithActionRow}>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.fieldLabel}>Meeting Address</Text>
+                    <Text style={styles.requiredStar}>*</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.detectGpsBtn}
+                    onPress={handleFetchCurrentLocation}
+                    disabled={fetchingLocation}
+                    activeOpacity={0.75}
                   >
-                    PENDING
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusPill,
-                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
-                    status === 'completed' && { backgroundColor: '#dcfce7', borderColor: '#10b981' },
-                  ]}
-                  onPress={() => setStatus('completed')}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      { fontSize: 11, fontWeight: 'bold' },
-                      status === 'completed' && { color: '#15803d' },
-                    ]}
-                  >
-                    COMPLETED
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusPill,
-                    { borderRadius: 16, flex: 1, paddingVertical: 12 },
-                    status === 'follow-up' && { backgroundColor: '#e0f2fe', borderColor: '#0284c7' },
-                  ]}
-                  onPress={() => setStatus('follow-up')}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      { fontSize: 11, fontWeight: 'bold' },
-                      status === 'follow-up' && { color: '#0369a1' },
-                    ]}
-                  >
-                    FOLLOW-UP
-                  </Text>
-                </TouchableOpacity>
+                    {fetchingLocation ? (
+                      <ActivityIndicator size="small" color="#059669" />
+                    ) : (
+                      <>
+                        <Navigation size={12} color="#059669" />
+                        <Text style={styles.detectGpsBtnText}>Auto-Detect GPS</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.inputCard}>
+                  <View style={styles.inputIconBox}>
+                    <MapPin size={17} color="#059669" />
+                  </View>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter shop, village or office address"
+                    value={meetingAddress}
+                    onChangeText={setMeetingAddress}
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
               </View>
 
-              {/* Notes */}
-              <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Visit Notes / Feedback</Text>
-              <View style={[styles.inputWrapper, { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, height: 100, alignItems: 'flex-start', paddingTop: 12, paddingHorizontal: 16 }]}>
-                <TextInput
-                  style={[styles.input, { height: 80, textAlignVertical: 'top', fontSize: 15 }]}
-                  placeholder="Write client requirements or feedback..."
-                  multiline={true}
-                  numberOfLines={4}
-                  value={meetingNotes}
-                  onChangeText={setMeetingNotes}
-                  placeholderTextColor="#94a3b8"
-                />
+              {/* Field 4: Status Selector */}
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Visit Outcome / Status</Text>
+                <View style={styles.statusSegmentRow}>
+                  {/* Completed */}
+                  <TouchableOpacity
+                    style={[
+                      styles.statusSegmentBtn,
+                      status === 'completed' && styles.statusSegmentCompleted
+                    ]}
+                    onPress={() => setStatus('completed')}
+                    activeOpacity={0.75}
+                  >
+                    <CheckCircle2
+                      size={15}
+                      color={status === 'completed' ? '#059669' : '#64748B'}
+                    />
+                    <Text
+                      style={[
+                        styles.statusSegmentText,
+                        status === 'completed' && styles.statusSegmentTextCompleted
+                      ]}
+                    >
+                      COMPLETED
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Follow-up */}
+                  <TouchableOpacity
+                    style={[
+                      styles.statusSegmentBtn,
+                      status === 'follow-up' && styles.statusSegmentFollowUp
+                    ]}
+                    onPress={() => setStatus('follow-up')}
+                    activeOpacity={0.75}
+                  >
+                    <Clock
+                      size={15}
+                      color={status === 'follow-up' ? '#4F46E5' : '#64748B'}
+                    />
+                    <Text
+                      style={[
+                        styles.statusSegmentText,
+                        status === 'follow-up' && styles.statusSegmentTextFollowUp
+                      ]}
+                    >
+                      FOLLOW-UP
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Pending */}
+                  <TouchableOpacity
+                    style={[
+                      styles.statusSegmentBtn,
+                      status === 'scheduled' && styles.statusSegmentPending
+                    ]}
+                    onPress={() => setStatus('scheduled')}
+                    activeOpacity={0.75}
+                  >
+                    <AlertCircle
+                      size={15}
+                      color={status === 'scheduled' ? '#D97706' : '#64748B'}
+                    />
+                    <Text
+                      style={[
+                        styles.statusSegmentText,
+                        status === 'scheduled' && styles.statusSegmentTextPending
+                      ]}
+                    >
+                      PENDING
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Selfie Capture Box */}
+              {/* Field 5: Notes & Requirements */}
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Visit Notes / Feedback</Text>
+                <View style={[styles.inputCard, styles.textareaCard]}>
+                  <TextInput
+                    style={styles.textareaInput}
+                    placeholder="Write discussion notes, farmer feedback or next actions..."
+                    multiline={true}
+                    numberOfLines={3}
+                    value={meetingNotes}
+                    onChangeText={setMeetingNotes}
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+              </View>
+
+              {/* Field 6: Selfie Verification */}
               {!editingMeeting && (
-                <>
-                  <Text style={[styles.inputLabel, { fontWeight: '700', color: '#475569', marginTop: 16 }]}>Meeting Selfie *</Text>
-                  <View style={styles.selfieContainer}>
-                    {selfieImage ? (
-                      <View style={[styles.selfieImageWrapper, { backgroundColor: '#ecfdf5', borderColor: '#10b981', borderRadius: 16 }]}>
-                        <Text style={{ fontSize: 14, color: '#10b981', marginBottom: 6, fontWeight: 'bold' }}>✓ Selfie Captured</Text>
-                        <TouchableOpacity onPress={() => setSelfieImage(null)} style={[styles.retakeBtn, { backgroundColor: '#10b981' }]}>
-                          <Text style={[styles.retakeBtnText, { color: '#fff' }]}>Retake Selfie</Text>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.fieldLabel}>Visit Selfie Verification</Text>
+                    <Text style={styles.requiredStar}>*</Text>
+                  </View>
+                  {selfieImage ? (
+                    <View style={styles.selfieCapturedCard}>
+                      <Image source={{ uri: selfieImage }} style={styles.selfieThumbnail} />
+                      <View style={styles.selfieMetaCol}>
+                        <View style={styles.selfieVerifiedTag}>
+                          <CheckCircle2 size={13} color="#059669" />
+                          <Text style={styles.selfieVerifiedTagText}>Selfie Attached</Text>
+                        </View>
+                        <Text style={styles.selfieSubHint}>Geo-tagged for instant visit approval</Text>
+                        <TouchableOpacity
+                          onPress={handleCaptureSelfie}
+                          style={styles.retakePillBtn}
+                          activeOpacity={0.75}
+                        >
+                          <Camera size={12} color="#047857" />
+                          <Text style={styles.retakePillText}>Retake Photo</Text>
                         </TouchableOpacity>
                       </View>
-                    ) : (
-                      <TouchableOpacity style={[styles.selfieUploadBox, { borderRadius: 16, borderStyle: 'dashed', borderColor: '#00c6a9', backgroundColor: '#e6fffa' }]} onPress={handleCaptureSelfie}>
-                        <Camera size={28} color="#00c6a9" style={{ marginBottom: 8 }} />
-                        <Text style={[styles.selfieBoxText, { color: '#00c6a9', fontWeight: 'bold' }]}>Take a Selfie</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.selfiePlaceholderCard}
+                      onPress={handleCaptureSelfie}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.cameraCircleBox}>
+                        <Camera size={22} color="#059669" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.selfiePlaceholderTitle}>Take Meeting Selfie</Text>
+                        <Text style={styles.selfiePlaceholderSub}>Required for GPS location & audit verification</Text>
+                      </View>
+                      <View style={styles.selfieSnapAction}>
+                        <Text style={styles.selfieSnapActionText}>Snap</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
 
-              {/* Submit Button */}
+              {/* Submit CTA Button */}
               {submitting ? (
-                <ActivityIndicator size="large" color="#00c6a9" style={{ marginTop: 24, marginBottom: 12 }} />
+                <View style={styles.submittingBox}>
+                  <ActivityIndicator size="small" color="#059669" />
+                  <Text style={styles.submittingText}>Saving visit details & uploading proof...</Text>
+                </View>
               ) : (
                 <TouchableOpacity
-                  style={[styles.submitBtn, { marginTop: 24, shadowColor: '#00c6a9', shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 }]}
+                  style={styles.saveVisitBtn}
                   onPress={handleSaveMeeting}
+                  activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={['#00b4d8', '#00c6a9']}
-                    style={[styles.submitBtnGradient, { borderRadius: 16, height: 60 }]}
+                    colors={['#059669', '#047857']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.saveVisitBtnGradient}
                   >
-                    <Text style={[styles.submitBtnText, { fontSize: 16, fontWeight: 'bold' }]}>
-                      {editingMeeting ? 'Update Visit Report' : 'Save Visit Report'}
+                    <Check size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveVisitBtnText}>
+                      {editingMeeting ? 'Update Client Visit' : 'Save & Verify Client Visit'}
                     </Text>
-                    <Check size={20} color="#fff" style={{ marginLeft: 8 }} />
                   </LinearGradient>
                 </TouchableOpacity>
               )}
@@ -1036,147 +1126,312 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 32,
-    maxHeight: '90%',
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '92%',
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 12,
+    justifyContent: 'space-between',
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 16,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  modalHeaderIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0f172a',
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 6,
-    marginTop: 14,
+  modalSubTitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748B',
+    marginTop: 2,
   },
-  inputWrapper: {
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    height: 48,
+    gap: 4,
+    marginBottom: 6,
   },
-  input: {
-    flex: 1,
+  labelWithActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  fieldLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#334155',
+    letterSpacing: 0.2,
+  },
+  requiredStar: {
     fontSize: 13,
-    color: '#0f172a',
+    fontWeight: '700',
+    color: '#E11D48',
+  },
+  detectGpsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 8,
+    gap: 5,
+  },
+  detectGpsBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  inputCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    height: 52,
     paddingHorizontal: 12,
   },
-  pillRow: {
+  inputIconBox: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '500',
+    paddingVertical: 0,
+  },
+  textareaCard: {
+    height: 84,
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+  },
+  textareaInput: {
+    flex: 1,
+    width: '100%',
+    fontSize: 13.5,
+    color: '#0F172A',
+    fontWeight: '500',
+    textAlignVertical: 'top',
+  },
+  statusSegmentRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 6,
+    marginTop: 2,
   },
-  statusPill: {
+  statusSegmentBtn: {
     flex: 1,
-    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  statusSegmentText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.3,
+  },
+  statusSegmentCompleted: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
+  },
+  statusSegmentTextCompleted: {
+    color: '#065F46',
+  },
+  statusSegmentFollowUp: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#4F46E5',
+  },
+  statusSegmentTextFollowUp: {
+    color: '#3730A3',
+  },
+  statusSegmentPending: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#D97706',
+  },
+  statusSegmentTextPending: {
+    color: '#92400E',
+  },
+  selfiePlaceholderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#059669',
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+  },
+  cameraCircleBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selfiePlaceholderTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  selfiePlaceholderSub: {
+    fontSize: 11,
+    color: '#059669',
+    marginTop: 2,
+  },
+  selfieSnapAction: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  selfieSnapActionText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  selfieCapturedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+  },
+  selfieThumbnail: {
+    width: 60,
+    height: 60,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    borderColor: '#059669',
   },
-  statusPillActivePending: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#f59e0b',
+  selfieMetaCol: {
+    flex: 1,
   },
-  statusPillActiveCompleted: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#10b981',
-  },
-  statusPillActiveFollowUp: {
-    backgroundColor: '#e0e7ff',
-    borderColor: '#4f46e5',
-  },
-  statusPillText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#64748b',
-  },
-  statusPillTextActive: {
-    color: '#0f172a',
-  },
-  submitBtn: {
-    marginTop: 28,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#0f766e',
-  },
-  submitBtnGradient: {
-    height: 48,
+  selfieVerifiedTag: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
-  submitBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  selfieContainer: {
-    marginTop: 6,
-    marginBottom: 10,
-  },
-  selfieUploadBox: {
-    height: 80,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  selfieBoxText: {
+  selfieVerifiedTagText: {
     fontSize: 13,
-    color: '#0f766e',
-    fontWeight: '600',
-    marginLeft: 8,
+    fontWeight: '700',
+    color: '#065F46',
   },
-  selfieImageWrapper: {
-    backgroundColor: '#f0fdfa',
-    padding: 12,
-    borderRadius: 12,
+  selfieSubHint: {
+    fontSize: 10.5,
+    color: '#059669',
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  retakePillBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#ccfbf1',
-  },
-  retakeBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
+    gap: 4,
   },
-  retakeBtnText: {
-    fontSize: 11,
-    color: '#64748b',
-    fontWeight: 'bold',
+  retakePillText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  saveVisitBtn: {
+    marginTop: 10,
+    marginBottom: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#059669',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  saveVisitBtnGradient: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  saveVisitBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  submittingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 10,
+  },
+  submittingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
   },
   meetingSelfieThumbWrap: {
     marginRight: 10,

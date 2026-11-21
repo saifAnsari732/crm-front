@@ -13,6 +13,8 @@ import {
   ChevronRight, ChevronDown, X, CheckCircle2, Filter
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import FloatingAdminTabBar from '../../components/FloatingAdminTabBar';
 import { adminAPI, getAvatarUrl } from '../../services/api';
 
@@ -41,11 +43,12 @@ export default function AdminReportsScreen() {
   const [reportEmpId, setReportEmpId] = useState('');
   const [empDropdownVisible, setEmpDropdownVisible] = useState(false);
 
-  const [reportStart, setReportStart] = useState(new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  const [reportStart, setReportStart] = useState(todayStr);
   const [reportEnd, setReportEnd] = useState(todayStr);
-  const [activePreset, setActivePreset] = useState('7d');
+  const [activePreset, setActivePreset] = useState('today');
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [reportError, setReportError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,24 +79,25 @@ export default function AdminReportsScreen() {
     setRefreshing(false);
   };
 
-  // Quick Date Preset Handler
+  // Quick Date Preset Handler (Today, Yesterday, This Month ONLY)
   const handleDatePreset = (presetKey) => {
     setActivePreset(presetKey);
-    const end = new Date();
-    let start = new Date();
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
 
     if (presetKey === 'today') {
-      start = end;
-    } else if (presetKey === '7d') {
-      start = new Date(Date.now() - 7 * 86400000);
-    } else if (presetKey === '30d') {
-      start = new Date(Date.now() - 30 * 86400000);
+      setReportStart(today);
+      setReportEnd(today);
+    } else if (presetKey === 'yesterday') {
+      const yestDate = new Date(Date.now() - 86400000);
+      const yest = yestDate.toISOString().slice(0, 10);
+      setReportStart(yest);
+      setReportEnd(yest);
     } else if (presetKey === 'thisMonth') {
-      start = new Date(end.getFullYear(), end.getMonth(), 1);
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      setReportStart(firstDay);
+      setReportEnd(today);
     }
-
-    setReportStart(start.toISOString().slice(0, 10));
-    setReportEnd(end.toISOString().slice(0, 10));
   };
 
   const handleGenerateReport = async () => {
@@ -128,84 +132,106 @@ export default function AdminReportsScreen() {
   const handleDownloadPDF = async () => {
     if (!reportData) return;
     const empName = selectedEmp ? formatFullName(selectedEmp.name) : 'Staff';
+    const empCode = selectedEmp?.employeeId || (reportEmpId ? 'EMP-' + String(reportEmpId).slice(-6).toUpperCase() : '—');
+    const empRole = selectedEmp?.designation || selectedEmp?.role || 'Field Executive';
+    const empPhone = selectedEmp?.phone || '—';
+    const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Staff Activity Report - ${empName}</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 28px; color: #0f172a; background: #fff; }
-            .header-banner { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #059669; padding-bottom: 16px; margin-bottom: 24px; }
-            .brand-title { font-size: 24px; font-weight: 800; color: #074e26; }
-            .brand-sub { font-size: 12px; color: #059669; font-weight: bold; letter-spacing: 0.5px; }
-            .meta-box { font-size: 13px; color: #475569; margin-top: 6px; }
-            .confidential-tag { font-size: 11px; font-weight: 800; color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 6px; display: inline-block; }
-            
-            .section-heading { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-            .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-            .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
-            .kpi-val { font-size: 22px; font-weight: 900; color: #059669; }
-            .kpi-lbl { font-size: 10px; color: #64748b; font-weight: 800; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-            
-            .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
-            .summary-text { font-size: 13px; color: #166534; line-height: 1.6; }
+    setPdfGenerating(true);
+    try {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Staff Activity Report - ${empName}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 28px; color: #0f172a; background: #fff; }
+              .header-banner { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #059669; padding-bottom: 16px; margin-bottom: 24px; }
+              .brand-title { font-size: 24px; font-weight: 800; color: #074e26; }
+              .brand-sub { font-size: 12px; color: #059669; font-weight: bold; letter-spacing: 0.5px; }
+              .meta-box { font-size: 13px; color: #475569; margin-top: 6px; }
+              .confidential-tag { font-size: 11px; font-weight: 800; color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 6px; display: inline-block; }
+              
+              .section-heading { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 20px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+              .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+              .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
+              .kpi-val { font-size: 22px; font-weight: 900; color: #059669; }
+              .kpi-lbl { font-size: 10px; color: #64748b; font-weight: 800; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+              
+              .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+              .summary-text { font-size: 13px; color: #166534; line-height: 1.6; }
 
-            .footer { margin-top: 40px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="header-banner">
-            <div>
-              <div class="brand-title">KisanConnect Field Report</div>
-              <div class="brand-sub">OFFICIAL PERFORMANCE & MILEAGE AUDIT</div>
-              <div class="meta-box">Field Executive: <strong>${empName}</strong> | Period: <strong>${reportStart} to ${reportEnd}</strong></div>
+              .footer { margin-top: 40px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="header-banner">
+              <div>
+                <div class="brand-title">KisanConnect Field Report</div>
+                <div class="brand-sub">OFFICIAL PERFORMANCE & MILEAGE AUDIT</div>
+                <div class="meta-box">Field Executive: <strong>${empName}</strong> (${empCode}) | Period: <strong>${reportStart} to ${reportEnd}</strong></div>
+              </div>
+              <div style="text-align: right;">
+                <div class="confidential-tag">OFFICIAL AUDIT REPORT</div>
+                <div class="meta-box" style="margin-top: 8px;">Issued on ${todayDate}</div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div class="confidential-tag">OFFICIAL AUDIT REPORT</div>
-              <div class="meta-box" style="margin-top: 8px;">Issued on ${new Date().toLocaleDateString('en-GB')}</div>
+
+            <div class="section-heading">Key Metrics Overview</div>
+            <div class="kpi-grid">
+              <div class="kpi-card"><div class="kpi-val">${Number(summary.totalKm || 0).toFixed(2)} km</div><div class="kpi-lbl">Total Travel Distance</div></div>
+              <div class="kpi-card"><div class="kpi-val">₹${Number(summary.travelPay || 0).toLocaleString('en-IN')}</div><div class="kpi-lbl">Travel Pay (TA/DA)</div></div>
+              <div class="kpi-card"><div class="kpi-val">${summary.totalMeetings || 0}</div><div class="kpi-lbl">Field Visits</div></div>
+              <div class="kpi-card"><div class="kpi-val">${summary.totalTasks || 0}</div><div class="kpi-lbl">Tasks Completed</div></div>
+              <div class="kpi-card"><div class="kpi-val">₹${Number(summary.totalExpenses || 0).toLocaleString('en-IN')}</div><div class="kpi-lbl">Expense Claims</div></div>
+              <div class="kpi-card"><div class="kpi-val">${summary.totalLeads || 0}</div><div class="kpi-lbl">Leads Handled</div></div>
             </div>
-          </div>
 
-          <div class="section-heading">Key Metrics Overview</div>
-          <div class="kpi-grid">
-            <div class="kpi-card"><div class="kpi-val">${Number(summary.totalKm || 0).toFixed(2)} km</div><div class="kpi-lbl">Total Travel Distance</div></div>
-            <div class="kpi-card"><div class="kpi-val">₹${Number(summary.travelPay || 0).toLocaleString('en-IN')}</div><div class="kpi-lbl">Travel Pay (TA/DA)</div></div>
-            <div class="kpi-card"><div class="kpi-val">${summary.totalMeetings || 0}</div><div class="kpi-lbl">Field Visits</div></div>
-            <div class="kpi-card"><div class="kpi-val">${summary.totalTasks || 0}</div><div class="kpi-lbl">Tasks Completed</div></div>
-            <div class="kpi-card"><div class="kpi-val">₹${Number(summary.totalExpenses || 0).toLocaleString('en-IN')}</div><div class="kpi-lbl">Expense Claims</div></div>
-            <div class="kpi-card"><div class="kpi-val">${summary.totalLeads || 0}</div><div class="kpi-lbl">Leads Handled</div></div>
-          </div>
-
-          <div class="summary-box">
-            <div class="summary-text">
-              <strong>Audit Summary:</strong> Executive ${empName} completed a total travel distance of <strong>${Number(summary.totalKm || 0).toFixed(2)} KM</strong> between ${reportStart} and ${reportEnd}. Recorded ${summary.totalMeetings || 0} field visits and ${summary.totalTasks || 0} completed tasks with total TA/DA reimbursement of ₹${Number(summary.travelPay || 0).toLocaleString('en-IN')}.
+            <div class="summary-box">
+              <div class="summary-text">
+                <strong>Audit Summary:</strong> Executive ${empName} (${empRole}, Ph: ${empPhone}) completed a total travel distance of <strong>${Number(summary.totalKm || 0).toFixed(2)} KM</strong> between ${reportStart} and ${reportEnd}. Recorded ${summary.totalMeetings || 0} field visits and ${summary.totalTasks || 0} completed tasks with total TA/DA reimbursement of ₹${Number(summary.travelPay || 0).toLocaleString('en-IN')}.
+              </div>
             </div>
-          </div>
 
-          <div class="footer">
-            System Generated Report • KisanConnect Field Workforce Console • ${new Date().toISOString()}
-          </div>
-        </body>
-      </html>
-    `;
+            <div class="footer">
+              System Generated Report • KisanConnect Field Workforce Console • ${new Date().toISOString()}
+            </div>
+          </body>
+        </html>
+      `;
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => { printWindow.print(); }, 300);
-      }
-    } else {
-      try {
-        await Share.share({
-          title: `KisanConnect Staff Report - ${empName}`,
-          message: `📊 KisanConnect Field Staff Report for ${empName} (${reportStart} to ${reportEnd})\n• Distance: ${Number(summary.totalKm || 0).toFixed(1)} km\n• Travel Pay: ₹${Number(summary.travelPay || 0)}\n• Field Visits: ${summary.totalMeetings || 0}\n• Tasks: ${summary.totalTasks || 0}`,
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => { printWindow.print(); }, 300);
+        }
+      } else {
+        const file = await Print.printToFileAsync({
+          html: htmlContent,
+          base64: false
         });
-      } catch (e) {}
+
+        if (file && file.uri) {
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(file.uri, {
+              mimeType: 'application/pdf',
+              dialogTitle: `Download Report PDF - ${empName}`,
+              UTI: 'com.adobe.pdf'
+            });
+          } else {
+            Alert.alert('PDF Saved', `Report PDF generated at: ${file.uri}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.log('PDF export error:', err);
+      Alert.alert('PDF Error', 'Failed to generate PDF. Please try again.');
+    } finally {
+      setPdfGenerating(false);
     }
   };
 
@@ -308,14 +334,13 @@ export default function AdminReportsScreen() {
             <ChevronDown size={18} color="#64748b" />
           </TouchableOpacity>
 
-          {/* Quick Date Presets */}
-          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>QUICK DATE PRESETS</Text>
+          {/* Quick Date Presets (Today, Yesterday, This Month ONLY) */}
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>REPORT TIMEFRAME</Text>
           <View style={styles.presetRow}>
             {[
               { key: 'today', label: 'Today' },
-              { key: '7d', label: 'Last 7 Days' },
+              { key: 'yesterday', label: 'Yesterday' },
               { key: 'thisMonth', label: 'This Month' },
-              { key: '30d', label: 'Last 30 Days' },
             ].map((preset) => {
               const isSelected = activePreset === preset.key;
               return (
@@ -397,12 +422,28 @@ export default function AdminReportsScreen() {
             <View style={styles.resultsHeaderRow}>
               <Text style={styles.sectionTitle}>ACTIVITY & PERFORMANCE SUMMARY</Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
-                <TouchableOpacity style={styles.pdfExportBtn} onPress={handleDownloadPDF} activeOpacity={0.8}>
-                  <Download size={14} color="#ffffff" />
-                  <Text style={styles.pdfExportBtnText}>Generate PDF</Text>
+                <TouchableOpacity
+                  style={[styles.pdfExportBtn, pdfGenerating && { opacity: 0.7 }]}
+                  onPress={handleDownloadPDF}
+                  disabled={pdfGenerating}
+                  activeOpacity={0.8}
+                >
+                  {pdfGenerating ? (
+                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 4 }} />
+                  ) : (
+                    <Download size={14} color="#ffffff" />
+                  )}
+                  <Text style={styles.pdfExportBtnText}>
+                    {pdfGenerating ? 'Creating PDF...' : 'Download PDF'}
+                  </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.shareBtn} onPress={handleDownloadPDF} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={handleDownloadPDF}
+                  disabled={pdfGenerating}
+                  activeOpacity={0.8}
+                >
                   <Share2 size={14} color="#059669" />
                 </TouchableOpacity>
               </View>
