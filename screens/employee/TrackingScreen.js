@@ -742,16 +742,19 @@ export default function ActiveShiftMapScreen() {
                   lastCoordRef.current = { lat, lng };
                 } else {
                   let departureConfirmed = false;
-                  const effectiveMoveSpeed = Math.max(rawSpeedKmh, calculatedSpeedKmh);
-                  if (distFromAnchorM >= 12.0 && effectiveMoveSpeed >= 2.0 && (Number(acc) || 25) <= 120) {
+                  const repAcc = Number(acc) || 25;
+                  const minDirectBreakoutM = Math.max(20.0, repAcc * 1.15);
+                  const minProgCandM = Math.max(10.0, repAcc * 0.75);
+                  const minProgConfirmM = Math.max(16.0, repAcc * 1.05);
+                  if (distFromAnchorM >= minDirectBreakoutM && rawSpeedKmh >= 2.2 && repAcc <= 110) {
                     departureConfirmed = true;
-                  } else if (distFromAnchorM >= 10.0 && (Number(acc) || 25) <= 140) {
+                  } else if (distFromAnchorM >= minProgCandM && repAcc <= 125) {
                     const firstCand = departureBufferRef.current.length > 0 ? departureBufferRef.current[0] : null;
-                    if (!firstCand || (fixTsMs - firstCand.ts) > 120000) {
+                    if (!firstCand || (fixTsMs - firstCand.ts) > 180000) {
                       departureBufferRef.current = [{ lat, lng, distM: distFromAnchorM, ts: fixTsMs }];
                     } else {
                       const stepFromCandM = haversineMeters(firstCand.lat, firstCand.lng, lat, lng);
-                      if (distFromAnchorM >= 14.0 && stepFromCandM >= 4.0 && distFromAnchorM >= firstCand.distM + 3.0) {
+                      if (distFromAnchorM >= minProgConfirmM && stepFromCandM >= 5.0 && distFromAnchorM >= firstCand.distM + 4.0) {
                         departureConfirmed = true;
                       } else if (distFromAnchorM < 8.0 || distFromAnchorM < firstCand.distM - 5.0) {
                         departureBufferRef.current = [];
@@ -779,8 +782,12 @@ export default function ActiveShiftMapScreen() {
                 }
               } else {
                 // 🚗 CURRENT STATE: MOVING ON ROAD
-                // Transition back to STATIONARY if prolonged stop (>= 60s) with displacement < 3m and speed < 1.2 km/h
-                const isLowSpeedDrift = rawSpeedKmh < 1.2 && calculatedSpeedKmh < 1.2 && distFromLastM < 3.0;
+                // Hold anchor during zero-Doppler indoor wobbles (< max(12m, acc*0.85)) and transition back to STATIONARY after 60s
+                const repAcc = Number(acc) || 25;
+                const minMovingStepM = rawSpeedKmh >= 1.8
+                  ? Math.max(3.5, Math.min(repAcc * 0.3, 10.0))
+                  : Math.max(12.0, repAcc * 0.85);
+                const isLowSpeedDrift = distFromLastM < minMovingStepM || (rawSpeedKmh < 1.2 && calculatedSpeedKmh < 1.2 && distFromLastM < 8.0);
                 if (isLowSpeedDrift) {
                   if (timeDiffSecs >= 60.0) {
                     isMovingRef.current = false;
@@ -798,7 +805,7 @@ export default function ActiveShiftMapScreen() {
                       isSame: true,
                     };
                   }
-                } else if (distFromLastM >= 3.0 && distFromLastM <= 2500) {
+                } else if (distFromLastM >= minMovingStepM && distFromLastM <= 2500) {
                   if (calculatedSpeedKmh <= 160.0) {
                     didConfirmStep = true;
                     const travelSpeedKmh = rawSpeedKmh >= 2.0 ? rawSpeedKmh : Math.round(calculatedSpeedKmh);

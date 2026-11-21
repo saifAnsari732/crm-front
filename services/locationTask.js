@@ -133,8 +133,14 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: false };
   }
 
-  // Direct single-step departure when real displacement >= 15m with speed >= 1.5 km/h, or displacement >= 25m with good accuracy
-  if (((distM >= 15.0 && (reportedSpeedKmh >= 1.5 || effectiveSpeedKmh >= 1.5)) || (distM >= 25.0 && accuracyM <= 80)) && accuracyM <= 140) {
+  // Direct single-step departure: displacement MUST exceed the GPS uncertainty circle (accuracyM * 1.15)
+  // with true hardware Doppler speed >= 2.2 km/h, or clean-accuracy displacement >= max(40m, accuracyM * 1.4)
+  const minDirectBreakoutM = Math.max(20.0, accuracyM * 1.15);
+  if (
+    ((distM >= minDirectBreakoutM && reportedSpeedKmh >= 2.2) ||
+     (distM >= Math.max(40.0, accuracyM * 1.4) && accuracyM <= 65 && effectiveSpeedKmh >= 2.5)) &&
+    accuracyM <= 110
+  ) {
     console.log(`📍 Direct Departure: ${distM.toFixed(0)}m at speed ${reportedSpeedKmh.toFixed(1)} km/h. Transitioning to MOVING.`);
     _movementCandidateBuffer = [];
     _isConfirmedMoving = true;
@@ -142,25 +148,26 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
   }
 
   // 2-Point Progressive Departure Verification (blocks single-spike indoor bounces while capturing 100% of walking departure distance)
-  const minCandDistM = 8.0;
-  if (distM >= minCandDistM && accuracyM <= 140) {
+  const minCandDistM = Math.max(10.0, accuracyM * 0.75);
+  const minConfirmDistM = Math.max(16.0, accuracyM * 1.05);
+  if (distM >= minCandDistM && accuracyM <= 125) {
     const firstCandidate = _movementCandidateBuffer.length > 0
       ? _movementCandidateBuffer[0]
       : null;
 
     if (firstCandidate) {
-      if (Date.now() - firstCandidate.time > 120000) {
+      if (Date.now() - firstCandidate.time > 180000) {
         _movementCandidateBuffer = [{ lat: currLat, lng: currLng, distM, secs: stepSecs, reportedSpeedKmh, calcSpeedKmh, accuracyM, time: Date.now(), coord: currCoord }];
         return { confirmed: false, pending: true };
       }
 
       const stepFromFirstCandidateM = distanceMeters(firstCandidate.lat, firstCandidate.lng, currLat, currLng);
 
-      // Confirmed genuine travel: progressive movement away from anchor (>= 14m) AND away from candidate 1 (>= 4m)
+      // Confirmed genuine travel: progressive movement away from anchor (>= minConfirmDistM) AND away from candidate 1 (>= 5m)
       if (
-        distM >= 14.0 &&
-        stepFromFirstCandidateM >= 4.0 &&
-        distM >= firstCandidate.distM + 3.0
+        distM >= minConfirmDistM &&
+        stepFromFirstCandidateM >= 5.0 &&
+        distM >= firstCandidate.distM + 4.0
       ) {
         console.log(`📍 Movement Confirmed: Progressive travel verified (${firstCandidate.distM.toFixed(0)}m → ${distM.toFixed(0)}m). Transitioning to MOVING.`);
         const savedCandidateCoord = firstCandidate.coord || null;
@@ -170,8 +177,8 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
         return { confirmed: true, backfillDistKm: totalBackfillKm, candidateCoord: savedCandidateCoord };
       }
 
-      // If phone bounced back deep inside stationary spot (< 6m or closer than candidate - 5m), clear candidate buffer
-      if (distM < 6.0 || distM < firstCandidate.distM - 6.0) {
+      // If phone bounced back deep inside stationary spot (< 8m or closer than candidate - 5m), clear candidate buffer
+      if (distM < 8.0 || distM < firstCandidate.distM - 5.0) {
         _movementCandidateBuffer = [];
         return { confirmed: false, pending: false };
       }
@@ -182,7 +189,7 @@ function evaluateMovementTransition(currLat, currLng, distM, secs, reportedSpeed
     return { confirmed: false, pending: true };
   }
 
-  if (_movementCandidateBuffer.length > 0 && distM < 6.0) {
+  if (_movementCandidateBuffer.length > 0 && distM < 8.0) {
     _movementCandidateBuffer = [];
   }
   return { confirmed: false, pending: false };
@@ -307,7 +314,7 @@ function validateSegment(prev, curr) {
     return { valid: false, distKm: 0, reanchorOnly: true };
   }
 
-  const effectiveTimeSecs = _isConfirmedMoving ? rawSecs : Math.min(rawSecs, Math.max(stepSecs, 5));
+  const effectiveTimeSecs = _isConfirmedMoving ? rawSecs : Math.min(rawSecs, Math.max(stepSecs, 5), 20);
   const calcSpeedKmh = (distKm / effectiveTimeSecs) * 3600;
   if (calcSpeedKmh > MAX_SPEED_KMH && (distKm / rawSecs) * 3600 > MAX_SPEED_KMH) {
     console.log(`📍 GPS Teleport detected: ${calcSpeedKmh.toFixed(0)} km/h — skipping`);
@@ -320,14 +327,20 @@ function validateSegment(prev, curr) {
   }
 
   // ── Gate 4: Active Moving Step Acceptance (Pure Haversine, Zero Stationary Drift) ──
-  // When confirmed moving: accept legitimate walking / riding steps >= 3.0m (or >= 2.0m if speed >= 1.0 km/h)
+  // - If hardware Doppler confirms motion (reportedSpeedKmh >= 1.8 km/h): accept steps >= max(3.5m, min(acc * 0.3, 10m))
+  // - If hardware Doppler is 0 / < 1.8 km/h (indoor jitter OR phone without Doppler while walking):
+  //   hold anchor until accumulated displacement from anchor reaches >= max(12.0m, acc * 0.85) so indoor wobble adds 0 KM
+  //   while genuine walking accumulates cleanly across 2-3 ticks!
   const stepCalcKmh = (distKm / Math.max(stepSecs, 1)) * 3600;
   const activeStepSpeedKmh = Math.max(reportedSpeedKmh, calcSpeedKmh, stepCalcKmh);
-  if (distM < 3.0 || (distM < 6.0 && activeStepSpeedKmh < 1.0 && reportedSpeedKmh < 1.0)) {
-    if (rawSecs > 120) {
+  const minMovingStepM = reportedSpeedKmh >= 1.8
+    ? Math.max(3.5, Math.min(reportedAccuracy * 0.3, 10.0))
+    : Math.max(12.0, reportedAccuracy * 0.85);
+  if (distM < minMovingStepM || (distM < 8.0 && activeStepSpeedKmh < 1.2 && reportedSpeedKmh < 1.2)) {
+    if (rawSecs > 90) {
       _isConfirmedMoving = false;
     }
-    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 120 };
+    return { valid: false, distKm: 0, keepMovingAnchor: rawSecs <= 90 };
   }
 
   return { valid: true, distKm };
@@ -552,9 +565,10 @@ const processLocationUnlocked = async (location) => {
 
     const distFromBgBaseM = distanceMeters(_backgroundBaselineCoord.lat, _backgroundBaselineCoord.lng, latitude, longitude);
 
-    // If ALREADY confirmed moving, or genuine departure occurs (Doppler >= 1.5 km/h AND displaced >= 12m, or displaced >= 20m),
-    // baseline follows current position. Never let an indoor GPS spike bypass the departure gate!
-    const isGenuineDopplerDeparture = (reportedSpeedKmh >= 1.5 && stepFromLastM >= 12.0) || (stepFromLastM >= 20.0 && reportedAcc <= 120);
+    // Only pre-confirm moving before validateSegment/evaluateMovementTransition if ALREADY confirmed moving,
+    // or if true hardware Doppler speed (>= 2.2 km/h) AND displacement exceeds GPS accuracy circle (max(20m, acc * 1.15)).
+    // Single-point zero-Doppler jumps MUST go through the 2-Point CUSUM evaluateMovementTransition gate!
+    const isGenuineDopplerDeparture = reportedSpeedKmh >= 2.2 && stepFromLastM >= Math.max(20.0, reportedAcc * 1.15) && reportedAcc <= 100;
     const isScreenOrDopplerMoving = _isConfirmedMoving || isGenuineDopplerDeparture;
     if (isScreenOrDopplerMoving) {
       _isConfirmedMoving = true;
@@ -573,6 +587,14 @@ const processLocationUnlocked = async (location) => {
         _isConfirmedMoving = false;
         if (distFromBgBaseM < 6.0) {
           _movementCandidateBuffer = [];
+        }
+        if (lastLocation) {
+          await storage.setItem('last_recorded_location', JSON.stringify({
+            ...lastLocation,
+            lastTickTimestamp: new Date(timestamp).toISOString(),
+            isConfirmedMoving: false,
+            movementCandidateBuffer: _movementCandidateBuffer,
+          })).catch(() => {});
         }
         const storedDistNow = await storage.getValidatedTodayDistance(sessionId);
         appEvents.emit('LiveDistanceUpdated', {
@@ -786,11 +808,11 @@ const processLocationUnlocked = async (location) => {
     const elapsedSinceLastUpload = nowMs - (_lastCoordUploadTs || 0);
 
     // Only upload immediately when a movement step is confirmed (calculatedDistKm > 0),
-    // on initial seed / 30-min re-anchor, or when genuinely moving (displaced >= 5m with speed >= 1.2 km/h).
-    // Stationary unconfirmed indoor bounces (< 30s) send a lightweight heartbeat instead of polluting the map trajectory!
+    // on initial seed / 30-min re-anchor, or when genuinely moving (displaced >= 5m with Doppler speed >= 1.8 km/h).
+    // Stationary unconfirmed indoor bounces ALWAYS send a lightweight heartbeat instead of polluting the map trajectory!
     const isGenuineMovingUpload = _isConfirmedMoving &&
-      ((lastLocation && distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) >= 5.0) || reportedSpeedKmh >= 1.2);
-    if (calculatedDistKm <= 0 && !isGenuineMovingUpload && !isInitialSeed && !isReanchorUpload && elapsedSinceLastUpload < 30000) {
+      ((lastLocation && distanceMeters(lastLocation.lat, lastLocation.lng, latitude, longitude) >= 5.0 && reportedSpeedKmh >= 1.8) || calculatedDistKm > 0);
+    if (calculatedDistKm <= 0 && !isGenuineMovingUpload && !isInitialSeed && !isReanchorUpload) {
       sendHeartbeatNow(false).catch(() => {});
       return;
     }

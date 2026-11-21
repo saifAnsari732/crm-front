@@ -271,23 +271,63 @@ export default function useLocationTracker() {
                 (s) => s.isActive && !s.manuallyStopped
               );
               if (liveTodaySession && liveTodaySession.sessionId) {
-                console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
-                const prevStoredSessionId = await storage.getItem('tracking_accumulated_session_id');
-                const prevStoredDate = await storage.getItem('tracking_accumulated_date');
-                const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                await storage.removeItem('user_manually_punched_out');
-                await storage.setItem('isTrackingActive', 'true');
-                await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
-                await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
-                await storage.setItem('tracking_accumulated_date', todayKolkata);
-                await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
-                const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
-                const serverDistNum = Number(liveTodaySession.totalDistance) || Number(liveTodaySession.officialDistance) || 0;
-                const isSameSessionToday = prevStoredSessionId === liveTodaySession.sessionId && prevStoredDate === todayKolkata;
-                const finalDist = (isSameSessionToday ? Math.max(localSavedDist, serverDistNum) : serverDistNum).toFixed(2);
-                await storage.setItem('tracking_accumulated_distance', finalDist);
-                activeSession = liveTodaySession.sessionId;
-                syncGlobalTrackingState(true);
+                const srvLastCoord = Array.isArray(liveTodaySession.coordinates) && liveTodaySession.coordinates.length > 0
+                  ? liveTodaySession.coordinates[liveTodaySession.coordinates.length - 1]
+                  : null;
+                let isRemoteCityHijack = false;
+                if (srvLastCoord && Number.isFinite(Number(srvLastCoord.lat)) && Number.isFinite(Number(srvLastCoord.lng))) {
+                  try {
+                    const localPos = await Location.getLastKnownPositionAsync().catch(() => null);
+                    if (localPos?.coords) {
+                      const dMeters = haversineMeters(
+                        Number(srvLastCoord.lat),
+                        Number(srvLastCoord.lng),
+                        localPos.coords.latitude,
+                        localPos.coords.longitude
+                      );
+                      const srvTs = srvLastCoord.timestamp ? new Date(srvLastCoord.timestamp).getTime() : Date.now();
+                      const dtHours = Math.max((Date.now() - srvTs) / 3600000, 0.05);
+                      const impliedSpeedKmh = (dMeters / 1000) / dtHours;
+                      if (dMeters > 50000 && impliedSpeedKmh > 135.0) {
+                        isRemoteCityHijack = true;
+                        console.log(`🛑 [AUTO_HEAL_HIJACK_GUARD] Device is ${(dMeters / 1000).toFixed(1)} km away from active session (${impliedSpeedKmh.toFixed(0)} km/h). Blocking cross-city session hijack.`);
+                      }
+                    }
+                  } catch (_) {}
+                }
+
+                if (!isRemoteCityHijack) {
+                  console.log('🛡️ [AUTO_HEAL] Active shift found on server. Restoring local tracking:', liveTodaySession.sessionId);
+                  const prevStoredSessionId = await storage.getItem('tracking_accumulated_session_id');
+                  const prevStoredDate = await storage.getItem('tracking_accumulated_date');
+                  const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                  await storage.removeItem('user_manually_punched_out');
+                  await storage.setItem('isTrackingActive', 'true');
+                  await storage.setItem('currentTrackingSessionId', liveTodaySession.sessionId);
+                  await storage.setItem('tracking_accumulated_session_id', liveTodaySession.sessionId);
+                  await storage.setItem('tracking_accumulated_date', todayKolkata);
+                  await storage.setItem('trackingStartTime', liveTodaySession.startTime || new Date().toISOString());
+                  if (srvLastCoord && Number.isFinite(Number(srvLastCoord.lat)) && !(await storage.getItem('last_recorded_location'))) {
+                    const isoAnchor = srvLastCoord.timestamp ? new Date(srvLastCoord.timestamp).toISOString() : new Date().toISOString();
+                    await storage.setItem('last_recorded_location', JSON.stringify({
+                      lat: Number(srvLastCoord.lat),
+                      lng: Number(srvLastCoord.lng),
+                      speed: 0,
+                      accuracy: 15,
+                      timestamp: isoAnchor,
+                      lastTickTimestamp: new Date().toISOString(),
+                      isConfirmedMoving: false,
+                      movementCandidateBuffer: [],
+                    })).catch(() => {});
+                  }
+                  const localSavedDist = Number(await storage.getItem('tracking_accumulated_distance')) || 0;
+                  const serverDistNum = Number(liveTodaySession.totalDistance) || Number(liveTodaySession.officialDistance) || 0;
+                  const isSameSessionToday = prevStoredSessionId === liveTodaySession.sessionId && prevStoredDate === todayKolkata;
+                  const finalDist = (isSameSessionToday ? Math.max(localSavedDist, serverDistNum) : serverDistNum).toFixed(2);
+                  await storage.setItem('tracking_accumulated_distance', finalDist);
+                  activeSession = liveTodaySession.sessionId;
+                  syncGlobalTrackingState(true);
+                }
               } else {
                 // No active session on server today: align local storage with server's authoritative today total
                 const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
