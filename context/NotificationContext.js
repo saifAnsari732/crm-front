@@ -45,6 +45,7 @@ const POLL_INTERVAL = 45000; // 45 seconds fallback (Socket.IO delivers real-tim
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
+  const userId = user?._id || user?.id;
   const router = useRouter();
   const [activeNotification, setActiveNotification] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -114,7 +115,7 @@ export const NotificationProvider = ({ children }) => {
     }
 
     configureNativeNotifications();
-  }, [user]);
+  }, [userId]);
 
   // ── Core trigger: in-app banner + OS native alert (APK) ───────────────────
   const triggerSystemNotification = useCallback(async ({ title, message, type, route, data }) => {
@@ -209,11 +210,11 @@ export const NotificationProvider = ({ children }) => {
         }
       }
     }
-  }, [user, triggerSystemNotification]);
+  }, [userId, triggerSystemNotification]);
 
   // ── Start/stop polling ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setActiveNotification(null);
       setUnreadCount(0);
       lastNotificationIdRef.current = null;
@@ -240,7 +241,7 @@ export const NotificationProvider = ({ children }) => {
       pollingTimerRef.current = null;
       appStateSub.remove();
     };
-  }, [user, pollForNewNotifications]);
+  }, [userId, pollForNewNotifications]);
 
   // ── Socket listeners (real-time bonus) ────────────────────────────────────
   useEffect(() => {

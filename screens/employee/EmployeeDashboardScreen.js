@@ -208,12 +208,6 @@ export default function EmployeeDashboardScreen() {
       syncLocalDistance();
       loadDashboardData();
       fetchNotifications();
-      // Fresh user profile fetch to ensure updated avatar syncs across tabs
-      authAPI.getMe().then((res) => {
-        if (res.data?.success && res.data?.user && updateUser) {
-          updateUser(res.data.user);
-        }
-      }).catch(() => {});
     }, [isTracking])
   );
 

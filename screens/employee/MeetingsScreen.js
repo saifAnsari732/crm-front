@@ -14,14 +14,15 @@ import {
   Image,
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye } from 'lucide-react-native';
+import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye, ArrowLeft } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { meetingApi, uploadAPI, getAvatarUrl } from '../../services/api';
 
 export default function MeetingsScreen() {
+  const router = useRouter();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -265,7 +266,14 @@ export default function MeetingsScreen() {
       {/* ── TOP HEADER (Clean Crisp Forest Teal Theme) ── */}
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
-          <View>
+          <TouchableOpacity
+            style={styles.backBtnHeader}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(employee)/dashboard'))}
+            activeOpacity={0.7}
+          >
+            <ArrowLeft size={20} color="#0f766e" />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerKicker}>FIELD ACTIVITY</Text>
             <Text style={styles.headerMainTitle}>Client Visits</Text>
             <Text style={styles.headerSubTitle}>Your Field Meeting Logs</Text>
@@ -653,6 +661,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  backBtnHeader: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 2,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   headerKicker: {
     fontSize: 10.5,

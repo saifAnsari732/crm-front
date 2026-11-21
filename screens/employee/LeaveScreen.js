@@ -4,9 +4,10 @@ import {
   Alert, Dimensions, Platform, ActivityIndicator 
 } from 'react-native';
 import { Text, Surface, Portal, Modal, TextInput, Button } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { 
   Calendar, CalendarPlus, Plus, ChevronRight, CheckCircle, 
-  Clock, ShieldAlert, BadgeAlert 
+  Clock, ShieldAlert, BadgeAlert, ArrowLeft 
 } from 'lucide-react-native';
 import { leaveApi } from '../../services/api';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 
 export default function LeaveScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [leaves, setLeaves] = useState([]);
@@ -112,6 +114,21 @@ export default function LeaveScreen() {
         <RefreshControl refreshing={fetching} onRefresh={fetchLeaves} colors={['#1d4ed8']} />
       }
     >
+      {/* Top Header */}
+      <View style={styles.topHeaderRow}>
+        <TouchableOpacity
+          style={styles.backBtnHeader}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(employee)/dashboard'))}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={20} color="#0f766e" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.topHeaderTitle}>Leave Management</Text>
+          <Text style={styles.topHeaderSub}>Apply and track your field leaves</Text>
+        </View>
+      </View>
+
       {/* Available Leave Balance Card */}
       <Surface style={styles.balanceCard} elevation={2}>
         <View style={styles.balanceLeft}>
@@ -273,6 +290,32 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 32,
+  },
+  topHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backBtnHeader: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  topHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  topHeaderSub: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
   },
   balanceCard: {
     backgroundColor: '#fff',

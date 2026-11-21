@@ -22,6 +22,13 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Hide floating tab bar on non-main screens so sub-screens get full viewport
+  const currentRouteName = state?.routes?.[state?.index]?.name;
+  const isMainTab = ['dashboard', 'tracking', 'leads', 'profile'].includes(currentRouteName);
+  if (!isMainTab) {
+    return null;
+  }
+
   // Defined tab items matching the image design: Home, Tracking, [Center Map], Team, Profile
   const tabItems = [
     { key: "dashboard", name: "dashboard", label: "Home", icon: Home, route: "/(employee)/dashboard" },
@@ -105,14 +112,16 @@ function CustomFloatingTabBar({ state, descriptors, navigation }) {
   );
 }
 
+const renderFloatingTabBar = (props) => <CustomFloatingTabBar {...props} />;
+
 export default function EmployeeLayout() {
   const { user } = useAuth();
-  const isAdminOrManager = user?.role === "admin" || user?.role === "manager";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f8fafc" }}>
       <Tabs
-        tabBar={(props) => <CustomFloatingTabBar {...props} />}
+        tabBar={renderFloatingTabBar}
+        backBehavior="history"
         screenOptions={{
           headerShown: false,
         }}
@@ -122,13 +131,13 @@ export default function EmployeeLayout() {
         <Tabs.Screen name="leads" options={{ title: "Team" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
 
-        {/* Hidden screen routes */}
-        <Tabs.Screen name="tasks" options={{ href: null }} />
-        <Tabs.Screen name="meetings" options={{ href: null }} />
-        <Tabs.Screen name="expenses" options={{ href: null }} />
-        <Tabs.Screen name="leaves" options={{ href: null }} />
-        <Tabs.Screen name="admin/history" options={{ href: null }} />
-        <Tabs.Screen name="trip-planner" options={{ href: null }} />
+        {/* Functional sub-screens: fully routable, clean viewport */}
+        <Tabs.Screen name="tasks" options={{ title: "Tasks" }} />
+        <Tabs.Screen name="meetings" options={{ title: "Meetings" }} />
+        <Tabs.Screen name="expenses" options={{ title: "Expenses" }} />
+        <Tabs.Screen name="leaves" options={{ title: "Leaves" }} />
+        <Tabs.Screen name="admin/history" options={{ title: "History" }} />
+        <Tabs.Screen name="trip-planner" options={{ title: "Trip Planner" }} />
       </Tabs>
     </View>
   );

@@ -150,7 +150,27 @@ export const AuthProvider = ({ children }) => {
    */
   const updateUser = async (updatedData) => {
     try {
-      const mergedUser = { ...user, ...updatedData };
+      if (!updatedData || typeof updatedData !== 'object') return;
+
+      // Check if any meaningful property actually changed
+      const current = user || {};
+      const relevantKeys = Object.keys(updatedData).filter(
+        k => !['__v', 'updatedAt', 'lastActive', 'tokens'].includes(k)
+      );
+
+      let hasChanged = false;
+      for (const key of relevantKeys) {
+        if (JSON.stringify(current[key]) !== JSON.stringify(updatedData[key])) {
+          hasChanged = true;
+          break;
+        }
+      }
+
+      if (!hasChanged) {
+        return; // Guard: No actual data change, prevent re-render cascade
+      }
+
+      const mergedUser = { ...current, ...updatedData };
       await storage.setItem('userData', JSON.stringify(mergedUser));
       setUser(mergedUser);
       console.log('🔐 AuthContext: Profile values updated successfully.');

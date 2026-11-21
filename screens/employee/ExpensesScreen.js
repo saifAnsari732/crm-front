@@ -5,10 +5,11 @@ import {
   Modal, KeyboardAvoidingView
 } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { 
   DollarSign, Calendar, Truck, Utensils, Fuel, FileText, 
   ChevronRight, CheckCircle2, AlertCircle, Clock, UploadCloud, 
-  Plus, Wallet, XCircle, X, MapPin, Navigation, Bike, Train, Bus, Car, Building2, Package
+  Plus, Wallet, XCircle, X, MapPin, Navigation, Bike, Train, Bus, Car, Building2, Package, ArrowLeft
 } from 'lucide-react-native';
 import Svg, { Rect, Path, Line, Circle } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +18,7 @@ import { expenseApi, authApi, uploadAPI } from '../../services/api';
 const { width } = Dimensions.get('window');
 
 export default function ExpensesScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   
@@ -223,6 +225,13 @@ export default function ExpensesScreen() {
     >
       {/* 1. Header titles */}
       <View style={styles.headerRowContainer}>
+        <TouchableOpacity
+          style={styles.backBtnHeader}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(employee)/dashboard'))}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={20} color="#0f766e" />
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Expense Claims</Text>
           <Text style={styles.subtitle}>Track your field expenses and reimbursements.</Text>
@@ -539,6 +548,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  backBtnHeader: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   logNewBtnHeader: {
     flexDirection: 'row',
