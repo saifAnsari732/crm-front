@@ -115,9 +115,6 @@ export default function useLocationTracker() {
     checkActiveSession();
     cancelNoMovementNotification().catch(() => {});
     
-    // Show battery optimization dialog once (first-ever app launch)
-    showBatteryOptimizationDialog();
-    
     // Listen for global tracking state changes (syncs across multiple hook instances)
     const subscription = appEvents.addListener('TrackingStateChanged', (newState) => {
       const boolVal = Boolean(newState);

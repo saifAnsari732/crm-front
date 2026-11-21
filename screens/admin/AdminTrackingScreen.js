@@ -568,7 +568,25 @@ export default function AdminTrackingScreen(props = {}) {
       });
     }
 
-    return result;
+    return result.sort((a, b) => {
+      // 🌟 STRICT ACTIVE FLEET PRIORITY (Moving 1st, On Field / At Spot 2nd, Has KM 3rd, Offline Last)
+      const aMoving = a.isTracking && (a.speed >= 1.5 || a.status === 'IN_TRANSIT');
+      const bMoving = b.isTracking && (b.speed >= 1.5 || b.status === 'IN_TRANSIT');
+      if (aMoving && !bMoving) return -1;
+      if (!aMoving && bMoving) return 1;
+
+      const aActive = a.isTracking || a.status === 'ON_FIELD' || a.status === 'AT_LOCATION';
+      const bActive = b.isTracking || b.status === 'ON_FIELD' || b.status === 'AT_LOCATION';
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+
+      const aHasKm = (Number(a.totalDistance) || 0) > 0;
+      const bHasKm = (Number(b.totalDistance) || 0) > 0;
+      if (aHasKm && !bHasKm) return -1;
+      if (!aHasKm && bHasKm) return 1;
+
+      return (Number(b.totalDistance) || 0) - (Number(a.totalDistance) || 0);
+    });
   }, [allEmployeesList, liveLocations, liveLocationIndex]);
 
   const activeCount = directoryStaff.filter((s) => s.isTracking || s.status === 'ON_FIELD' || s.status === 'IN_TRANSIT').length;
@@ -578,10 +596,11 @@ export default function AdminTrackingScreen(props = {}) {
   const totalFleetKm = directoryStaff.reduce((sum, s) => sum + (Number(s.totalDistance) || 0), 0);
 
   const filteredSheetStaff = useMemo(() => {
-    if (sheetFilter === 'MOVING') return directoryStaff.filter((s) => s.status === 'IN_TRANSIT');
-    if (sheetFilter === 'AT_SPOT') return directoryStaff.filter((s) => s.status === 'ON_FIELD' || s.status === 'AT_LOCATION');
-    if (sheetFilter === 'OFFLINE') return directoryStaff.filter((s) => !s.isTracking && s.status !== 'ON_FIELD' && s.status !== 'IN_TRANSIT');
-    return directoryStaff;
+    let list = directoryStaff;
+    if (sheetFilter === 'MOVING') list = directoryStaff.filter((s) => s.status === 'IN_TRANSIT');
+    else if (sheetFilter === 'AT_SPOT') list = directoryStaff.filter((s) => s.status === 'ON_FIELD' || s.status === 'AT_LOCATION');
+    else if (sheetFilter === 'OFFLINE') list = directoryStaff.filter((s) => !s.isTracking && s.status !== 'ON_FIELD' && s.status !== 'IN_TRANSIT');
+    return list;
   }, [directoryStaff, sheetFilter]);
 
   // Compute map region dynamically to fit ALL active employees on the map automatically
@@ -861,13 +880,45 @@ export default function AdminTrackingScreen(props = {}) {
           onSelectEmployee={handleSelectEmployee}
         />
 
-        {/* Floating controls */}
+        {/* ── FLOATING TELEMATICS FILTER CHIPS (UI/UX PRO MAX) ──── */}
+        <View style={styles.floatingFilterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.floatingFilterScroll}>
+            {[
+              { id: 'ALL', label: `All (${directoryStaff.length})` },
+              { id: 'MOVING', label: `Moving (${movingCount})`, dot: '#10b981' },
+              { id: 'AT_SPOT', label: `At Spot (${atSpotCount})`, dot: '#f59e0b' },
+              { id: 'OFFLINE', label: `Offline (${offlineCount})`, dot: '#94a3b8' },
+            ].map((tab) => {
+              const active = sheetFilter === tab.id;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.floatingFilterPill, active && styles.floatingFilterPillActive, cardShadow]}
+                  onPress={() => setSheetFilter(tab.id)}
+                  activeOpacity={0.85}
+                >
+                  {tab.dot ? (
+                    <View style={[styles.filterDot, { backgroundColor: active ? '#ffffff' : tab.dot }]} />
+                  ) : null}
+                  <Text style={[styles.floatingFilterText, active && styles.floatingFilterTextActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Floating map controls */}
         <View style={styles.mapControls}>
           <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={recenterMap} activeOpacity={0.85}>
-            <LocateFixed size={18} color={GREEN} />
+            <LocateFixed size={18} color="#059669" />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={fitRoute} activeOpacity={0.85}>
-            <Route size={18} color={GREEN} />
+            <Route size={18} color="#0284c7" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.mapCtrlBtn, cardShadow]} onPress={() => setPanelOpen((v) => !v)} activeOpacity={0.85}>
+            <Users size={18} color="#4f46e5" />
           </TouchableOpacity>
         </View>
 
@@ -1192,6 +1243,48 @@ const styles = StyleSheet.create({
   },
 
   mapWrap: { flex: 1, position: 'relative' },
+  floatingFilterContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  floatingFilterScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 12,
+  },
+  floatingFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  floatingFilterPillActive: {
+    backgroundColor: '#0F766E',
+    borderColor: '#0F766E',
+  },
+  filterDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  floatingFilterText: {
+    fontFamily: FONT,
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  floatingFilterTextActive: {
+    color: '#ffffff',
+  },
   mapControls: { position: 'absolute', right: 12, bottom: 14, gap: 8 },
   mapCtrlBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   routeLoader: { position: 'absolute', top: 16, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8, borderWidth: 1, borderColor: '#e2e8f0' },

@@ -28,8 +28,10 @@ const MapViewComponent = forwardRef(({
         const lat = parseFloat(emp.lat);
         const lng = parseFloat(emp.lng);
         if (isNaN(lat) || isNaN(lng)) return null;
-        const isLive = emp.isTracking || emp.status === 'ON_FIELD';
-        const statusColor = emp.statusColor || (isLive ? '#10b981' : '#64748b');
+
+        const isMoving = emp.status === 'IN_TRANSIT' || (emp.isTracking && Number(emp.speed) >= 1.5);
+        const isLive = emp.isTracking || emp.status === 'ON_FIELD' || emp.status === 'IN_TRANSIT';
+        const borderColor = isMoving ? '#059669' : (isLive ? '#d97706' : '#cbd5e1');
         const kmVal = parseFloat(emp.totalDistance || 0).toFixed(1);
         const firstName = (emp.name || 'Agent').trim().split(' ')[0];
 
@@ -42,12 +44,15 @@ const MapViewComponent = forwardRef(({
             onPress={() => onSelectEmployee && onSelectEmployee(emp)}
           >
             <View style={styles.unifiedPin}>
-              <View style={[styles.pinBody, cardShadow]}>
+              <View style={[styles.pinBody, cardShadow, { borderColor, borderWidth: isMoving ? 2 : 1.5 }]}>
+                {/* Moving indicator */}
+                {isMoving && <View style={styles.movingDot} />}
+
                 {/* Avatar Photo */}
                 {getAvatarUrl(emp.avatar) ? (
                   <Image source={{ uri: getAvatarUrl(emp.avatar) }} style={styles.avatarImg} />
                 ) : (
-                  <View style={[styles.avatarInitial, { backgroundColor: isLive ? '#059669' : '#64748b' }]}>
+                  <View style={[styles.avatarInitial, { backgroundColor: isMoving ? '#059669' : isLive ? '#d97706' : '#64748b' }]}>
                     <Text style={styles.avatarInitialText}>{(emp.name || 'E').charAt(0).toUpperCase()}</Text>
                   </View>
                 )}
@@ -56,13 +61,15 @@ const MapViewComponent = forwardRef(({
                 <Text style={styles.nameText} numberOfLines={1}>{firstName}</Text>
 
                 {/* KM Telemetry Badge */}
-                <View style={[styles.kmBadge, { backgroundColor: isLive ? '#ecfdf5' : '#f1f5f9' }]}>
-                  <Text style={[styles.kmText, { color: isLive ? '#047857' : '#475569' }]}>{kmVal} km</Text>
+                <View style={[styles.kmBadge, { backgroundColor: isMoving ? '#ecfdf5' : isLive ? '#fffbeb' : '#f1f5f9' }]}>
+                  <Text style={[styles.kmText, { color: isMoving ? '#047857' : isLive ? '#b45309' : '#475569' }]}>
+                    {kmVal} km
+                  </Text>
                 </View>
               </View>
 
               {/* Teardrop Pointer Tip */}
-              <View style={styles.pinTip} />
+              <View style={[styles.pinTip, { borderTopColor: borderColor }]} />
             </View>
           </Marker>
         );
@@ -84,17 +91,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 5,
-    paddingVertical: 3.5,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
     gap: 5,
+  },
+  movingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10b981',
   },
   avatarImg: { width: 26, height: 26, borderRadius: 13 },
   avatarInitial: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   avatarInitialText: { color: '#ffffff', fontWeight: 'bold', fontSize: 11 },
-  nameText: { color: '#0f172a', fontWeight: '700', fontSize: 11, maxWidth: 75 },
+  nameText: { color: '#0f172a', fontWeight: '700', fontSize: 11, maxWidth: 80 },
   kmBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
   kmText: { fontWeight: '800', fontSize: 10 },
   pinTip: {
@@ -105,7 +116,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 6,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#cbd5e1',
     marginTop: -1,
   },
 });

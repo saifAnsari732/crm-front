@@ -1009,6 +1009,24 @@ export default function ManagerDashboardScreen() {
       totalDistance: distNum,
       todayKm: distNum.toFixed(2),
     };
+  }).sort((a, b) => {
+    // 🌟 ACTIVE EMPLOYEES TO THE TOP (Moving 1st, At Spot 2nd, Traveled 3rd, Offline Last)
+    const aMoving = a.isTracking && (a.speed >= 1.5 || a.motionState === 'MOVING');
+    const bMoving = b.isTracking && (b.speed >= 1.5 || b.motionState === 'MOVING');
+    if (aMoving && !bMoving) return -1;
+    if (!aMoving && bMoving) return 1;
+
+    const aActive = a.isTracking || a.status === 'ACTIVE' || a.status === 'IDLE';
+    const bActive = b.isTracking || b.status === 'ACTIVE' || b.status === 'IDLE';
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+
+    const aHasKm = (a.totalDistance || 0) > 0 || (a.punchInTime && !a.punchInTime.toLowerCase().includes('not punch'));
+    const bHasKm = (b.totalDistance || 0) > 0 || (b.punchInTime && !b.punchInTime.toLowerCase().includes('not punch'));
+    if (aHasKm && !bHasKm) return -1;
+    if (!aHasKm && bHasKm) return 1;
+
+    return (b.totalDistance || 0) - (a.totalDistance || 0);
   });
 
   const totalTeam = teamMembers.length;
@@ -1018,7 +1036,8 @@ export default function ManagerDashboardScreen() {
   const activeLive = liveLocations.filter((l) => l.isActive === true && l.manuallyStopped !== true && l.autoClosed !== true).length;
   const teamTodayKm = Math.max(
     directoryStaff.reduce((sum, e) => sum + (Number(e.todayKm) || 0), 0),
-    liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistanceToday || l.todayKm || l.totalDistance) || 0), 0)
+    liveLocations.reduce((sum, l) => sum + (Number(l.officialDistance || l.totalDistanceToday || l.todayKm || l.totalDistance) || 0), 0),
+    attendanceRecords.reduce((sum, a) => sum + (Number(a.officialDistance || a.totalDistanceTraveled) || 0), 0)
   );
   
   const myLiveLoc = liveLocations.find((l) => String(l.employeeId?._id || l.employeeId || '') === String(user?._id || ''));
@@ -1610,7 +1629,10 @@ export default function ManagerDashboardScreen() {
                 const isStationary = isLive && !isMoving;
                 const kmDisplay = (parseFloat(emp.todayKm) || 0).toFixed(2);
                 const avatarBg = isMoving ? '#0F766E' : isStationary ? '#334155' : '#64748B';
-                const checkInVal = (!emp.punchInTime || emp.punchInTime === 'Not Punched') ? 'Not In' : emp.punchInTime;
+                let checkInVal = 'Not In';
+                if (emp.punchInTime && !emp.punchInTime.toLowerCase().includes('not punch')) {
+                  checkInVal = emp.punchInTime;
+                }
 
                 return (
                   <Surface

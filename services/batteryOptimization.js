@@ -122,17 +122,37 @@ export async function stopCpuKeepAlive() {
   }
 }
 
+// Module-level guard to prevent multiple dialogs from opening simultaneously
+let _isBatteryAlertActive = false;
+
 /**
- * Enforce battery optimization exemption check before punch in
+ * Enforce battery optimization exemption check
+ * @param {string} packageName 
+ * @param {boolean} force - If false, honors previously dismissed state so it doesn't spam user
  */
-export async function ensureBatteryOptimizationExempt(packageName = 'com.kisanteam.crm') {
+export async function ensureBatteryOptimizationExempt(packageName = 'com.kisanteam.crm', force = false) {
   if (Platform.OS !== 'android') return true;
 
   const isExempt = await isBatteryOptimizationExempt();
   if (isExempt) {
     console.log('✅ [BATTERY_GUARD] App is already unrestricted from battery optimization.');
+    await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true').catch(() => {});
     return true;
   }
+
+  // If already shown/dismissed and not explicitly forced, do not interrupt the user!
+  if (!force) {
+    const alreadyShown = await storage.getItem(BATTERY_OPT_SHOWN_KEY);
+    if (alreadyShown === 'true') {
+      return false;
+    }
+  }
+
+  // Guard against multiple simultaneous dialogs from multiple hook instances
+  if (_isBatteryAlertActive) {
+    return false;
+  }
+  _isBatteryAlertActive = true;
 
   return new Promise((resolve) => {
     showCustomAlert(
@@ -143,15 +163,20 @@ export async function ensureBatteryOptimizationExempt(packageName = 'com.kisante
         {
           text: 'Allow Karein',
           onPress: async () => {
+            _isBatteryAlertActive = false;
+            await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true').catch(() => {});
             await openBatteryOptimizationSettings(packageName);
-            await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true');
             resolve(true);
           },
         },
         {
           text: 'Baad Mein',
           style: 'cancel',
-          onPress: () => resolve(false),
+          onPress: async () => {
+            _isBatteryAlertActive = false;
+            await storage.setItem(BATTERY_OPT_SHOWN_KEY, 'true').catch(() => {});
+            resolve(false);
+          },
         }
       ],
       'battery'
@@ -163,9 +188,13 @@ export async function ensureBatteryOptimizationExempt(packageName = 'com.kisante
  * Legacy compatibility wrappers
  */
 export async function showBatteryOptimizationDialog(opts) {
-  return ensureBatteryOptimizationExempt(opts?.packageName);
+  const alreadyShown = await storage.getItem(BATTERY_OPT_SHOWN_KEY);
+  if (alreadyShown === 'true') {
+    return false;
+  }
+  return ensureBatteryOptimizationExempt(opts?.packageName, false);
 }
 
 export async function remindBatteryOptimizationIfNeeded(packageName = 'com.kisanteam.crm') {
-  return ensureBatteryOptimizationExempt(packageName);
+  return ensureBatteryOptimizationExempt(packageName, false);
 }

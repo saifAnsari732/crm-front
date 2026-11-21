@@ -563,7 +563,7 @@ export default function EmployeeDashboardScreen() {
           {/* 3. Sleek Compact KPI Stat Cards (2x2 Grid) */}
           <View style={styles.kpiGrid}>
             {/* Card 1: DISTANCE TODAY */}
-            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/tracking")}>
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/(employee)/tracking")}>
               <Surface style={styles.statCard} elevation={1}>
                 <View style={styles.statHeaderRow}>
                   <Radio size={14} color="#0f766e" />
@@ -574,7 +574,7 @@ export default function EmployeeDashboardScreen() {
             </TouchableOpacity>
 
             {/* Card 2: MEETINGS */}
-            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/meetings")}>
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/(employee)/meetings")}>
               <Surface style={styles.statCard} elevation={1}>
                 <View style={styles.statHeaderRow}>
                   <Calendar size={14} color="#0f766e" />
@@ -585,7 +585,7 @@ export default function EmployeeDashboardScreen() {
             </TouchableOpacity>
 
             {/* Card 3: TOTAL DISTANCE */}
-            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/tracking")}>
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/(employee)/tracking")}>
               <Surface style={styles.statCard} elevation={1}>
                 <View style={styles.statHeaderRow}>
                   <Footprints size={14} color="#0f766e" />
@@ -596,7 +596,7 @@ export default function EmployeeDashboardScreen() {
             </TouchableOpacity>
 
             {/* Card 4: TRAVEL PAY */}
-            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/expenses")}>
+            <TouchableOpacity style={styles.statCardWrap} activeOpacity={0.85} onPress={() => router.push("/(employee)/expenses")}>
               <Surface style={styles.statCard} elevation={1}>
                 <View style={styles.statHeaderRow}>
                   <Wallet size={14} color="#0f766e" />
@@ -648,35 +648,35 @@ export default function EmployeeDashboardScreen() {
               <Text style={styles.quickOpGridLabel}>Plan Trip</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/tracking")}>
+            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/(employee)/tracking")}>
               <View style={styles.quickOpIconCircle}>
                 <MapPin size={20} color="#0f766e" />
               </View>
               <Text style={styles.quickOpGridLabel}>Tracking</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/tasks")}>
+            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/(employee)/tasks")}>
               <View style={styles.quickOpIconCircle}>
                 <ClipboardCheck size={20} color="#0f766e" />
               </View>
               <Text style={styles.quickOpGridLabel}>Action Plan</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/leaves")}>
+            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/(employee)/leaves")}>
               <View style={styles.quickOpIconCircle}>
                 <Calendar size={20} color="#0f766e" />
               </View>
               <Text style={styles.quickOpGridLabel}>Apply Leave</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/meetings")}>
+            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/(employee)/meetings")}>
               <View style={styles.quickOpIconCircle}>
                 <UserPlus size={20} color="#0f766e" />
               </View>
               <Text style={styles.quickOpGridLabel}>Add Meeting</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/expenses")}>
+            <TouchableOpacity style={styles.quickOpGridItem} activeOpacity={0.85} onPress={() => router.push("/(employee)/expenses")}>
               <View style={styles.quickOpIconCircle}>
                 <Wallet size={20} color="#0f766e" />
               </View>
@@ -687,7 +687,7 @@ export default function EmployeeDashboardScreen() {
           {/* 5. RECENT MEETINGS */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeaderTitle}>Recent Meetings</Text>
-            <TouchableOpacity onPress={() => router.push("/meetings")}>
+            <TouchableOpacity onPress={() => router.push("/(employee)/meetings")}>
               <Text style={styles.viewAllBtnText}>View all ›</Text>
             </TouchableOpacity>
           </View>
@@ -759,7 +759,7 @@ export default function EmployeeDashboardScreen() {
           {/* 6. RECENT EXPENSES */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeaderTitle}>Recent Expenses</Text>
-            <TouchableOpacity onPress={() => router.push("/expenses")}>
+            <TouchableOpacity onPress={() => router.push("/(employee)/expenses")}>
               <Text style={styles.viewAllBtnText}>View all ›</Text>
             </TouchableOpacity>
           </View>
@@ -877,14 +877,14 @@ export default function EmployeeDashboardScreen() {
                 <Text style={styles.menuSectionTitle}>NAVIGATION</Text>
 
                 {[
-                  { label: "Dashboard", route: "/dashboard", icon: "Home", desc: "Main control center" },
-                  { label: "Live GPS Tracking", route: "/tracking", icon: "Navigation", desc: "Realtime speed & distance" },
+                  { label: "Dashboard", route: "/(employee)/dashboard", icon: "Home", desc: "Main control center" },
+                  { label: "Live GPS Tracking", route: "/(employee)/tracking", icon: "Navigation", desc: "Realtime speed & distance" },
                   { label: "Trip & Route Planner", route: "/(employee)/trip-planner", icon: "Car", desc: "Plan meeting route & claim KM" },
-                  { label: "Daily Action Plan", route: "/tasks", icon: "ClipboardCheck", desc: "View & add daily actions" },
-                  { label: "Leads", route: "/leads", icon: "Users", desc: "View assigned leads" },
-                  { label: "Client Meetings", route: "/meetings", icon: "Calendar", desc: "Log feedback & visit details" },
-                  { label: "Expenses & Claims", route: "/expenses", icon: "Wallet", desc: "Submit logs & receipt uploads" },
-                  { label: "Leaves & Attendance", route: "/leaves", icon: "ClipboardCheck", desc: "Request leave sessions" },
+                  { label: "Daily Action Plan", route: "/(employee)/tasks", icon: "ClipboardCheck", desc: "View & add daily actions" },
+                  { label: "Leads", route: "/(employee)/leads", icon: "Users", desc: "View assigned leads" },
+                  { label: "Client Meetings", route: "/(employee)/meetings", icon: "Calendar", desc: "Log feedback & visit details" },
+                  { label: "Expenses & Claims", route: "/(employee)/expenses", icon: "Wallet", desc: "Submit logs & receipt uploads" },
+                  { label: "Leaves & Attendance", route: "/(employee)/leaves", icon: "ClipboardCheck", desc: "Request leave sessions" },
                   { label: "My Profile", route: "/(employee)/profile", icon: "UserCircle", desc: "Account details" },
                 ].map((item) => (
                   <TouchableOpacity

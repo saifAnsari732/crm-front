@@ -53,7 +53,7 @@ export default function RegisterScreen() {
         Alert.alert(
           'Registration Pending',
           'Your profile registration request has been successfully queued for approval.',
-          [{ text: 'Proceed', onPress: () => router.push('/login') }]
+          [{ text: 'Proceed', onPress: () => router.push('/(auth)/login') }]
         );
       }
     } catch (err) {
@@ -235,7 +235,7 @@ export default function RegisterScreen() {
           {/* Lower Proxy Nav */}
           <View style={styles.loginProxyRow}>
             <Text style={styles.loginProxyText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/login')}>
+            <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
               <Text style={styles.loginProxyLink}>Login to Portal</Text>
             </TouchableOpacity>
           </View>
