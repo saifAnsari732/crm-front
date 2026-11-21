@@ -964,6 +964,9 @@ export default function AdminTrackingScreen(props = {}) {
               const selected = selectedEmployee?._id === item._id;
               const displayAddress = normalizeAddress(item.address);
               const hasAddress = Boolean(displayAddress);
+              const isMoving = item.status === 'IN_TRANSIT' || (item.isTracking && Number(item.speed) >= 1.5);
+              const isLive = item.isTracking || item.status === 'ON_FIELD';
+              const kmVal = (parseFloat(item.totalDistance) || 0).toFixed(1);
 
               return (
                 <TouchableOpacity
@@ -986,9 +989,12 @@ export default function AdminTrackingScreen(props = {}) {
                     <View style={[styles.memberDot, { backgroundColor: meta.pin }]} />
                   </View>
 
-                  {/* Content Section: Name & Real Address only (Clean design) */}
+                  {/* Content Section: Name, Role & Real Address */}
                   <View style={styles.memberMainContent}>
                     <Text style={styles.memberName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.memberRoleText} numberOfLines={1}>
+                      {item.designation || item.department || 'Field Executive'}
+                    </Text>
                     {hasAddress ? (
                       <View style={styles.memberLocRow}>
                         <MapPin size={10} color="#64748b" />
@@ -997,17 +1003,31 @@ export default function AdminTrackingScreen(props = {}) {
                     ) : null}
                   </View>
 
-                  {/* Right Telemetry Badge */}
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  {/* Right Telemetry Badge: Prominent KM + Status / Speed */}
+                  <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
+                    {/* Prominent KM Pill */}
+                    <View style={[
+                      styles.distBadgePill,
+                      isMoving ? styles.distBadgeMoving : (isLive ? styles.distBadgeLive : styles.distBadgeOffline)
+                    ]}>
+                      <Route size={10} color={isMoving ? '#047857' : (isLive ? '#b45309' : '#64748b')} style={{ marginRight: 3 }} />
+                      <Text style={[
+                        styles.distBadgeKmNumber,
+                        { color: isMoving ? '#047857' : (isLive ? '#b45309' : '#334155') }
+                      ]}>
+                        {kmVal} <Text style={styles.distBadgeKmUnit}>KM</Text>
+                      </Text>
+                    </View>
+
+                    {/* Status / Speed Pill */}
                     <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
                       <View style={[styles.statusPillDot, { backgroundColor: meta.pin }]} />
-                      <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
+                      <Text style={[styles.statusPillText, { color: meta.color }]}>
+                        {isMoving && Number(item.speed) >= 1.5
+                          ? `${Math.round(item.speed)} km/h`
+                          : meta.label}
+                      </Text>
                     </View>
-                    {(parseFloat(item.totalDistance) || 0) > 0 && (
-                      <View style={styles.distBadge}>
-                        <Text style={styles.distBadgeText}>{(parseFloat(item.totalDistance) || 0).toFixed(1)} km</Text>
-                      </View>
-                    )}
                   </View>
                   <ChevronRight size={14} color="#cbd5e1" style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
@@ -1308,20 +1328,123 @@ const styles = StyleSheet.create({
 
   sheetList: { flexGrow: 1 },
 
-  // Member Card Item Design
-  memberCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 6 },
-  memberCardSelected: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-  memberDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', bottom: -1, right: -1, borderWidth: 2, borderColor: '#fff' },
-  memberMainContent: { flex: 1, marginLeft: 10, justifyContent: 'center' },
-  memberName: { fontFamily: FONT, fontSize: 13, fontWeight: '700', color: '#0f172a' },
-  memberLocRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  memberLoc: { fontFamily: FONT, fontSize: 9.5, color: '#64748b', flex: 1 },
+  // Member Card Item Design — UI/UX Pro Max Telematics Dispatch Console
+  memberCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 8,
+  },
+  memberCardSelected: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#10b981',
+    borderWidth: 1.5,
+  },
+  memberDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  memberMainContent: {
+    flex: 1,
+    marginLeft: 11,
+    justifyContent: 'center',
+  },
+  memberName: {
+    fontFamily: FONT,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  memberRoleText: {
+    fontFamily: FONT,
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  memberLocRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  memberLoc: {
+    fontFamily: FONT,
+    fontSize: 10,
+    color: '#475569',
+    flex: 1,
+  },
   
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2.5 },
-  statusPillDot: { width: 5, height: 5, borderRadius: 2.5 },
-  statusPillText: { fontFamily: FONT, fontSize: 8, fontWeight: 'bold' },
-  distBadge: { backgroundColor: '#ccfbf1', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 6 },
-  distBadgeText: { fontFamily: FONT, fontSize: 9.5, fontWeight: 'bold', color: GREEN_DARK },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+  },
+  statusPillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  statusPillText: {
+    fontFamily: FONT,
+    fontSize: 8.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  distBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  distBadgeMoving: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  distBadgeLive: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  distBadgeOffline: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  distBadgeKmNumber: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  distBadgeKmUnit: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  distBadge: {
+    backgroundColor: '#ccfbf1',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  distBadgeText: {
+    fontFamily: FONT,
+    fontSize: 9.5,
+    fontWeight: 'bold',
+    color: GREEN_DARK,
+  },
 
   emptyWrap: { alignItems: 'center', paddingVertical: 20 },
   emptyText: { fontFamily: FONT, fontSize: 11, color: '#94a3b8', marginTop: 6 },
