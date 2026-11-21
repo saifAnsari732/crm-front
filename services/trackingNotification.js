@@ -2,10 +2,12 @@ import { Platform } from 'react-native';
 import { storage } from './storage';
 
 let Notifications = null;
-try {
-  Notifications = require('expo-notifications');
-} catch (e) {
-  console.log('⚠️ expo-notifications not available in Expo Go:', e.message);
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (e) {
+    console.log('⚠️ expo-notifications not available in Expo Go:', e.message);
+  }
 }
 
 const WATCHDOG_KEY = 'tracking_no_movement_notification_ids';

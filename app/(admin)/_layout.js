@@ -12,10 +12,19 @@ export default function AdminLayout() {
   const isAdminOrManager = ['ADMIN', 'ORG_ADMIN', 'HR', 'MANAGER', 'SUPER_ADMIN', 'SUPERADMIN'].includes(roleUpper);
 
   useEffect(() => {
-    if (!isLoading && user && !isAdminOrManager) {
-      router.replace('/(employee)/dashboard');
+    if (!isLoading) {
+      if (!user) {
+        router.replace('/(auth)/login');
+      } else if (!isAdminOrManager) {
+        router.replace('/(employee)/dashboard');
+      }
     }
   }, [isAdminOrManager, isLoading, router, user]);
+
+  // Strict Role Gate: Never mount Admin screens or fire /api/admin/* calls when logged in as an Employee
+  if (isLoading || !user || !isAdminOrManager) {
+    return <View style={{ flex: 1, backgroundColor: '#f4f8fb' }} />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f4f8fb' }}>

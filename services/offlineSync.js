@@ -411,14 +411,19 @@ export async function registerOfflineSyncTask() {
 // ─── Network Reconnect Listener ───────────────────────────────────────────────
 // Automatically flush queue when internet comes back
 let unsubscribeNetListener = null;
+let _wasNetworkConnected = true;
 export function startNetworkListener() {
   if (unsubscribeNetListener) return; // Already listening
   
   unsubscribeNetListener = NetInfo.addEventListener((state) => {
-    if (state.isConnected !== false) {
+    const isNowConnected = state.isConnected !== false;
+    if (isNowConnected && !_wasNetworkConnected) {
       console.log('📦 OfflineSync: Network reconnected! Auto-flushing offline queue...');
       flushOfflineQueue();
+    } else if (isNowConnected) {
+      flushOfflineQueue();
     }
+    _wasNetworkConnected = isNowConnected;
   });
   console.log('📦 OfflineSync: Network listener started.');
 }

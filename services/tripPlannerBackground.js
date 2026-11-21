@@ -19,9 +19,11 @@ import * as Location from 'expo-location';
 import { storage } from './storage';
 
 let Notifications = null;
-try {
-  Notifications = require('expo-notifications');
-} catch (_) {}
+if (Platform.OS !== 'web') {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (_) {}
+}
 
 export const BACKGROUND_TRIP_PLANNER_TASK = 'BACKGROUND_TRIP_PLANNER_TASK';
 

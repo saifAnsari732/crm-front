@@ -96,7 +96,7 @@ class SocketService {
    */
   async connect() {
     if (this.socket) {
-      if (this.socket.connected) {
+      if (this.socket.connected || this.socket.active) {
         return this.socket;
       }
       try {
@@ -105,77 +105,91 @@ class SocketService {
       } catch (_) {}
     }
 
-    try {
-      const token = await storage.getItem('userToken') || await storage.getItem('token');
-      if (!token) {
-        console.log('🔌 Socket: Connection deferred. Auth token missing.');
-        return null;
-      }
+    if (this._connectPromise) {
+      return this._connectPromise;
+    }
 
-      console.log('🔌 Socket: Launching handshake with Render production server...', this.serverUrl);
-      
-      this.socket = io(this.serverUrl, {
-        auth: { token },
-        reconnection: true,
-        reconnectionAttempts: 20,
-        reconnectionDelay: 3000,
-        reconnectionDelayMax: 15000,
-        timeout: 10000,
-        transports: ['websocket', 'polling'],
-      });
+    this._connectPromise = (async () => {
+      try {
+        const token = await storage.getItem('userToken') || await storage.getItem('token');
+        if (!token) {
+          console.log('🔌 Socket: Connection deferred. Auth token missing.');
+          return null;
+        }
 
-      // Bind common lifecycle handlers
-      this.socket.on('connect', () => {
-        console.log('🔌 Socket: Status CONNECTED successfully! Client ID:', this.socket.id);
-        this.notifyConnectionStateChange(true);
-        this.flushMessageQueue(); // Flush queued telemetry on reconnect
-        this.startHeartbeat();
+        if (this.socket && (this.socket.connected || this.socket.active)) {
+          return this.socket;
+        }
+
+        console.log('🔌 Socket: Launching handshake with production server...', this.serverUrl);
         
-        // Re-register all custom listeners cleanly without duplicate bindings
-        this.listeners.forEach((callbacks, event) => {
-          callbacks.forEach(cb => {
-            this.socket.off(event, cb);
-            this.socket.on(event, cb);
+        this.socket = io(this.serverUrl, {
+          auth: { token },
+          reconnection: true,
+          reconnectionAttempts: 20,
+          reconnectionDelay: 3000,
+          reconnectionDelayMax: 15000,
+          timeout: 10000,
+          transports: ['websocket', 'polling'],
+        });
+
+        // Bind common lifecycle handlers
+        this.socket.on('connect', () => {
+          console.log('🔌 Socket: Status CONNECTED successfully! Client ID:', this.socket.id);
+          this.notifyConnectionStateChange(true);
+          this.flushMessageQueue(); // Flush queued telemetry on reconnect
+          this.startHeartbeat();
+          
+          // Re-register all custom listeners cleanly without duplicate bindings
+          this.listeners.forEach((callbacks, event) => {
+            callbacks.forEach(cb => {
+              this.socket.off(event, cb);
+              this.socket.on(event, cb);
+            });
           });
         });
-      });
 
-      this.socket.on('disconnect', (reason) => {
-        console.log('🔌 Socket: Status DISCONNECTED. Reason:', reason);
-        this.notifyConnectionStateChange(false);
-        this.stopHeartbeat();
-        // Socket.io v4: If the server explicitly initiates the disconnect, auto-reconnect is paused.
-        // Calling this.socket.connect() restores auto-reconnection seamlessly.
-        if (reason === 'io server disconnect') {
-          try { this.socket.connect(); } catch (_) {}
-        }
-      });
-
-      this.socket.on('connect_error', (error) => {
-        // Silenced to prevent terminal spam when using temporary tunnels or offline.
-        // console.log('🔌 Socket: Connection handshake failure:', error.message);
-        this.notifyConnectionStateChange(false);
-      });
-
-      this.socket.on('error', (err) => {
-        console.error('🔌 Socket: Server error:', err);
-      });
-
-      this.socket.on('heartbeat_ack', (data) => {
-        if (data?.timestamp) {
-          const rtt = Date.now() - data.timestamp;
-          this.networkLatency = rtt;
-          if (rtt > 1500) {
-            console.log(`🔌 Socket: Slow network connection detected (RTT: ${rtt}ms)`);
+        this.socket.on('disconnect', (reason) => {
+          console.log('🔌 Socket: Status DISCONNECTED. Reason:', reason);
+          this.notifyConnectionStateChange(false);
+          this.stopHeartbeat();
+          // Socket.io v4: If the server explicitly initiates the disconnect, auto-reconnect is paused.
+          // Calling this.socket.connect() restores auto-reconnection seamlessly.
+          if (reason === 'io server disconnect') {
+            try { this.socket.connect(); } catch (_) {}
           }
-        }
-      });
+        });
 
-      return this.socket;
-    } catch (e) {
-      console.error('🔌 Socket: Initialization error:', e);
-      return null;
-    }
+        this.socket.on('connect_error', (error) => {
+          // Silenced to prevent terminal spam when using temporary tunnels or offline.
+          // console.log('🔌 Socket: Connection handshake failure:', error.message);
+          this.notifyConnectionStateChange(false);
+        });
+
+        this.socket.on('error', (err) => {
+          console.error('🔌 Socket: Server error:', err);
+        });
+
+        this.socket.on('heartbeat_ack', (data) => {
+          if (data?.timestamp) {
+            const rtt = Date.now() - data.timestamp;
+            this.networkLatency = rtt;
+            if (rtt > 1500) {
+              console.log(`🔌 Socket: Slow network connection detected (RTT: ${rtt}ms)`);
+            }
+          }
+        });
+
+        return this.socket;
+      } catch (e) {
+        console.error('🔌 Socket: Initialization error:', e);
+        return null;
+      } finally {
+        this._connectPromise = null;
+      }
+    })();
+
+    return this._connectPromise;
   }
 
   /**

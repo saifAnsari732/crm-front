@@ -20,19 +20,21 @@ import { showBatteryOptimizationDialog, remindBatteryOptimizationIfNeeded, ensur
 ========================================================================= */
 let Notifications = null;
 const isExpoGo = Constants.appOwnership === 'expo';
-try {
-  Notifications = require('expo-notifications');
-  if (Notifications?.setNotificationHandler) {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    if (Notifications?.setNotificationHandler) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    }
+  } catch (e) {
+    // Gracefully ignored in Expo Go
   }
-} catch (e) {
-  // Gracefully ignored in Expo Go
 }
 
 const canUseNativeLocalNotifications = async () => {

@@ -362,6 +362,8 @@ export default function ManagerDashboardScreen() {
   };
 
   const fetchData = useCallback(async (isInitial = false) => {
+    const isAdminOrMgrRole = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'manager' || user?.role === 'subadmin';
+    if (!user || !isAdminOrMgrRole) return;
     try {
       // 1. Instant 0ms Hydration from Local Cache (Stale-While-Revalidate)
       let hadCache = false;
@@ -464,7 +466,7 @@ export default function ManagerDashboardScreen() {
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [todayStr]);
+  }, [todayStr, user]);
 
   useEffect(() => {
     fetchData(true);

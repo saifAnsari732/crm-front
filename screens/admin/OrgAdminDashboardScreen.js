@@ -150,6 +150,12 @@ export default function OrgAdminDashboardScreen() {
   }, []);
 
   const fetchData = useCallback(async () => {
+    const roleUpper = user?.role ? String(user.role).toUpperCase() : '';
+    const isAdminRole = ['ADMIN', 'ORG_ADMIN', 'HR', 'MANAGER', 'SUPER_ADMIN', 'SUPERADMIN'].includes(roleUpper);
+    if (!user || !isAdminRole) {
+      setLoading(false);
+      return;
+    }
     try {
       const [statsRes, empRes, locRes, orgRes, mgrRes, attRes, leavesRes, expRes] = await Promise.all([
         adminAPI.getDashboard().catch(() => ({ data: { success: false } })),

@@ -36,7 +36,7 @@ function InitialLayout() {
   }, []);
 
   useEffect(() => {
-    if (isLoading || showSplash) return;
+    if (isLoading) return;
 
     const inAuthGroup = segments.some(s => s === '(auth)');
     const inEmployeeGroup = segments.some(s => s === '(employee)');
@@ -62,7 +62,7 @@ function InitialLayout() {
         router.replace('/(employee)/dashboard');
       }
     }
-  }, [user, segments, isLoading, showSplash]);
+  }, [user, segments, isLoading]);
 
   useEffect(() => {
     if (!isLoading && !showSplash) {
