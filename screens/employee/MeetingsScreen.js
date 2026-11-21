@@ -16,7 +16,7 @@ import {
 import { Text, Surface } from 'react-native-paper';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye, ArrowLeft } from 'lucide-react-native';
+import { Plus, User, Phone, MapPin, ClipboardList, Check, Calendar, ArrowRight, X, Pencil, Camera, Eye, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { meetingApi, uploadAPI, getAvatarUrl } from '../../services/api';
@@ -24,6 +24,14 @@ import { meetingApi, uploadAPI, getAvatarUrl } from '../../services/api';
 export default function MeetingsScreen() {
   const router = useRouter();
   const [meetings, setMeetings] = useState([]);
+  const [expandedIds, setExpandedIds] = useState({}); // Default all collapsed
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -329,11 +337,23 @@ export default function MeetingsScreen() {
             </Surface>
           ) : (
             meetings.map((item) => {
+              const itemId = item._id || item.id;
+              const isExpanded = !!expandedIds[itemId];
               const badge = getStatusBadgeStyle(item.status);
               const selfieUri = getAvatarUrl(item.selfieUrl || (item.images && item.images[0]));
+
               return (
-                <Surface key={item._id || item.id} style={styles.meetingCard} elevation={1}>
-                  <View style={styles.cardHeader}>
+                <Surface
+                  key={itemId}
+                  style={[styles.meetingCard, isExpanded && styles.meetingCardExpanded]}
+                  elevation={isExpanded ? 2 : 1}
+                >
+                  {/* Header Row — Tap anywhere to Expand/Collapse */}
+                  <TouchableOpacity
+                    onPress={() => toggleExpand(itemId)}
+                    activeOpacity={0.7}
+                    style={[styles.cardHeader, isExpanded ? { marginBottom: 12 } : { marginBottom: 0 }]}
+                  >
                     <View style={styles.clientInfoBlock}>
                       {selfieUri ? (
                         <TouchableOpacity
@@ -353,62 +373,114 @@ export default function MeetingsScreen() {
                         <Text style={styles.clientPhoneText}>{item.mobileNumber}</Text>
                       </View>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.statusBadgeText, { color: badge.text }]}>
-                        {badge.label}
-                      </Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.metaRow}>
-                    <MapPin size={13} color="#94a3b8" style={{ marginRight: 6, marginTop: 2 }} />
-                    <Text style={styles.metaText} numberOfLines={2}>{item.meetingAddress || "Location not recorded"}</Text>
-                  </View>
-
-                  {selfieUri && (
-                    <TouchableOpacity
-                      style={styles.meetingSelfieBannerRow}
-                      onPress={() => setPreviewPhotoUrl(selfieUri)}
-                      activeOpacity={0.85}
-                    >
-                      <Image source={{ uri: selfieUri }} style={styles.meetingSelfieInline} />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.meetingSelfieLabel}>Visit Selfie Verified</Text>
-                        <Text style={styles.meetingSelfieSub}>Tap to view full photo</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.statusBadgeText, { color: badge.text }]}>
+                          {badge.label}
+                        </Text>
                       </View>
-                      <Eye size={15} color="#0f766e" />
+                      <View style={styles.chevronCircle}>
+                        {isExpanded ? (
+                          <ChevronUp size={16} color="#0f766e" strokeWidth={2.2} />
+                        ) : (
+                          <ChevronDown size={16} color="#0f766e" strokeWidth={2.2} />
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* ── COLLAPSED VIEW (Default): Clean, compact 1-line preview ── */}
+                  {!isExpanded && (
+                    <TouchableOpacity
+                      onPress={() => toggleExpand(itemId)}
+                      activeOpacity={0.7}
+                      style={styles.collapsedMetaRow}
+                    >
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+                        <MapPin size={12} color="#94a3b8" style={{ marginRight: 4 }} />
+                        <Text style={styles.collapsedMetaAddress} numberOfLines={1}>
+                          {item.meetingAddress || 'Location not recorded'}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Calendar size={11} color="#64748b" style={{ marginRight: 4 }} />
+                        <Text style={styles.collapsedMetaDate}>
+                          {new Date(item.date || item.createdAt).toLocaleDateString('en-GB', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   )}
 
-                  {item.meetingNotes ? (
-                    <View style={styles.notesBlock}>
-                      <Text style={styles.notesTitle}>FEEDBACK NOTES</Text>
-                      <Text style={styles.notesText}>{item.meetingNotes}</Text>
-                    </View>
-                  ) : null}
+                  {/* ── EXPANDED VIEW: Full Details (Address, Selfie, Notes, Date, Edit) ── */}
+                  {isExpanded && (
+                    <View style={styles.expandedContentBlock}>
+                      <View style={styles.metaRow}>
+                        <MapPin size={13} color="#0f766e" style={{ marginRight: 6, marginTop: 2 }} />
+                        <Text style={styles.metaText}>{item.meetingAddress || 'Location not recorded'}</Text>
+                      </View>
 
-                  <View style={styles.cardFooter}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Calendar size={13} color="#0f766e" style={{ marginRight: 6 }} />
-                      <Text style={styles.dateText}>
-                        {new Date(item.date || item.createdAt).toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
+                      {selfieUri && (
+                        <TouchableOpacity
+                          style={styles.meetingSelfieBannerRow}
+                          onPress={() => setPreviewPhotoUrl(selfieUri)}
+                          activeOpacity={0.85}
+                        >
+                          <Image source={{ uri: selfieUri }} style={styles.meetingSelfieInline} />
+                          <View style={{ flex: 1, marginLeft: 10 }}>
+                            <Text style={styles.meetingSelfieLabel}>Visit Selfie Verified</Text>
+                            <Text style={styles.meetingSelfieSub}>Tap to view full photo</Text>
+                          </View>
+                          <Eye size={15} color="#0f766e" />
+                        </TouchableOpacity>
+                      )}
+
+                      {item.meetingNotes ? (
+                        <View style={styles.notesBlock}>
+                          <Text style={styles.notesTitle}>FEEDBACK NOTES</Text>
+                          <Text style={styles.notesText}>{item.meetingNotes}</Text>
+                        </View>
+                      ) : null}
+
+                      <View style={styles.cardFooter}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Calendar size={13} color="#0f766e" style={{ marginRight: 6 }} />
+                          <Text style={styles.dateText}>
+                            {new Date(item.date || item.createdAt).toLocaleDateString('en-GB', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </Text>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <TouchableOpacity
+                            style={styles.collapseToggleBtn}
+                            onPress={() => toggleExpand(itemId)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.collapseToggleBtnText}>Close ▲</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            style={styles.editCardBtn} 
+                            onPress={() => handleEditMeeting(item)}
+                            activeOpacity={0.7}
+                          >
+                            <Pencil size={12} color="#0f766e" style={{ marginRight: 5 }} />
+                            <Text style={styles.editCardBtnText}>Edit</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     </View>
-                    <TouchableOpacity 
-                      style={styles.editCardBtn} 
-                      onPress={() => handleEditMeeting(item)}
-                      activeOpacity={0.7}
-                    >
-                      <Pencil size={12} color="#0f766e" style={{ marginRight: 5 }} />
-                      <Text style={styles.editCardBtnText}>Edit</Text>
-                    </TouchableOpacity>
-                  </View>
+                  )}
                 </Surface>
               );
             })
@@ -805,6 +877,58 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  chevronCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f0fdfa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccfbf1',
+  },
+  collapsedMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  collapsedMetaAddress: {
+    fontSize: 11.5,
+    color: '#64748b',
+    flex: 1,
+  },
+  collapsedMetaDate: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0f766e',
+  },
+  meetingCardExpanded: {
+    borderColor: '#0f766e',
+    shadowColor: '#0f766e',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  expandedContentBlock: {
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  collapseToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  collapseToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
   },
   metaRow: {
     flexDirection: 'row',
