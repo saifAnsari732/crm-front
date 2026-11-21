@@ -458,10 +458,22 @@ export default function OrgAdminDashboardScreen() {
       return empId && aEmpId === empId;
     });
 
-    const isLive = !!liveLoc || emp.isTracking || emp.isOnline;
+    const isLive = Boolean(liveLoc?.isActive || (liveLoc && liveLoc.isTracking !== false) || emp.isTracking || emp.isLive || (attRec?.checkIn && !attRec?.checkOut));
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(liveLoc?.officialDistance ?? liveLoc?.totalDistanceToday ?? liveLoc?.todayKm ?? liveLoc?.totalDistance ?? emp.todayKm ?? emp.totalDistanceToday ?? emp.totalDistance ?? 0);
+    const distNum = Math.max(
+      Number(liveLoc?.officialDistance || 0),
+      Number(liveLoc?.totalDistanceToday || 0),
+      Number(liveLoc?.todayKm || 0),
+      Number(liveLoc?.totalDistance || 0),
+      Number(attRec?.officialDistance || 0),
+      Number(attRec?.totalDistanceTraveled || 0),
+      Number(emp?.officialDistance || 0),
+      Number(emp?.todayKm || 0),
+      Number(emp?.totalDistanceToday || 0),
+      Number(emp?.totalDistance || 0),
+      0
+    );
 
     const empCode = emp.employeeId || (empId.length > 8 ? 'EMP-' + empId.slice(-6).toUpperCase() : '');
     const designation = emp.designation || emp.role || 'Field Executive';
@@ -501,12 +513,34 @@ export default function OrgAdminDashboardScreen() {
     };
   });
 
+  // Sort employees: ACTIVE / Live Fleet first, then by KM traveled descending, then Offline
+  const sortedDirectoryStaff = directoryStaff.slice().sort((a, b) => {
+    const aMoving = a.status === 'ACTIVE' || (a.isTracking && a.speed >= 1);
+    const bMoving = b.status === 'ACTIVE' || (b.isTracking && b.speed >= 1);
+    if (aMoving && !bMoving) return -1;
+    if (!aMoving && bMoving) return 1;
+
+    const aOnField = a.isTracking || a.status === 'IDLE';
+    const bOnField = b.isTracking || b.status === 'IDLE';
+    if (aOnField && !bOnField) return -1;
+    if (!aOnField && bOnField) return 1;
+
+    const aDist = parseFloat(a.todayKm) || 0;
+    const bDist = parseFloat(b.todayKm) || 0;
+    if (aDist !== bDist) return bDist - aDist;
+
+    if (a.isOnline && !b.isOnline) return -1;
+    if (!a.isOnline && b.isOnline) return 1;
+
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
   // All Employees Filtered & Counts
   const activeStaffCount = directoryStaff.filter((e) => e.status === 'ACTIVE').length;
   const idleStaffCount = directoryStaff.filter((e) => e.status === 'IDLE').length;
   const offlineStaffCount = directoryStaff.filter((e) => e.status === 'OFFLINE').length;
 
-  const filteredDirectoryStaff = directoryStaff.filter((emp) => {
+  const filteredDirectoryStaff = sortedDirectoryStaff.filter((emp) => {
     if (empStatusFilter !== 'ALL' && emp.status !== empStatusFilter) {
       return false;
     }
@@ -783,63 +817,113 @@ export default function OrgAdminDashboardScreen() {
           </View>
         </View>
 
-        {/* ── 3. QUICK OPERATIONS (Unified Slate & Indigo 3x2 Grid) ── */}
+        {/* ── 3. QUICK OPERATIONS (Vibrant Executive 3x2 Grid - Live Tracking 1st) ── */}
         <View style={styles.quickActionsSection}>
           <View style={styles.sectionSubHeaderRow}>
             <Text style={styles.cardHeaderTitle}>Quick Operations</Text>
+            {liveActiveCount > 0 && (
+              <View style={styles.quickHeaderLiveTag}>
+                <View style={styles.quickHeaderLiveDot} />
+                <Text style={styles.quickHeaderLiveText}>{liveActiveCount} On Duty</Text>
+              </View>
+            )}
           </View>
           <View style={styles.quick6Grid}>
-            {/* 1. Visit Records */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <Briefcase size={20} color="#4F46E5" />
+            {/* 1. Live Tracking (HERO #1 - Emerald Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardEmerald, cardShadow]}
+              onPress={() => router.push('/(admin)/tracking')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxEmerald]}>
+                <Navigation size={21} color="#059669" />
+                {liveActiveCount > 0 && <View style={styles.quick6LiveDot} />}
               </View>
-              <Text style={styles.quick6Label}>Visit Records</Text>
+              <Text style={[styles.quick6Label, { color: '#064E3B' }]}>Live Tracking</Text>
+              <Text style={[styles.quick6Sub, { color: '#059669' }]}>
+                {liveActiveCount > 0 ? `${liveActiveCount} Online` : 'GPS Fleet'}
+              </Text>
             </TouchableOpacity>
 
-            {/* 2. My Team */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <Users size={20} color="#4F46E5" />
+            {/* 2. Visit Records (Royal Indigo Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardIndigo, cardShadow]}
+              onPress={() => router.push('/(admin)/visits')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxIndigo]}>
+                <Briefcase size={21} color="#4F46E5" />
               </View>
-              <Text style={styles.quick6Label}>My Team</Text>
+              <Text style={[styles.quick6Label, { color: '#1E1B4B' }]}>Visit Records</Text>
+              <Text style={styles.quick6Sub}>Field Logs</Text>
             </TouchableOpacity>
 
-            {/* 3. Live Tracking */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <Compass size={20} color="#4F46E5" />
+            {/* 3. My Team (Sky Blue Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardSky, cardShadow]}
+              onPress={() => router.push('/(admin)/team')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxSky]}>
+                <Users size={21} color="#0284C7" />
               </View>
-              <Text style={styles.quick6Label}>Live Tracking</Text>
+              <Text style={[styles.quick6Label, { color: '#0C4A6E' }]}>My Team</Text>
+              <Text style={styles.quick6Sub}>{totalStaffCount} Staff</Text>
             </TouchableOpacity>
 
-            {/* 4. Generate Report */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <FileText size={20} color="#4F46E5" />
+            {/* 4. Reports (Warm Amber Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardAmber, cardShadow]}
+              onPress={() => router.push('/(admin)/reports')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxAmber]}>
+                <FileText size={21} color="#D97706" />
               </View>
-              <Text style={styles.quick6Label}>Reports</Text>
+              <Text style={[styles.quick6Label, { color: '#78350F' }]}>Reports</Text>
+              <Text style={styles.quick6Sub}>Analytics</Text>
             </TouchableOpacity>
 
-            {/* 5. Approvals */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <CheckCircle2 size={20} color="#4F46E5" />
+            {/* 5. Approvals (Purple / Violet Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardPurple, cardShadow]}
+              onPress={() => router.push('/(admin)/leaves')}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxPurple]}>
+                <CheckCircle2 size={21} color="#9333EA" />
+                {(leaveApprovalsCount + expenseApprovalsCount) > 0 && (
+                  <View style={styles.quick6BadgeCircle}>
+                    <Text style={styles.quick6BadgeText}>
+                      {leaveApprovalsCount + expenseApprovalsCount}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.quick6Label}>Approvals</Text>
+              <Text style={[styles.quick6Label, { color: '#581C87' }]}>Approvals</Text>
+              <Text style={styles.quick6Sub}>
+                {(leaveApprovalsCount + expenseApprovalsCount) > 0
+                  ? `${leaveApprovalsCount + expenseApprovalsCount} Pending`
+                  : 'Requests'}
+              </Text>
             </TouchableOpacity>
 
-            {/* 6. Add Employee */}
-            <TouchableOpacity style={[styles.quick6Card, cardShadow]} onPress={() => setAddEmpModalVisible(true)} activeOpacity={0.75}>
-              <View style={[styles.quick6IconBox, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', borderWidth: 1 }]}>
-                <UserPlus size={20} color="#4F46E5" />
+            {/* 6. Add Staff (Crisp Teal Theme) */}
+            <TouchableOpacity
+              style={[styles.quick6Card, styles.quick6CardTeal, cardShadow]}
+              onPress={() => setAddEmpModalVisible(true)}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quick6IconBox, styles.quick6IconBoxTeal]}>
+                <UserPlus size={21} color="#0D9488" />
               </View>
-              <Text style={styles.quick6Label}>Add Staff</Text>
+              <Text style={[styles.quick6Label, { color: '#134E4A' }]}>Add Staff</Text>
+              <Text style={styles.quick6Sub}>+ Onboard</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (CLEAN PROFESSIONAL BANNER) ── */}
+        {/* ── 4.5. TRIP ROUTE CLAIMS & AUDIT (ENHANCED PREMIUM BANNER) ── */}
         <Surface style={[styles.tripClaimsBannerCard, cardShadow]} elevation={1}>
           <TouchableOpacity
             style={styles.tripClaimsBannerTouch}
@@ -847,11 +931,16 @@ export default function OrgAdminDashboardScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.tripClaimsBannerLeft}>
-              <View style={[styles.tripClaimsBannerIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Car size={20} color="#4F46E5" />
+              <View style={[styles.tripClaimsBannerIconBox, { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#C7D2FE' }]}>
+                <Car size={22} color="#4F46E5" />
               </View>
               <View style={styles.tripClaimsBannerTextCol}>
-                <Text style={styles.tripClaimsBannerTitle}>Trip Route Claims</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.tripClaimsBannerTitle}>Trip Route Claims</Text>
+                  <View style={styles.auditBadgePill}>
+                    <Text style={styles.auditBadgeText}>AUDIT</Text>
+                  </View>
+                </View>
                 <Text style={styles.tripClaimsBannerSub}>
                   Planned routes, road KM & payouts
                 </Text>
@@ -984,9 +1073,7 @@ export default function OrgAdminDashboardScreen() {
           </View>
 
           <View style={styles.dutyList}>
-            {directoryStaff
-              .slice()
-              .sort((a, b) => (Number(b.todayKm) || 0) - (Number(a.todayKm) || 0))
+            {sortedDirectoryStaff
               .slice(0, 5)
               .map((emp, idx) => (
                 <TouchableOpacity
@@ -1998,6 +2085,129 @@ const styles = StyleSheet.create({
     fontFamily: FONT,
     textAlign: 'center',
     marginTop: 1,
+  },
+  quick6CardEmerald: {
+    borderColor: '#A7F3D0',
+    backgroundColor: '#FAFCFA',
+  },
+  quick6IconBoxEmerald: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+  },
+  quick6CardIndigo: {
+    borderColor: '#C7D2FE',
+    backgroundColor: '#FAFAFF',
+  },
+  quick6IconBoxIndigo: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+    borderWidth: 1,
+  },
+  quick6CardSky: {
+    borderColor: '#BAE6FD',
+    backgroundColor: '#FAFDFF',
+  },
+  quick6IconBoxSky: {
+    backgroundColor: '#F0F9FF',
+    borderColor: '#BAE6FD',
+    borderWidth: 1,
+  },
+  quick6CardAmber: {
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFCF5',
+  },
+  quick6IconBoxAmber: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+  },
+  quick6CardPurple: {
+    borderColor: '#E9D5FF',
+    backgroundColor: '#FCFAFF',
+  },
+  quick6IconBoxPurple: {
+    backgroundColor: '#FAF5FF',
+    borderColor: '#E9D5FF',
+    borderWidth: 1,
+  },
+  quick6CardTeal: {
+    borderColor: '#99F6E4',
+    backgroundColor: '#FAFCFC',
+  },
+  quick6IconBoxTeal: {
+    backgroundColor: '#F0FDFA',
+    borderColor: '#99F6E4',
+    borderWidth: 1,
+  },
+  quick6LiveDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  quick6BadgeCircle: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  quick6BadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+    fontFamily: FONT,
+  },
+  quickHeaderLiveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 4,
+  },
+  quickHeaderLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#059669',
+  },
+  quickHeaderLiveText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#059669',
+    fontFamily: FONT,
+  },
+  auditBadgePill: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  auditBadgeText: {
+    color: '#4F46E5',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontFamily: FONT,
   },
   tripClaimsBannerCard: {
     backgroundColor: '#ffffff',

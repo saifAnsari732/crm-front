@@ -960,16 +960,17 @@ export default function ManagerDashboardScreen() {
     );
     const isIdle = isLive && ((liveLoc?.speed || 0) < 1 || liveLoc?.motionState === 'STATIONARY');
     const photo = getAvatarUrl(emp.avatar || emp.profilePicture || emp.photo || liveLoc?.avatar);
-    const distNum = Number(
-      liveLoc?.officialDistance ??
-      liveLoc?.totalDistanceToday ??
-      liveLoc?.todayKm ??
-      liveLoc?.totalDistance ??
-      attRec?.officialDistance ??
-      attRec?.totalDistanceTraveled ??
-      emp.todayKm ??
-      emp.totalDistanceToday ??
-      emp.totalDistance ??
+    const distNum = Math.max(
+      Number(liveLoc?.officialDistance || 0),
+      Number(liveLoc?.totalDistanceToday || 0),
+      Number(liveLoc?.todayKm || 0),
+      Number(liveLoc?.totalDistance || 0),
+      Number(attRec?.officialDistance || 0),
+      Number(attRec?.totalDistanceTraveled || 0),
+      Number(emp?.officialDistance || 0),
+      Number(emp?.todayKm || 0),
+      Number(emp?.totalDistanceToday || 0),
+      Number(emp?.totalDistance || 0),
       0
     );
 
@@ -1471,93 +1472,98 @@ export default function ManagerDashboardScreen() {
         <View style={styles.cleanQuickSection}>
           <Text style={styles.sectionHeaderTitle}>Quick Operations</Text>
 
-          {/* Row 1 */}
+          {/* Row 1 - Live Map First & Vibrant Color Coding */}
           <View style={styles.quickGridRow}>
-            {/* Visits */}
-            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Briefcase size={20} color="#4F46E5" />
+            {/* Live Map (HERO 1 - Emerald Theme) */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' }]}>
+                <Navigation size={20} color="#059669" />
+                {onFieldStaffCount > 0 && (
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#10B981' }]}>
+                    <Text style={styles.quickBadgeText}>{onFieldStaffCount}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.quickLabel}>Visits</Text>
+              <Text style={[styles.quickLabel, { color: '#064E3B' }]}>Live Map</Text>
             </TouchableOpacity>
 
-            {/* Tasks Flow */}
+            {/* Visits (Indigo Theme) */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/visits')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#C7D2FE' }]}>
+                <Briefcase size={20} color="#4F46E5" />
+              </View>
+              <Text style={[styles.quickLabel, { color: '#1E1B4B' }]}>Visits</Text>
+            </TouchableOpacity>
+
+            {/* Team Staff (Sky Blue Theme) */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#F0F9FF', borderWidth: 1, borderColor: '#BAE6FD' }]}>
+                <Users size={20} color="#0284C7" />
+              </View>
+              <Text style={[styles.quickLabel, { color: '#0C4A6E' }]}>Team Staff</Text>
+            </TouchableOpacity>
+
+            {/* Tasks Flow (Amber Theme) */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tasks')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <ClipboardList size={20} color="#4F46E5" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }]}>
+                <ClipboardList size={20} color="#D97706" />
                 {taskCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#D97706' }]}>
                     <Text style={styles.quickBadgeText}>{taskCount}</Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.quickLabel}>Tasks</Text>
-            </TouchableOpacity>
-
-            {/* Leaves */}
-            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Calendar size={20} color="#4F46E5" />
-                {leaveCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
-                    <Text style={styles.quickBadgeText}>{leaveCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.quickLabel}>Leaves</Text>
-            </TouchableOpacity>
-
-            {/* Expenses */}
-            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Wallet size={20} color="#4F46E5" />
-                {expenseCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
-                    <Text style={styles.quickBadgeText}>{expenseCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.quickLabel}>Expenses</Text>
+              <Text style={[styles.quickLabel, { color: '#78350F' }]}>Tasks</Text>
             </TouchableOpacity>
           </View>
 
           {/* Row 2 */}
           <View style={[styles.quickGridRow, { marginTop: 10 }]}>
-            {/* Leads */}
+            {/* Leads (Teal Theme) */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leads')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <UserPlus size={20} color="#4F46E5" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#F0FDFA', borderWidth: 1, borderColor: '#99F6E4' }]}>
+                <UserPlus size={20} color="#0D9488" />
                 {leadCount > 0 && (
-                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#4F46E5' }]}>
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#0D9488' }]}>
                     <Text style={styles.quickBadgeText}>{leadCount}</Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.quickLabel}>Leads</Text>
+              <Text style={[styles.quickLabel, { color: '#134E4A' }]}>Leads</Text>
             </TouchableOpacity>
 
-            {/* Live Map */}
-            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/tracking')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Compass size={20} color="#4F46E5" />
-              </View>
-              <Text style={styles.quickLabel}>Live Map</Text>
-            </TouchableOpacity>
-
-            {/* Team Staff */}
-            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/team')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <Users size={20} color="#4F46E5" />
-              </View>
-              <Text style={styles.quickLabel}>Team Staff</Text>
-            </TouchableOpacity>
-
-            {/* Reports */}
+            {/* Reports (Violet Theme) */}
             <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/reports')} activeOpacity={0.75}>
-              <View style={[styles.quickIconBox, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
-                <FileText size={20} color="#4F46E5" />
+              <View style={[styles.quickIconBox, { backgroundColor: '#FAF5FF', borderWidth: 1, borderColor: '#E9D5FF' }]}>
+                <FileText size={20} color="#9333EA" />
               </View>
-              <Text style={styles.quickLabel}>Reports</Text>
+              <Text style={[styles.quickLabel, { color: '#581C87' }]}>Reports</Text>
+            </TouchableOpacity>
+
+            {/* Leaves (Rose Theme) */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/leaves')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#FFF1F2', borderWidth: 1, borderColor: '#FECDD3' }]}>
+                <Calendar size={20} color="#E11D48" />
+                {leaveCount > 0 && (
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#E11D48' }]}>
+                    <Text style={styles.quickBadgeText}>{leaveCount}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.quickLabel, { color: '#881337' }]}>Leaves</Text>
+            </TouchableOpacity>
+
+            {/* Expenses (Blue Theme) */}
+            <TouchableOpacity style={styles.quickCard} onPress={() => router.push('/(admin)/expenses')} activeOpacity={0.75}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }]}>
+                <Wallet size={20} color="#2563EB" />
+                {expenseCount > 0 && (
+                  <View style={[styles.quickBadgeCircle, { backgroundColor: '#2563EB' }]}>
+                    <Text style={styles.quickBadgeText}>{expenseCount}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.quickLabel, { color: '#1E3A8A' }]}>Expenses</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -300,16 +300,17 @@ export default function AdminTeamScreen() {
       ...emp,
       isLive,
       isIdle,
-      distanceToday: Number(
-        liveLoc?.officialDistance ??
-        liveLoc?.totalDistanceToday ??
-        liveLoc?.todayKm ??
-        liveLoc?.totalDistance ??
-        emp.todayKm ??
-        emp.totalDistanceToday ??
-        emp.totalDistance ??
+      distanceToday: Math.max(
+        Number(liveLoc?.officialDistance || 0),
+        Number(liveLoc?.totalDistanceToday || 0),
+        Number(liveLoc?.todayKm || 0),
+        Number(liveLoc?.totalDistance || 0),
+        Number(emp?.officialDistance || 0),
+        Number(emp?.todayKm || 0),
+        Number(emp?.totalDistanceToday || 0),
+        Number(emp?.totalDistance || 0),
         0
-      ).toFixed(1),
+      ).toFixed(2),
       currentLocation: liveLoc?.address || emp.location || (isLive ? 'Active On Field' : 'Offline / Idle'),
       punchInTime: emp.punchInTime || (liveLoc?.startTime ? new Date(liveLoc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),
       punchOutTime: emp.punchOutTime || (liveLoc?.endTime ? new Date(liveLoc.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'),
@@ -325,7 +326,16 @@ export default function AdminTeamScreen() {
   const offlineCount = mappedEmployees.filter((e) => !e.isLive && e.isPunchedIn).length;
   const notPunchedCount = mappedEmployees.filter((e) => !e.isPunchedIn).length;
 
-  const filtered = mappedEmployees.filter((e) => {
+  const sortedMappedEmployees = mappedEmployees.slice().sort((a, b) => {
+    if (a.isLive && !b.isLive) return -1;
+    if (!a.isLive && b.isLive) return 1;
+    const aDist = parseFloat(a.distanceToday) || 0;
+    const bDist = parseFloat(b.distanceToday) || 0;
+    if (aDist !== bDist) return bDist - aDist;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  const filtered = sortedMappedEmployees.filter((e) => {
     if (activeTab === 'active' && !e.isLive) return false;
     if (activeTab === 'offline' && e.isLive) return false;
     if (activeTab === 'not_punched' && e.isPunchedIn) return false;
